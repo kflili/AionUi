@@ -15,7 +15,7 @@ import { AcpErrorType, createAcpError } from '@/types/acpTypes';
 import net from 'node:net';
 import { OpenClawGatewayConnection } from './OpenClawGatewayConnection';
 import { OpenClawGatewayManager } from './OpenClawGatewayManager';
-import { getGatewayAuthPassword, getGatewayAuthToken, getGatewayHost, getGatewayPort, getGatewayUrl } from './openclawConfig';
+import { getGatewayPort, resolveGatewayConfigFromFile } from './openclawConfig';
 import type { ChatEvent, EventFrame, HelloOk, OpenClawGatewayConfig } from './types';
 
 async function isTcpPortOpen(host: string, port: number, timeoutMs = 300): Promise<boolean> {
@@ -103,21 +103,25 @@ export class OpenClawAgent {
       this.emitStatusMessage('connecting');
 
       const gatewayConfig: OpenClawGatewayConfig = this.config.gateway || { port: 18789 };
-      const port = gatewayConfig.port || getGatewayPort();
-      const host = gatewayConfig.host || getGatewayHost() || 'localhost';
+      const fileConfig = resolveGatewayConfigFromFile();
+      const port = gatewayConfig.port || fileConfig.port || getGatewayPort();
+      const host = gatewayConfig.host || 'localhost';
+
+      // Determine effective mode: UI passed > config file resolved mode > auto-infer (backward compat)
+      const effectiveMode = gatewayConfig.mode ?? fileConfig.mode;
 
       // Determine whether to use an external gateway:
-      // explicit flag > auto-infer from url or remote host presence
+      // explicit flag > mode-driven > auto-infer from url or remote host presence
       const isRemoteHost = host !== 'localhost' && host !== '127.0.0.1';
-      const useExternal = gatewayConfig.useExternalGateway ?? (!!gatewayConfig.url || !!getGatewayUrl() || isRemoteHost);
+      const useExternal = gatewayConfig.useExternalGateway ?? (effectiveMode === 'remote' || !!gatewayConfig.url || isRemoteHost);
 
-      // Resolve WebSocket URL: when external, prefer explicit url > config file url;
-      // when local, always connect to host:port (ignore remote url from config)
-      const gatewayUrl = useExternal ? gatewayConfig.url || getGatewayUrl() || `ws://${host}:${port}` : `ws://${host}:${port}`;
+      // Resolve WebSocket URL: when external, prefer UI url > file config url > host:port;
+      // when local, always connect to host:port
+      const gatewayUrl = useExternal ? gatewayConfig.url || fileConfig.url || `ws://${host}:${port}` : `ws://${host}:${port}`;
 
-      // Auto-load token/password from OpenClaw config if not explicitly provided
-      const token = gatewayConfig.token ?? getGatewayAuthToken() ?? undefined;
-      const password = gatewayConfig.password ?? getGatewayAuthPassword() ?? undefined;
+      // Auto-load token/password: UI passed > file config (already resolved by mode)
+      const token = gatewayConfig.token ?? fileConfig.token ?? undefined;
+      const password = gatewayConfig.password ?? fileConfig.password ?? undefined;
 
       if (token) {
         console.log('[OpenClawAgent] Using gateway auth token from config');

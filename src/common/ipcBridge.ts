@@ -421,6 +421,7 @@ export interface ICreateConversationParams {
     sessionMode?: string;
     /** Gateway config overrides for OpenClaw (host, port, url, useExternalGateway, etc.) */
     gateway?: {
+      mode?: 'local' | 'remote';
       host?: string;
       port?: number;
       url?: string;

@@ -258,6 +258,8 @@ export type GatewayClientName = GatewayClientId;
 // ========== Gateway Connection Config ==========
 
 export interface OpenClawGatewayConfig {
+  /** Gateway mode: 'local' spawns/connects locally, 'remote' connects to remote URL */
+  mode?: 'local' | 'remote';
   /** Gateway host (default: localhost) */
   host?: string;
   /** Gateway port (default: 18789) */

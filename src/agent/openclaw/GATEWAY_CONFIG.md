@@ -21,6 +21,29 @@ OpenClaw Gateway 采用**基于设备的认证**模型：
 后续连接：设备 token + 设备签名 → hello-ok（+ 刷新）
 ```
 
+## 配置结构
+
+OpenClaw 使用 `gateway.mode` 字段区分本地和远程模式，远程连接信息放在 `gateway.remote` 子对象中：
+
+```json
+{
+  "gateway": {
+    "mode": "local | remote",
+    "port": 18789,
+    "auth": {
+      "mode": "none | token | password",
+      "token": "...",
+      "password": "..."
+    },
+    "remote": {
+      "url": "ws://...",
+      "token": "...",
+      "password": "..."
+    }
+  }
+}
+```
+
 ## 配置示例
 
 ### 示例 1：本地 Gateway（零配置）
@@ -29,36 +52,43 @@ OpenClaw Gateway 采用**基于设备的认证**模型：
 
 ```
 结果：
+  mode     = local（默认）
   url      = ws://localhost:18789
   external = false → 自动启动 Gateway
   auth     = 无
 ```
 
-### 示例 2：本地 Gateway 自定义端口
+### 示例 2：本地 Gateway 自定义端口 + Token 认证
 
 ```json
 {
   "gateway": {
-    "port": 9999
+    "mode": "local",
+    "port": 9999,
+    "auth": {
+      "mode": "token",
+      "token": "your-local-token"
+    }
   }
 }
 ```
 
 ```
 结果：
+  mode     = local
   url      = ws://localhost:9999
   external = false → 自动启动或检测已有进程
-  auth     = 无
+  auth     = token（从 gateway.auth.token 读取）
 ```
 
-### 示例 3：通过 URL 连接远程服务器
+### 示例 3：连接远程 Gateway（推荐方式）
 
 ```json
 {
   "gateway": {
-    "url": "ws://192.168.1.100:18789",
-    "auth": {
-      "mode": "token",
+    "mode": "remote",
+    "remote": {
+      "url": "ws://192.168.1.100:18789",
       "token": "your-shared-token"
     }
   }
@@ -67,20 +97,20 @@ OpenClaw Gateway 采用**基于设备的认证**模型：
 
 ```
 结果：
+  mode     = remote
   url      = ws://192.168.1.100:18789
-  external = true（从 url 自动推断）
-  auth     = token
+  external = true
+  auth     = token（从 gateway.remote.token 读取）
 ```
 
-### 示例 4：通过 host + port 连接远程服务器
+### 示例 4：加密远程连接 (wss://)
 
 ```json
 {
   "gateway": {
-    "host": "192.168.1.100",
-    "port": 18789,
-    "auth": {
-      "mode": "token",
+    "mode": "remote",
+    "remote": {
+      "url": "wss://ai.example.com",
       "token": "your-shared-token"
     }
   }
@@ -89,40 +119,20 @@ OpenClaw Gateway 采用**基于设备的认证**模型：
 
 ```
 结果：
-  url      = ws://192.168.1.100:18789
-  external = true（从远程 host 自动推断）
-  auth     = token
-```
-
-### 示例 5：加密连接 (wss://)
-
-```json
-{
-  "gateway": {
-    "url": "wss://ai.example.com",
-    "auth": {
-      "mode": "token",
-      "token": "your-shared-token"
-    }
-  }
-}
-```
-
-```
-结果：
+  mode     = remote
   url      = wss://ai.example.com
   external = true
   auth     = token（TLS 加密传输）
 ```
 
-### 示例 6：密码认证
+### 示例 5：远程密码认证
 
 ```json
 {
   "gateway": {
-    "url": "ws://192.168.1.100:18789",
-    "auth": {
-      "mode": "password",
+    "mode": "remote",
+    "remote": {
+      "url": "ws://192.168.1.100:18789",
       "password": "your-password"
     }
   }
@@ -133,14 +143,14 @@ OpenClaw Gateway 采用**基于设备的认证**模型：
 
 ### `gateway` 对象
 
-| 字段   | 类型   | 默认值      | 说明                                     |
-| ------ | ------ | ----------- | ---------------------------------------- |
-| `url`  | string | —           | 完整 WebSocket URL，优先于 `host`/`port` |
-| `host` | string | `localhost` | Gateway 主机名或 IP                      |
-| `port` | number | `18789`     | Gateway 端口                             |
-| `auth` | object | —           | 认证配置                                 |
+| 字段     | 类型   | 默认值  | 说明                         |
+| -------- | ------ | ------- | ---------------------------- |
+| `mode`   | string | `local` | `"local"` 或 `"remote"`      |
+| `port`   | number | `18789` | Gateway 端口（本地模式使用） |
+| `auth`   | object | —       | 本地模式认证配置             |
+| `remote` | object | —       | 远程模式连接配置             |
 
-### `gateway.auth` 对象
+### `gateway.auth` 对象（本地模式）
 
 | 字段       | 类型   | 可选值                      | 说明                     |
 | ---------- | ------ | --------------------------- | ------------------------ |
@@ -148,29 +158,57 @@ OpenClaw Gateway 采用**基于设备的认证**模型：
 | `token`    | string | —                           | 共享 token（mode=token） |
 | `password` | string | —                           | 密码（mode=password）    |
 
+### `gateway.remote` 对象（远程模式）
+
+| 字段             | 类型   | 说明                 |
+| ---------------- | ------ | -------------------- |
+| `url`            | string | 远程 WebSocket URL   |
+| `token`          | string | 远程认证 token       |
+| `password`       | string | 远程认证密码         |
+| `tlsFingerprint` | string | TLS 证书指纹（可选） |
+| `sshTarget`      | string | SSH 隧道目标（可选） |
+| `sshIdentity`    | string | SSH 密钥路径（可选） |
+
 ## 配置值优先级
 
-每个配置值按以下顺序解析（取第一个非空值）：
+每个配置值按以下优先级链解析（取第一个非空值）：
 
 ```
-url:      程序传入 → openclaw.json gateway.url  → ws://{host}:{port}
-host:     程序传入 → openclaw.json gateway.host → "localhost"
-port:     程序传入 → openclaw.json gateway.port → 18789
-token:    程序传入 → openclaw.json gateway.auth.token    → （无）
-password: 程序传入 → openclaw.json gateway.auth.password → （无）
+mode:     UI 传入 → gateway.mode → wizard.lastRunMode → 自动推断 → "local"
+url:      UI 传入 → gateway.remote.url（remote 模式） → ws://localhost:{port}
+token:    UI 传入 → gateway.remote.token / gateway.auth.token（按 mode）
+password: UI 传入 → gateway.remote.password / gateway.auth.password（按 mode）
+port:     UI 传入 → gateway.port → 18789
 ```
 
-## 外部 Gateway 自动推断
+## 模式推断规则
 
-当未显式设置 `useExternalGateway` 时，按以下规则自动推断：
+当 `gateway.mode` 未显式设置时，按以下规则自动推断：
 
-| 条件                                  | `useExternal`                  |
-| ------------------------------------- | ------------------------------ |
-| 配置了 `url`（程序传入或配置文件）    | `true`                         |
-| `host` 不是 `localhost` / `127.0.0.1` | `true`                         |
-| 其他情况                              | `false` → 尝试启动本地 Gateway |
+| 条件                             | 推断 mode |
+| -------------------------------- | --------- |
+| `gateway.remote.url` 存在        | `remote`  |
+| `wizard.lastRunMode` 为 `remote` | `remote`  |
+| 旧配置中存在 `gateway.url`       | `remote`  |
+| 其他情况                         | `local`   |
 
-当 `useExternalGateway` 显式设为 `false` 时，配置文件中的远程 `url` 会被忽略，连接始终使用 `ws://{host}:{port}`。
+## 向后兼容
+
+旧版配置（使用 `gateway.url` / `gateway.host` / `gateway.auth`）仍然受支持：
+
+```json
+{
+  "gateway": {
+    "url": "ws://192.168.1.100:18789",
+    "auth": {
+      "mode": "token",
+      "token": "your-shared-token"
+    }
+  }
+}
+```
+
+此配置会被自动推断为 `remote` 模式，token 从 `gateway.auth.token` 回退读取。建议迁移到新的 `gateway.mode` + `gateway.remote` 结构。
 
 ## 服务端部署
 
