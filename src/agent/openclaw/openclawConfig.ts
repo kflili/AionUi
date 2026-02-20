@@ -27,6 +27,7 @@ interface OpenClawGatewayAuth {
 }
 
 interface OpenClawGatewayRemote {
+  url?: string;
   token?: string;
   password?: string;
   tlsFingerprint?: string;
@@ -156,7 +157,7 @@ export function readOpenClawConfig(): OpenClawConfig | null {
  * Resolve gateway config from the config file based on `gateway.mode`.
  *
  * - `gateway.mode` is the authoritative indicator; defaults to `'local'` when absent
- * - `remote` mode reads token/password from `gateway.remote.*`, url from `gateway.url`
+ * - `remote` mode reads url/token/password from `gateway.remote.*`, falls back to `gateway.url`
  * - `local` mode reads auth from `gateway.auth.*`
  */
 export function resolveGatewayConfigFromFile(): ResolvedFileGatewayConfig {
@@ -171,7 +172,7 @@ export function resolveGatewayConfigFromFile(): ResolvedFileGatewayConfig {
     const remote = gw?.remote;
     return {
       mode: 'remote',
-      url: gw?.url || undefined,
+      url: remote?.url || gw?.url || undefined,
       token: remote?.token || (gw?.auth?.mode === 'token' ? gw.auth.token : undefined),
       password: remote?.password || (gw?.auth?.mode === 'password' ? gw.auth.password : undefined),
       port,
