@@ -75,27 +75,13 @@
   }
 }
 
-/* Agent 选中时：先放大再回落至略大 */
-@keyframes agentSelectPop {
-  0% {
-    transform: scale(1);
-  }
-  35% {
-    transform: scale(1.12);
-  }
-  100% {
-    transform: scale(1.02);
-  }
-}
-
-.agentItemSelected {
-  animation: agentSelectPop 0.4s ease-out forwards;
-}
-
-/* 移动端优化 */
+/* 移动端优化：宽度限制、水平居中、为底部按钮留白 */
 @media (max-width: 768px) {
   .guidLayout {
     width: clamp(var(--app-min-width, 360px), calc(100% - 32px), 100%);
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
     padding: 0 16px;
     padding-bottom: 100px; /* 为底部快捷按钮留出空间 */
     box-sizing: border-box;
@@ -122,7 +108,7 @@
   }
 }
 
-/* 移动端容器滚动支持 */
+/* 桌面端：内容居中，整体略上移 */
 .guidContainer {
   height: 100%;
   display: flex;
@@ -138,13 +124,46 @@
   margin-top: -5vh;
 }
 
+/* Agent 选中时：先放大再回落至略大（pop 动效） */
+@keyframes agentSelectPop {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(1.12);
+  }
+  100% {
+    transform: scale(1.02);
+  }
+}
+
+.agentItemSelected {
+  background-color: var(--fill-0);
+  transition:
+    opacity 0.5s cubic-bezier(0.2, 0.8, 0.3, 1),
+    background-color 0.25s ease-out;
+  animation: agentSelectPop 0.4s ease-out forwards;
+}
+
+/* 底部快捷按钮：基础间距 + 安全区，避免贴底或被遮挡 */
+.guidQuickActions {
+  bottom: calc(32px + env(safe-area-inset-bottom, 0px));
+}
+
+/* 移动端：保持居中，可滚动，安全区留白 */
 @media (max-width: 768px) {
   .guidContainer {
-    justify-content: flex-start;
+    justify-content: center;
+    align-items: center;
     overflow-y: auto;
     overflow-x: hidden;
-    padding-top: 20px;
+    padding: max(20px, env(safe-area-inset-top)) 10px max(20px, env(safe-area-inset-bottom)) 10px;
     -webkit-overflow-scrolling: touch;
+  }
+
+  /* 移动端取消上移，避免与安全区叠加后显得偏上 */
+  .guidContainer .guidLayout {
+    margin-top: 0;
   }
 }
 

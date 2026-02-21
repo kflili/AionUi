@@ -10,22 +10,7 @@ import type { IProvider, TProviderWithModel } from '@/common/storage';
 import { ConfigStorage } from '@/common/storage';
 import { resolveLocaleKey, uuid } from '@/common/utils';
 import coworkSvg from '@/renderer/assets/cowork.svg';
-import AuggieLogo from '@/renderer/assets/logos/auggie.svg';
-import ClaudeLogo from '@/renderer/assets/logos/claude.svg';
-import CodeBuddyLogo from '@/renderer/assets/logos/codebuddy.svg';
-import CodexLogo from '@/renderer/assets/logos/codex.svg';
-import DroidLogo from '@/renderer/assets/logos/droid.svg';
-import GeminiLogo from '@/renderer/assets/logos/gemini.svg';
-import GitHubLogo from '@/renderer/assets/logos/github.svg';
-import GooseLogo from '@/renderer/assets/logos/goose.svg';
-import IflowLogo from '@/renderer/assets/logos/iflow.svg';
-import KimiLogo from '@/renderer/assets/logos/kimi.svg';
-import MistralLogo from '@/renderer/assets/logos/mistral.svg';
-import NanobotLogo from '@/renderer/assets/logos/nanobot.svg';
-import OpenClawLogo from '@/renderer/assets/logos/openclaw.svg';
-import OpenCodeLogo from '@/renderer/assets/logos/opencode.svg';
-import QoderLogo from '@/renderer/assets/logos/qoder.png';
-import QwenLogo from '@/renderer/assets/logos/qwen.svg';
+import { getAgentLogo } from '@/renderer/utils/agentLogo';
 import AgentModeSelector from '@/renderer/components/AgentModeSelector';
 import { supportsModeSwitch } from '@/renderer/constants/agentModes';
 import FilePreview from '@/renderer/components/FilePreview';
@@ -42,6 +27,7 @@ import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/messageFiles';
 import { hasSpecificModelCapability } from '@/renderer/utils/modelCapabilities';
 import { updateWorkspaceTime } from '@/renderer/utils/workspaceHistory';
+import { DEFAULT_CODEX_MODELS, DEFAULT_CODEX_MODEL_ID } from '@/common/codex/codexModels';
 import { isAcpRoutedPresetType, type AcpBackend, type AcpBackendConfig, type PresetAgentType } from '@/types/acpTypes';
 import { Button, ConfigProvider, Dropdown, Input, Menu, Message, Tooltip } from '@arco-design/web-react';
 import { IconClose } from '@arco-design/web-react/icon';
@@ -174,25 +160,8 @@ const useModelList = () => {
   return { modelList, isGoogleAuth, geminiModeOptions };
 };
 
-// Agent Logo 映射 (custom uses Robot icon from @icon-park/react)
-const AGENT_LOGO_MAP: Partial<Record<AcpBackend, string>> = {
-  claude: ClaudeLogo,
-  gemini: GeminiLogo,
-  qwen: QwenLogo,
-  codex: CodexLogo,
-  codebuddy: CodeBuddyLogo,
-  droid: DroidLogo,
-  iflow: IflowLogo,
-  goose: GooseLogo,
-  auggie: AuggieLogo,
-  kimi: KimiLogo,
-  opencode: OpenCodeLogo,
-  copilot: GitHubLogo,
-  qoder: QoderLogo,
-  vibe: MistralLogo,
-  'openclaw-gateway': OpenClawLogo,
-  nanobot: NanobotLogo,
-};
+// Agent Logo 现在统一从 @/renderer/utils/agentLogo 获取
+// Agent Logo is now unified from @/renderer/utils/agentLogo
 const CUSTOM_AVATAR_IMAGE_MAP: Record<string, string> = {
   'cowork.svg': coworkSvg,
   '🛠️': coworkSvg,
@@ -344,6 +313,7 @@ const Guid: React.FC = () => {
   const selectedAgentInfo = useMemo(() => findAgentByKey(selectedAgentKey), [selectedAgentKey, availableAgents, customAgents]);
   const isPresetAgent = Boolean(selectedAgentInfo?.isPreset);
   const [selectedMode, setSelectedMode] = useState<string>('default');
+  const [selectedCodexModel, setSelectedCodexModel] = useState<string>(DEFAULT_CODEX_MODEL_ID);
   const [isPlusDropdownOpen, setIsPlusDropdownOpen] = useState(false);
   const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(true);
   const [typewriterPlaceholder, setTypewriterPlaceholder] = useState('');
@@ -470,7 +440,7 @@ const Guid: React.FC = () => {
         tokens,
         avatar,
         avatarImage: avatar ? CUSTOM_AVATAR_IMAGE_MAP[avatar] : undefined,
-        logo: AGENT_LOGO_MAP[agent.backend],
+        logo: getAgentLogo(agent.backend) || undefined,
       };
     });
   }, [availableAgents, customAgentAvatarMap]);
@@ -1044,6 +1014,8 @@ const Guid: React.FC = () => {
             presetAssistantId: isPreset ? codexAgentInfo?.customAgentId : undefined,
             // Initial session mode from Guid page mode selector
             sessionMode: selectedMode,
+            // User-selected Codex model from Guid page
+            codexModel: selectedCodexModel,
           },
         });
 
@@ -1482,24 +1454,14 @@ const Guid: React.FC = () => {
                   .filter((agent) => agent.backend !== 'custom')
                   .map((agent, index) => {
                     const isSelected = selectedAgentKey === getAgentKey(agent);
-                    const logoSrc = AGENT_LOGO_MAP[agent.backend];
+                    const logoSrc = getAgentLogo(agent.backend);
 
                     return (
                       <React.Fragment key={getAgentKey(agent)}>
                         {index > 0 && <div className='text-16px lh-1 p-2px select-none opacity-30'>|</div>}
                         <div
                           className={`group flex items-center cursor-pointer whitespace-nowrap overflow-hidden ${isSelected ? `opacity-100 px-12px py-8px rd-20px mx-2px ${styles.agentItemSelected}` : 'opacity-60 p-4px hover:opacity-100'}`}
-                          style={
-                            isSelected
-                              ? {
-                                  transition: 'opacity 0.5s cubic-bezier(0.2, 0.8, 0.3, 1), background-color 0.25s ease-out',
-                                  backgroundColor: 'var(--fill-0)',
-                                }
-                              : {
-                                  transition: 'opacity 0.5s cubic-bezier(0.2, 0.8, 0.3, 1), background-color 0.25s ease-out, transform 0.2s ease-out',
-                                  transform: 'scale(1)',
-                                }
-                          }
+                          style={isSelected ? undefined : { transition: 'opacity 0.5s cubic-bezier(0.2, 0.8, 0.3, 1)' }}
                           onClick={() => {
                             setSelectedAgentKey(getAgentKey(agent));
                             setMentionOpen(false);
@@ -1749,6 +1711,25 @@ const Guid: React.FC = () => {
                       {currentModel ? formatGeminiModelLabel(currentModel, currentModel.useModel) : t('conversation.welcome.selectModel')}
                     </Button>
                   </Dropdown>
+                ) : (selectedAgent === 'codex' && !isPresetAgent) || (isPresetAgent && currentEffectiveAgentInfo.agentType === 'codex') ? (
+                  <Dropdown
+                    trigger='click'
+                    droplist={
+                      <Menu selectedKeys={[selectedCodexModel]}>
+                        {DEFAULT_CODEX_MODELS.map((model) => (
+                          <Menu.Item key={model.id} className={model.id === selectedCodexModel ? '!bg-2' : ''} onClick={() => setSelectedCodexModel(model.id)}>
+                            <Tooltip position='right' trigger='hover' content={<div className='max-w-240px text-12px text-t-secondary leading-5'>{model.description}</div>}>
+                              <span>{model.label}</span>
+                            </Tooltip>
+                          </Menu.Item>
+                        ))}
+                      </Menu>
+                    }
+                  >
+                    <Button className={'sendbox-model-btn'} shape='round'>
+                      {DEFAULT_CODEX_MODELS.find((m) => m.id === selectedCodexModel)?.label || selectedCodexModel}
+                    </Button>
+                  </Dropdown>
                 ) : (
                   <Tooltip content={t('conversation.welcome.modelSwitchNotSupported')} position='top'>
                     <Button className={'sendbox-model-btn'} shape='round' style={{ cursor: 'default' }}>
@@ -1935,7 +1916,7 @@ const Guid: React.FC = () => {
         </div>
 
         {/* 底部快捷按钮 */}
-        <div className='absolute bottom-32px left-50% -translate-x-1/2 flex flex-col justify-center items-center'>
+        <div className={`absolute left-50% -translate-x-1/2 flex flex-col justify-center items-center ${styles.guidQuickActions}`}>
           {/* <div className='text-text-3 text-14px mt-24px mb-12px'>{t('conversation.welcome.quickActionsTitle')}</div> */}
           <div className='flex justify-center items-center gap-24px'>
             <div className='group flex items-center justify-center w-36px h-36px rd-50% bg-fill-0 cursor-pointer overflow-hidden whitespace-nowrap hover:w-200px hover:rd-28px hover:px-20px hover:justify-start hover:gap-10px transition-all duration-400 ease-[cubic-bezier(0.2,0.8,0.3,1)]' style={quickActionStyle(hoveredQuickAction === 'feedback')} onMouseEnter={() => setHoveredQuickAction('feedback')} onMouseLeave={() => setHoveredQuickAction(null)} onClick={() => openLink('https://x.com/AionUi')}>

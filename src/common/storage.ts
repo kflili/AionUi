@@ -157,6 +157,10 @@ export type TChatConversation =
         enabledSkills?: string[];
         /** 预设助手 ID，用于在会话面板显示助手名称和头像 / Preset assistant ID for displaying name and avatar in conversation panel */
         presetAssistantId?: string;
+        /** 是否置顶会话 / Whether this conversation is pinned */
+        pinned?: boolean;
+        /** 置顶时间戳（毫秒）/ Pin timestamp in milliseconds */
+        pinnedAt?: number;
         /** Persisted session mode for resume support / 持久化的会话模式，用于恢复 */
         sessionMode?: string;
       }
@@ -176,12 +180,18 @@ export type TChatConversation =
           enabledSkills?: string[];
           /** 预设助手 ID，用于在会话面板显示助手名称和头像 / Preset assistant ID for displaying name and avatar in conversation panel */
           presetAssistantId?: string;
+          /** 是否置顶会话 / Whether this conversation is pinned */
+          pinned?: boolean;
+          /** 置顶时间戳（毫秒）/ Pin timestamp in milliseconds */
+          pinnedAt?: number;
           /** ACP 后端的 session UUID，用于会话恢复 / ACP backend session UUID for session resume */
           acpSessionId?: string;
           /** ACP session 最后更新时间 / Last update time of ACP session */
           acpSessionUpdatedAt?: number;
           /** Persisted session mode for resume support / 持久化的会话模式，用于恢复 */
           sessionMode?: string;
+          /** Persisted model ID for resume support / 持久化的模型 ID，用于恢复 */
+          currentModelId?: string;
         }
       >,
       'model'
@@ -199,8 +209,14 @@ export type TChatConversation =
           enabledSkills?: string[];
           /** 预设助手 ID，用于在会话面板显示助手名称和头像 / Preset assistant ID for displaying name and avatar in conversation panel */
           presetAssistantId?: string;
+          /** 是否置顶会话 / Whether this conversation is pinned */
+          pinned?: boolean;
+          /** 置顶时间戳（毫秒）/ Pin timestamp in milliseconds */
+          pinnedAt?: number;
           /** Persisted session mode for resume support / 持久化的会话模式，用于恢复 */
           sessionMode?: string;
+          /** User-selected Codex model from Guid page / 用户在引导页选择的 Codex 模型 */
+          codexModel?: string;
         }
       >,
       'model'
@@ -238,6 +254,10 @@ export type TChatConversation =
           enabledSkills?: string[];
           /** 预设助手 ID / Preset assistant ID */
           presetAssistantId?: string;
+          /** 是否置顶会话 / Whether this conversation is pinned */
+          pinned?: boolean;
+          /** 置顶时间戳（毫秒）/ Pin timestamp in milliseconds */
+          pinnedAt?: number;
         }
       >,
       'model'
@@ -252,6 +272,10 @@ export type TChatConversation =
           enabledSkills?: string[];
           /** 预设助手 ID / Preset assistant ID */
           presetAssistantId?: string;
+          /** 是否置顶会话 / Whether this conversation is pinned */
+          pinned?: boolean;
+          /** 置顶时间戳（毫秒）/ Pin timestamp in milliseconds */
+          pinnedAt?: number;
         }
       >,
       'model'

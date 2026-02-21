@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { AcpBackend, AcpIncomingMessage, AcpMessage, AcpNotification, AcpPermissionRequest, AcpRequest, AcpResponse, AcpSessionUpdate } from '@/types/acpTypes';
+import type { AcpBackend, AcpIncomingMessage, AcpMessage, AcpNotification, AcpPermissionRequest, AcpRequest, AcpResponse, AcpSessionConfigOption, AcpSessionModels, AcpSessionUpdate } from '@/types/acpTypes';
 import { ACP_METHODS, JSONRPC_VERSION } from '@/types/acpTypes';
 import type { ChildProcess, SpawnOptions } from 'child_process';
 import { execFile as execFileCb, execFileSync, spawn } from 'child_process';
@@ -85,6 +85,10 @@ export class AcpConnection {
   private initializeResponse: AcpResponse | null = null;
   private workingDir: string = process.cwd();
 
+  // Cached model information from session/new response
+  private configOptions: AcpSessionConfigOption[] | null = null;
+  private models: AcpSessionModels | null = null;
+
   // Performance tracking: timestamp when last prompt was sent
   private lastPromptSentAt: number = 0;
   private firstChunkReceived: boolean = true;
@@ -114,6 +118,9 @@ export class AcpConnection {
     delete cleanEnv.NODE_OPTIONS;
     delete cleanEnv.NODE_INSPECT;
     delete cleanEnv.NODE_DEBUG;
+    // Remove CLAUDECODE env var to prevent claude-agent-sdk from detecting
+    // a nested session when AionUi itself is launched from Claude Code.
+    delete cleanEnv.CLAUDECODE;
     // Strip npm lifecycle vars inherited from parent `npm start` process.
     // These (npm_config_*, npm_lifecycle_*, npm_package_*) can cause npx to
     // behave as if running inside an npm script, interfering with package
@@ -248,7 +255,7 @@ export class AcpConnection {
     // to avoid picking up a stale globally-installed npx (pre npm 7)
     const isWindows = process.platform === 'win32';
     const spawnCommand = resolveNpxPath(cleanEnv);
-    const spawnArgs = ['--prefer-offline', '@zed-industries/claude-code-acp'];
+    const spawnArgs = ['--prefer-offline', '@zed-industries/claude-agent-acp@0.18.0'];
 
     const spawnStart = Date.now();
     this.child = spawn(spawnCommand, spawnArgs, {
@@ -452,6 +459,8 @@ export class AcpConnection {
     this.isDetached = false;
     this.backend = null;
     this.initializeResponse = null;
+    this.configOptions = null;
+    this.models = null;
     this.child = null;
 
     // 3. Notify AcpAgent about disconnect
@@ -655,6 +664,13 @@ export class AcpConnection {
           }
           // Reset timeout on streaming updates - LLM is still processing
           this.resetSessionPromptTimeouts();
+          // Update cached configOptions when config_options_update arrives
+          if (message.params?.update && (message.params.update as Record<string, unknown>).sessionUpdate === 'config_options_update') {
+            const updatePayload = message.params.update as { configOptions?: AcpSessionConfigOption[] };
+            if (Array.isArray(updatePayload.configOptions)) {
+              this.configOptions = updatePayload.configOptions;
+            }
+          }
           this.onSessionUpdate(message.params);
           break;
         case ACP_METHODS.REQUEST_PERMISSION:
@@ -813,7 +829,7 @@ export class AcpConnection {
     const normalizedCwd = this.normalizeCwdForAgent(cwd);
 
     // Build _meta for Claude/CodeBuddy ACP resume support
-    // claude-code-acp and codebuddy use _meta.claudeCode.options.resume for session resume
+    // claude-agent-acp and codebuddy use _meta.claudeCode.options.resume for session resume
     const useMetaResume = (this.backend === 'claude' || this.backend === 'codebuddy') && options?.resumeSessionId;
     const meta = useMetaResume
       ? {
@@ -836,6 +852,16 @@ export class AcpConnection {
     });
 
     this.sessionId = response.sessionId;
+
+    // Parse configOptions and models from session/new response
+    const result = response as unknown as Record<string, unknown>;
+    if (Array.isArray(result.configOptions)) {
+      this.configOptions = result.configOptions as AcpSessionConfigOption[];
+    }
+    if (result.models && typeof result.models === 'object') {
+      this.models = result.models as AcpSessionModels;
+    }
+
     return response;
   }
 
@@ -901,10 +927,45 @@ export class AcpConnection {
       throw new Error('No active ACP session');
     }
 
-    return await this.sendRequest('session/set_model', {
+    const response = await this.sendRequest<AcpResponse>('session/set_model', {
       sessionId: this.sessionId,
       modelId,
     });
+
+    // Update local models cache with the new model ID
+    if (this.models) {
+      this.models = { ...this.models, currentModelId: modelId };
+    }
+
+    return response;
+  }
+
+  async setConfigOption(configId: string, value: string): Promise<AcpResponse> {
+    if (!this.sessionId) {
+      throw new Error('No active ACP session');
+    }
+
+    const response = await this.sendRequest<AcpResponse>(ACP_METHODS.SET_CONFIG_OPTION, {
+      sessionId: this.sessionId,
+      configId,
+      value,
+    });
+
+    // The response may contain the updated configOptions
+    const result = response as unknown as Record<string, unknown>;
+    if (Array.isArray(result.configOptions)) {
+      this.configOptions = result.configOptions as AcpSessionConfigOption[];
+    }
+
+    return response;
+  }
+
+  getConfigOptions(): AcpSessionConfigOption[] | null {
+    return this.configOptions;
+  }
+
+  getModels(): AcpSessionModels | null {
+    return this.models;
   }
 
   async disconnect(): Promise<void> {
@@ -956,6 +1017,8 @@ export class AcpConnection {
     this.isDetached = false;
     this.backend = null;
     this.initializeResponse = null;
+    this.configOptions = null;
+    this.models = null;
   }
 
   get isConnected(): boolean {
