@@ -28,6 +28,14 @@ if (isLinuxNoDisplay) {
   app.commandLine.appendSwitch('disable-dev-shm-usage');
 }
 
+// Detect Linux with Wayland display server
+// Force X11/XWayland to avoid Electron-Wayland compatibility issues on GNOME + Wayland
+const isLinuxWayland = process.platform === 'linux' && !!process.env.WAYLAND_DISPLAY;
+
+if (isLinuxWayland) {
+  app.commandLine.appendSwitch('ozone-platform', 'x11');
+}
+
 // For WebUI and --resetpass modes: disable sandbox for root user
 // 仅 WebUI 和重置密码模式：root 用户禁用沙箱
 if (isWebUI || isResetPassword) {
