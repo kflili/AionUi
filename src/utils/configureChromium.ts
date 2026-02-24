@@ -50,11 +50,13 @@ if (isLinuxNoDisplay) {
   app.commandLine.appendSwitch('disable-software-rasterizer');
 }
 
-// Linux Wayland (local desktop only, skip when going headless):
-// Force X11/XWayland to avoid Electron-Wayland compatibility issues on GNOME + Wayland
-if (isLinuxWayland && !isLinuxNoDisplay) {
-  app.commandLine.appendSwitch('ozone-platform', 'x11');
-  // disable hardware GPU as remote Wayland sessions (e.g. xrdp) lack hardware EGL support
+// Linux with usable X display: disable hardware GPU to prevent EGL/VkXcb failures
+// on remote sessions (xrdp, VNC, SSH X forwarding) — software rendering is adequate for chat UI
+if (process.platform === 'linux' && !isLinuxNoDisplay) {
+  if (isLinuxWayland) {
+    // Force X11 backend when Wayland is detected (avoids Electron-Wayland compatibility issues)
+    app.commandLine.appendSwitch('ozone-platform', 'x11');
+  }
   app.commandLine.appendSwitch('disable-gpu');
 }
 
