@@ -712,6 +712,20 @@ export class GeminiAgent {
 
   async send(message: string | Array<{ text: string }>, msg_id = '', files?: string[]) {
     await this.bootstrap;
+
+    // Fix orphaned user turn left by a previous abort.
+    // When abort happens, GeminiChat.sendMessageStream has already pushed the user
+    // message but processStreamResponse never pushes the model response, leaving an
+    // orphaned user turn that violates Gemini API's strict user/model alternation.
+    // Append a placeholder model response to preserve the user's question in context.
+    if (this.geminiClient?.isInitialized()) {
+      const history = this.geminiClient.getHistory();
+      if (history.length > 0 && history[history.length - 1].role === 'user') {
+        history.push({ role: 'model', parts: [{ text: '[Response cancelled by user]' }] });
+        this.geminiClient.setHistory(history);
+      }
+    }
+
     const abortController = this.createAbortController();
 
     const stripFilesMarker = (text: string): string => {
