@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/storage';
 import { STORAGE_KEYS } from '@/common/storageKeys';
 import { addEventListener } from '@/renderer/utils/emitter';
@@ -92,6 +93,13 @@ export const ConversationTabsProvider: React.FC<{ children: React.ReactNode }> =
       // 忽略存储错误（如存储空间不足）/ Ignore storage errors (e.g., quota exceeded)
     }
   }, [openTabs, activeTabId]);
+
+  // Notify main process of the active conversation for channel message routing
+  useEffect(() => {
+    if (activeTabId) {
+      void ipcBridge.conversation.setActive.invoke({ conversation_id: activeTabId });
+    }
+  }, [activeTabId]);
 
   // 获取当前激活的 tab / Get active tab
   const activeTab = openTabs.find((tab) => tab.id === activeTabId) || null;

@@ -17,6 +17,7 @@ import type AcpAgentManager from '../task/AcpAgentManager';
 import type { GeminiAgentManager } from '../task/GeminiAgentManager';
 import type NanoBotAgentManager from '../task/NanoBotAgentManager';
 import type OpenClawAgentManager from '../task/OpenClawAgentManager';
+import { setActiveConversationId } from '../activeConversation';
 import { copyFilesToDirectory, readDirectoryRecursive } from '../utils';
 import { computeOpenClawIdentityHash } from '../utils/openclawUtils';
 import WorkerManage from '../WorkerManage';
@@ -319,6 +320,13 @@ export function initConversationBridge(): void {
     } else {
       WorkerManage.clear();
     }
+    return Promise.resolve();
+  });
+
+  // Track which conversation the user is currently viewing.
+  // Used by ActionExecutor to route channel messages to the correct OpenClaw task.
+  ipcBridge.conversation.setActive.provider(({ conversation_id }) => {
+    setActiveConversationId(conversation_id);
     return Promise.resolve();
   });
 

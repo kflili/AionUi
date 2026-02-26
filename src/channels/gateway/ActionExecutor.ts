@@ -5,6 +5,7 @@
  */
 
 import type { TMessage } from '@/common/chatLib';
+import { getActiveConversationId } from '@/process/activeConversation';
 import { getDatabase } from '@/process/database';
 import { ProcessConfig } from '@/process/initStorage';
 import WorkerManage from '@/process/WorkerManage';
@@ -54,6 +55,42 @@ function getResponseActionsMarkup(platform: PluginType, text?: string) {
     return createDingTalkResponseActionsCard(text || '');
   }
   return createResponseActionsKeyboard();
+}
+
+/**
+ * Build a message that removes action buttons for the given platform.
+ * For card-based platforms (Lark/DingTalk), the buttons are embedded in the card
+ * structure, so we must rebuild the card with only text content.
+ * For Telegram, setting replyMarkup: undefined suffices.
+ *
+ * 构建去除操作按钮的消息。卡片平台（飞书/钉钉）需要重新构建纯文本卡片。
+ */
+function buildButtonStrippedMessage(content: IUnifiedOutgoingMessage, platform: PluginType): IUnifiedOutgoingMessage {
+  if (platform === 'lark') {
+    // Rebuild as a Lark text-only card via replyMarkup so toLarkSendParams
+    // uses the interactive card path (same card type as the original).
+    return {
+      ...content,
+      replyMarkup: {
+        config: { wide_screen_mode: true },
+        elements: [{ tag: 'markdown', content: content.text || '' }],
+      },
+    };
+  }
+  if (platform === 'dingtalk') {
+    return {
+      ...content,
+      replyMarkup: {
+        title: 'Response',
+        text: content.text || '',
+        btns: [],
+      },
+    };
+  }
+  // Telegram: explicitly set empty inline keyboard to REMOVE existing buttons.
+  // Setting replyMarkup: undefined causes the adapter to omit reply_markup from
+  // the API call, which makes Telegram keep the existing keyboard unchanged.
+  return { ...content, replyMarkup: { inline_keyboard: [] } };
 }
 
 /**
@@ -261,6 +298,17 @@ export class ActionExecutor {
   // Action registry
   private actionRegistry: Map<string, IRegisteredAction> = new Map();
 
+  // Track last response message with action buttons per chatId,
+  // so we can strip buttons from previous responses when a new one starts.
+  // Key: chatId, Value: { msgId, platform, content }
+  private lastButtonMessage: Map<string, { msgId: string; platform: PluginType; content: IUnifiedOutgoingMessage }> = new Map();
+
+  // Per-chatId message queue: ensures messages from the same chat are processed
+  // sequentially. Without this, concurrent messages cause AionUI to show
+  // user1, user2, AI1, AI2 instead of the correct user1, AI1, user2, AI2.
+  // Key: chatId, Value: promise chain
+  private chatQueues: Map<string, Promise<void>> = new Map();
+
   constructor(pluginManager: PluginManager, sessionManager: SessionManager, pairingService: PairingService) {
     this.pluginManager = pluginManager;
     this.sessionManager = sessionManager;
@@ -278,9 +326,28 @@ export class ActionExecutor {
   }
 
   /**
-   * Handle incoming message from plugin
+   * Handle incoming message from plugin.
+   * Messages from the same chatId are queued to ensure sequential processing.
+   * This prevents message ordering issues when users send multiple messages quickly
+   * (e.g., user1, user2, AI1, AI2 instead of the correct user1, AI1, user2, AI2).
    */
   private async handleIncomingMessage(message: IUnifiedIncomingMessage): Promise<void> {
+    console.log(`[ActionExecutor:Incoming] platform=${message.platform}, chatId=${message.chatId}, type=${message.content.type}, text=${(message.content.text || '').slice(0, 50)}`);
+    const chatId = message.chatId;
+    const prev = this.chatQueues.get(chatId) || Promise.resolve();
+    const current = prev
+      .then(() => this._processMessage(message))
+      .catch((err) => {
+        console.error(`[ActionExecutor] Message processing error for chatId=${chatId}:`, err);
+      });
+    this.chatQueues.set(chatId, current);
+    return current;
+  }
+
+  /**
+   * Internal: process a single incoming message (called sequentially per chatId)
+   */
+  private async _processMessage(message: IUnifiedIncomingMessage): Promise<void> {
     const { platform, chatId, user, content, action } = message;
 
     // Get plugin for sending responses
@@ -346,11 +413,18 @@ export class ActionExecutor {
       // Get or create session (scoped by chatId for per-chat isolation)
       let session = this.sessionManager.getSession(channelUser.id, chatId);
 
-      // When an active OpenClaw session exists in AionUI, ALWAYS route channel
-      // messages to it (even if a cached session points to a different conversation).
-      const activeOpenClawTask = WorkerManage.listTasks().find((t) => t.type === 'openclaw-gateway');
-      if (activeOpenClawTask && session?.conversationId !== activeOpenClawTask.id) {
-        session = this.sessionManager.createSessionWithConversation(channelUser, activeOpenClawTask.id, 'acp', undefined, chatId);
+      // When an active OpenClaw session exists in AionUI, route channel messages
+      // to it. Priority: (1) the conversation the user is currently viewing (if
+      // it's an OpenClaw task), (2) the most recently created OpenClaw task.
+      const openClawTasks = WorkerManage.listTasks().filter((t) => t.type === 'openclaw-gateway');
+      if (openClawTasks.length > 0) {
+        const activeConvId = getActiveConversationId();
+        // Prefer the conversation the user is currently viewing
+        const activeOpenClawTask = openClawTasks.find((t) => t.id === activeConvId) || openClawTasks[openClawTasks.length - 1];
+        if (session?.conversationId !== activeOpenClawTask.id) {
+          console.log(`[ActionExecutor:Route] Routing to OpenClaw: ${activeOpenClawTask.id} (active=${activeConvId}, tasks=${openClawTasks.length})`);
+          session = this.sessionManager.createSessionWithConversation(channelUser, activeOpenClawTask.id, 'acp', undefined, chatId);
+        }
       }
 
       if (!session || !session.conversationId) {
@@ -444,6 +518,7 @@ export class ActionExecutor {
         await this.executeAction(context, content.text, {});
       } else if (content.type === 'text' && content.text) {
         // Regular text message - send to AI
+        console.log(`[ActionExecutor:Route] chatMessage: convId=${context.conversationId}, sessionId=${context.sessionId}, text=${content.text.slice(0, 50)}`);
         await this.handleChatMessage(context, content.text);
       } else {
         // Unsupported content type
@@ -506,6 +581,22 @@ export class ActionExecutor {
       this.sessionManager.updateSessionActivity(context.channelUser.id, context.chatId);
     }
 
+    // Strip action buttons from the previous response in this chat
+    // so only the latest response retains interactive buttons.
+    // 清除上一轮回复的操作按钮，仅保留最新回复的按钮
+    const prevButton = this.lastButtonMessage.get(context.chatId);
+    if (prevButton) {
+      this.lastButtonMessage.delete(context.chatId);
+      try {
+        console.debug(`[ActionExecutor] Stripping buttons from previous message: chatId=${context.chatId}, msgId=${prevButton.msgId}, platform=${prevButton.platform}`);
+        await context.editMessage(prevButton.msgId, buildButtonStrippedMessage(prevButton.content, prevButton.platform));
+      } catch (err) {
+        console.warn(`[ActionExecutor] Failed to strip buttons: chatId=${context.chatId}, msgId=${prevButton.msgId}`, err);
+      }
+    } else {
+      console.debug(`[ActionExecutor] No previous button message to strip for chatId=${context.chatId}`);
+    }
+
     // Send "thinking" indicator
     const thinkingMsgId = await context.sendMessage({
       type: 'text',
@@ -525,7 +616,10 @@ export class ActionExecutor {
 
       // 节流控制：使用定时器机制确保最后一条消息能被发送
       // Throttle control: use timer mechanism to ensure last message is sent
-      let lastUpdateTime = 0;
+      // Initialize to Date.now() so the first streaming edit is also throttled (500ms).
+      // This prevents a race condition where the first content chunk arrives before
+      // Feishu/Lark has fully confirmed the "Thinking..." message on their server.
+      let lastUpdateTime = Date.now();
       const UPDATE_THROTTLE_MS = 500; // Update at most every 500ms
       let pendingUpdateTimer: ReturnType<typeof setTimeout> | null = null;
       let pendingMessage: IUnifiedOutgoingMessage | null = null;
@@ -662,11 +756,15 @@ export class ActionExecutor {
         // 使用最后一条消息的实际内容，添加操作按钮（根据平台）
         // Use actual content of last message, add action buttons (based on platform)
         const responseMarkup = getResponseActionsMarkup(context.platform as PluginType, lastMessageContent?.text);
-        const finalMessage: IUnifiedOutgoingMessage = lastMessageContent ? { ...lastMessageContent, replyMarkup: responseMarkup } : { type: 'text', text: '✅ Done', parseMode: 'HTML', replyMarkup: responseMarkup };
+        const finalContent: IUnifiedOutgoingMessage = lastMessageContent ? { ...lastMessageContent, replyMarkup: undefined } : { type: 'text', text: '✅ Done', parseMode: 'HTML' };
+        const finalMessage: IUnifiedOutgoingMessage = { ...finalContent, replyMarkup: responseMarkup };
         await context.editMessage(lastMsgId, finalMessage);
-      } catch {
-        // 忽略最终编辑错误
-        // Ignore final edit error
+
+        // Track this message so we can strip its buttons when the next response starts
+        this.lastButtonMessage.set(context.chatId, { msgId: lastMsgId, platform: context.platform as PluginType, content: finalContent });
+        console.debug(`[ActionExecutor] Tracked button message: chatId=${context.chatId}, msgId=${lastMsgId}, platform=${context.platform}`);
+      } catch (err) {
+        console.warn(`[ActionExecutor] Failed to add action buttons to final message:`, err);
       }
     } catch (error: any) {
       console.error(`[ActionExecutor] Chat processing failed:`, error);
