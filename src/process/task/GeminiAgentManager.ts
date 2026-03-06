@@ -24,6 +24,7 @@ import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
 import { ConversationTurnCompletionService } from '@process/services/ConversationTurnCompletionService';
 import { handlePreviewOpenEvent } from '../utils/previewUtils';
 import BaseAgentManager from './BaseAgentManager';
+import { mainLog, mainWarn, mainError } from '../utils/mainLogger';
 import { hasCronCommands } from './CronCommandDetector';
 import { extractTextFromMessage, processCronInMessage } from './MessageMiddleware';
 import { stripThinkTags } from './ThinkTagDetector';
@@ -304,6 +305,7 @@ export class GeminiAgentManager extends BaseAgentManager<
     await this.refreshWorkerIfMcpChanged();
     this.status = 'pending';
     cronBusyGuard.setProcessing(this.conversation_id, true);
+
     const result = await this.bootstrap
       .catch((e) => {
         cronBusyGuard.setProcessing(this.conversation_id, false);
@@ -335,16 +337,16 @@ export class GeminiAgentManager extends BaseAgentManager<
       const currentFingerprint = GeminiAgentManager.computeMcpFingerprint(mcpServers);
 
       if (currentFingerprint !== this.mcpFingerprint) {
-        console.log(`[GeminiAgentManager] MCP config changed (${this.mcpFingerprint} -> ${currentFingerprint}), re-bootstrapping worker...`);
+        mainLog('[GeminiAgentManager]', `MCP config changed (${this.mcpFingerprint} -> ${currentFingerprint}), re-bootstrapping worker...`);
         // Kill old worker process and its child processes (MCP server connections)
         this.kill();
         // Re-bootstrap with fresh config (getMcpServers will update the fingerprint)
         this.bootstrap = this.createBootstrap();
         await this.bootstrap;
-        console.log('[GeminiAgentManager] Worker re-bootstrapped with updated MCP config');
+        mainLog('[GeminiAgentManager]', 'Worker re-bootstrapped with updated MCP config');
       }
     } catch (error) {
-      console.warn('[GeminiAgentManager] Failed to check MCP config changes:', error);
+      mainWarn('[GeminiAgentManager]', 'Failed to check MCP config changes', error);
       // Don't block message sending on MCP check failure
     }
   }
@@ -528,6 +530,22 @@ export class GeminiAgentManager extends BaseAgentManager<
       }
       if (data.type === 'start') {
         this.status = 'running';
+        const traceData = {
+          agentType: 'gemini' as const,
+          provider: this.model.name,
+          modelId: this.model.useModel,
+          baseUrl: this.model.baseUrl,
+          platform: this.model.platform,
+          authType: getProviderAuthType(this.model),
+          timestamp: Date.now(),
+        };
+        // Emit request trace on each model generation start
+        ipcBridge.geminiConversation.responseStream.emit({
+          type: 'request_trace',
+          conversation_id: this.conversation_id,
+          msg_id: uuid(),
+          data: traceData,
+        });
       }
 
       // 处理预览打开事件（chrome-devtools 导航触发）/ Handle preview open event (triggered by chrome-devtools navigation)
@@ -737,7 +755,7 @@ export class GeminiAgentManager extends BaseAgentManager<
         db.updateConversation(this.conversation_id, { extra: updatedExtra } as Partial<typeof conversation>);
       }
     } catch (error) {
-      console.error('[GeminiAgentManager] Failed to save session mode:', error);
+      mainError('[GeminiAgentManager]', 'Failed to save session mode', error);
     }
   }
 
@@ -753,7 +771,7 @@ export class GeminiAgentManager extends BaseAgentManager<
         await ProcessConfig.set('gemini.config', { ...config, yoloMode: false });
       }
     } catch (error) {
-      console.error('[GeminiAgentManager] Failed to clear legacy yoloMode config:', error);
+      mainError('[GeminiAgentManager]', 'Failed to clear legacy yoloMode config', error);
     }
   }
 
