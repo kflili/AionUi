@@ -9,8 +9,9 @@ import { extractAtPaths, parseAllAtCommands, reconstructQuery } from '@/common/a
 import type { TMessage } from '@/common/chatLib';
 import type { IResponseMessage } from '@/common/ipcBridge';
 import { NavigationInterceptor } from '@/common/navigation';
+import type { SlashCommandItem } from '@/common/slash/types';
 import { uuid } from '@/common/utils';
-import type { AcpBackend, AcpModelInfo, AcpPermissionRequest, AcpResult, AcpSessionUpdate, ToolCallUpdate } from '@/types/acpTypes';
+import type { AcpBackend, AcpModelInfo, AcpPermissionRequest, AcpResult, AcpSessionUpdate, AvailableCommandsUpdate, ToolCallUpdate } from '@/types/acpTypes';
 import { AcpErrorType, createAcpError } from '@/types/acpTypes';
 import { spawn } from 'child_process';
 import { promises as fs } from 'fs';
@@ -20,6 +21,8 @@ import { getEnhancedEnv, resolveNpxPath } from '@process/utils/shellEnv';
 import { AcpApprovalStore, createAcpApprovalKey } from './ApprovalStore';
 import { CLAUDE_YOLO_SESSION_MODE, CODEBUDDY_YOLO_SESSION_MODE, IFLOW_YOLO_SESSION_MODE, QWEN_YOLO_SESSION_MODE } from './constants';
 import { getClaudeModel } from './utils';
+import { buildAcpModelInfo, summarizeAcpModelInfo } from './modelInfo';
+import { mainLog } from '@process/utils/mainLogger';
 
 /** Enable ACP performance diagnostics via ACP_PERF=1 */
 const ACP_PERF_LOG = process.env.ACP_PERF === '1';
@@ -35,6 +38,12 @@ interface InitializeResult {
   }>;
   [key: string]: unknown;
 }
+
+/**
+ * ACP available command type - subset of SlashCommandItem for ACP protocol layer
+ * ACP 可用命令类型 - SlashCommandItem 的子集，用于 ACP 协议层
+ */
+export type AcpAvailableCommand = Pick<SlashCommandItem, 'name' | 'description' | 'hint'>;
 
 /**
  * Helper function to normalize tool call status
@@ -78,6 +87,8 @@ export interface AcpAgentConfig {
   onSignalEvent?: (data: IResponseMessage) => void; // 新增：仅发送信号，不更新UI
   /** Callback when ACP session ID is updated / 当 ACP session ID 更新时的回调 */
   onSessionIdUpdate?: (sessionId: string) => void;
+  /** Callback when ACP agent updates available slash commands / ACP 可用斜杠命令更新回调 */
+  onAvailableCommandsUpdate?: (commands: AcpAvailableCommand[]) => void;
 }
 
 // ACP agent任务类
@@ -103,6 +114,7 @@ export class AcpAgent {
   private readonly onStreamEvent: (data: IResponseMessage) => void;
   private readonly onSignalEvent?: (data: IResponseMessage) => void;
   private readonly onSessionIdUpdate?: (sessionId: string) => void;
+  private readonly onAvailableCommandsUpdate?: (commands: AcpAvailableCommand[]) => void;
 
   // Track pending navigation tool calls for URL extraction from results
   // 跟踪待处理的导航工具调用，以便从结果中提取 URL
@@ -130,6 +142,7 @@ export class AcpAgent {
     this.onStreamEvent = config.onStreamEvent;
     this.onSignalEvent = config.onSignalEvent;
     this.onSessionIdUpdate = config.onSessionIdUpdate;
+    this.onAvailableCommandsUpdate = config.onAvailableCommandsUpdate;
     this.extra = config.extra || {
       workspace: config.workingDir,
       backend: config.backend,
@@ -262,7 +275,15 @@ export class AcpAgent {
             await this.connection.setModel(configuredModel);
             if (ACP_PERF_LOG) console.log(`[ACP-PERF] start: model set ${Date.now() - modelStart}ms`);
           } catch (error) {
-            console.warn(`[ACP] Failed to set model from settings: ${error instanceof Error ? error.message : String(error)}`);
+            const errMsg = error instanceof Error ? error.message : String(error);
+            console.warn(`[ACP] Failed to set model from settings: ${errMsg}`);
+            // Detect third-party relay/proxy errors (e.g., NewAPI/OneAPI "model_not_found").
+            // These services route by model name and may not have channels configured for
+            // specific model IDs like "claude-sonnet-4-6". Emit a visible warning so the
+            // user knows to update their relay's model configuration.
+            if (errMsg.includes('model_not_found') || errMsg.includes('无可用渠道')) {
+              this.emitErrorMessage(`Model "${configuredModel}" is not available on your API relay service. ` + `Please add this model to your relay's channel configuration, ` + `or update ANTHROPIC_MODEL in ~/.claude/settings.json to a supported model name. ` + `Falling back to the relay's default model.`);
+            }
           }
         }
       }
@@ -305,40 +326,7 @@ export class AcpAgent {
    * Prefers stable configOptions API, falls back to unstable models API.
    */
   getModelInfo(): AcpModelInfo | null {
-    // Try stable API first: configOptions with category 'model'
-    const configOptions = this.connection.getConfigOptions();
-    if (configOptions) {
-      const modelOption = configOptions.find((opt) => opt.category === 'model');
-      if (modelOption && modelOption.type === 'select' && modelOption.options) {
-        // Support both currentValue (ACP spec) and selectedValue (some agents)
-        const activeValue = modelOption.currentValue || modelOption.selectedValue || null;
-        return {
-          currentModelId: activeValue,
-          currentModelLabel: modelOption.options.find((o) => o.value === activeValue)?.name || modelOption.options.find((o) => o.value === activeValue)?.label || activeValue,
-          availableModels: modelOption.options.map((o) => ({ id: o.value, label: o.name || o.label || o.value })),
-          canSwitch: modelOption.options.length > 1,
-          source: 'configOption',
-          configOptionId: modelOption.id,
-        };
-      }
-    }
-
-    // Fallback to unstable models API
-    const models = this.connection.getModels();
-    if (models) {
-      const available = models.availableModels || [];
-      // Support both 'id' (spec) and 'modelId' (OpenCode) field names
-      const getModelId = (m: (typeof available)[0]) => m.id || m.modelId || '';
-      return {
-        currentModelId: models.currentModelId || null,
-        currentModelLabel: available.find((m) => getModelId(m) === models.currentModelId)?.name || models.currentModelId || null,
-        availableModels: available.map((m) => ({ id: getModelId(m), label: m.name || getModelId(m) })),
-        canSwitch: available.length > 1,
-        source: 'models',
-      };
-    }
-
-    return null;
+    return buildAcpModelInfo(this.connection.getConfigOptions(), this.connection.getModels());
   }
 
   /**
@@ -391,6 +379,9 @@ export class AcpAgent {
   private emitModelInfo(): void {
     const modelInfo = this.getModelInfo();
     if (modelInfo) {
+      if (this.extra.backend === 'codex') {
+        mainLog('[ACP codex]', 'Emitting model info', summarizeAcpModelInfo(modelInfo));
+      }
       this.onStreamEvent({
         type: 'acp_model_info',
         conversation_id: this.id,
@@ -746,6 +737,22 @@ export class AcpAgent {
 
   private handleSessionUpdate(data: AcpSessionUpdate): void {
     try {
+      if (data.update?.sessionUpdate === 'available_commands_update') {
+        const commandUpdate = data as AvailableCommandsUpdate;
+        const commands: AcpAvailableCommand[] = [];
+        for (const command of commandUpdate.update?.availableCommands || []) {
+          const name = command.name?.trim();
+          if (!name) continue;
+          const description = (command.description || command.name || '').trim();
+          commands.push({
+            name,
+            description: description || name,
+            hint: command.input?.hint?.trim(),
+          });
+        }
+        this.onAvailableCommandsUpdate?.(commands);
+      }
+
       // Intercept chrome-devtools navigation tools from session updates
       // 从会话更新中拦截 chrome-devtools 导航工具
       if (data.update?.sessionUpdate === 'tool_call') {

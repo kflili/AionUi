@@ -14,6 +14,17 @@ import { useTranslation } from 'react-i18next';
 import classNames from 'classnames';
 import { useSettingsViewMode } from '../settingsViewContext';
 
+type GeminiConfig = Parameters<typeof ConfigStorage.set<'gemini.config'>>[1];
+
+const toGeminiConfig = (config: Record<string, unknown>, accountProjects?: Record<string, string>): GeminiConfig => ({
+  authType: typeof config.authType === 'string' ? config.authType : '',
+  proxy: typeof config.proxy === 'string' ? config.proxy : '',
+  GOOGLE_GEMINI_BASE_URL: typeof config.GOOGLE_GEMINI_BASE_URL === 'string' ? config.GOOGLE_GEMINI_BASE_URL : undefined,
+  accountProjects: accountProjects && Object.keys(accountProjects).length > 0 ? accountProjects : undefined,
+  yoloMode: typeof config.yoloMode === 'boolean' ? config.yoloMode : undefined,
+  preferredMode: typeof config.preferredMode === 'string' ? config.preferredMode : undefined,
+});
+
 const GeminiModalContent: React.FC = () => {
   const { t } = useTranslation();
   const { theme: _theme } = useThemeContext();
@@ -37,10 +48,7 @@ const GeminiModalContent: React.FC = () => {
     // Clean up old global config (don't auto-migrate, it might belong to another account)
     if (geminiConfig?.GOOGLE_CLOUD_PROJECT) {
       const { GOOGLE_CLOUD_PROJECT: _, ...restConfig } = geminiConfig;
-      await ConfigStorage.set('gemini.config', {
-        ...restConfig,
-        accountProjects: Object.keys(accountProjects).length > 0 ? accountProjects : undefined,
-      } as Parameters<typeof ConfigStorage.set<'gemini.config'>>[1]);
+      await ConfigStorage.set('gemini.config', toGeminiConfig(restConfig, accountProjects));
     }
 
     form.setFieldValue('GOOGLE_CLOUD_PROJECT', projectId || '');
@@ -80,7 +88,7 @@ const GeminiModalContent: React.FC = () => {
   const saveConfig = useCallback(async () => {
     try {
       const values = form.getFieldsValue();
-      const { googleAccount: _googleAccount, customCss, GOOGLE_CLOUD_PROJECT, ...restConfig } = values;
+      const { googleAccount: _googleAccount, GOOGLE_CLOUD_PROJECT, ...restConfig } = values;
 
       const existingConfig = ((await ConfigStorage.get('gemini.config')) || {}) as Record<string, unknown>;
       const accountProjects = (existingConfig.accountProjects as Record<string, string>) || {};
@@ -91,19 +99,9 @@ const GeminiModalContent: React.FC = () => {
         delete accountProjects[currentAccountEmail];
       }
 
-      const geminiConfig = {
-        ...restConfig,
-        accountProjects: Object.keys(accountProjects).length > 0 ? accountProjects : undefined,
-      };
+      const geminiConfig = toGeminiConfig(restConfig, accountProjects);
 
       await ConfigStorage.set('gemini.config', geminiConfig);
-      await ConfigStorage.set('customCss', customCss || '');
-
-      window.dispatchEvent(
-        new CustomEvent('custom-css-updated', {
-          detail: { customCss: customCss || '' },
-        })
-      );
     } catch (error: unknown) {
       console.error('[GeminiSettings] Auto-save failed:', error);
     }
@@ -128,11 +126,10 @@ const GeminiModalContent: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    Promise.all([ConfigStorage.get('gemini.config'), ConfigStorage.get('customCss')])
-      .then(([geminiConfig, customCss]) => {
+    Promise.all([ConfigStorage.get('gemini.config')])
+      .then(([geminiConfig]) => {
         const formData = {
           ...geminiConfig,
-          customCss: customCss || '',
           // 先不设置 GOOGLE_CLOUD_PROJECT，等账号加载完再设置
           // Don't set GOOGLE_CLOUD_PROJECT yet, wait for account to load
           GOOGLE_CLOUD_PROJECT: '',
