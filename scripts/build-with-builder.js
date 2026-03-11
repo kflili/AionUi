@@ -105,6 +105,102 @@ function saveCurrentHash(hash) {
   } catch {}
 }
 
+function readJsonFile(filePath) {
+  return JSON.parse(fs.readFileSync(filePath, 'utf8'));
+}
+
+function getPackageDir(nodeModulesDir, packageName) {
+  if (packageName.startsWith('@')) {
+    const [scope, name] = packageName.split('/');
+    return path.join(nodeModulesDir, scope, name);
+  }
+
+  return path.join(nodeModulesDir, packageName);
+}
+
+function getInstalledPackageVersion(nodeModulesDir, packageName) {
+  const packageJsonPath = path.join(getPackageDir(nodeModulesDir, packageName), 'package.json');
+  if (!fs.existsSync(packageJsonPath)) {
+    return null;
+  }
+
+  try {
+    return readJsonFile(packageJsonPath).version ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function getExactVersion(spec) {
+  return /^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$/.test(spec) ? spec : null;
+}
+
+function getAionCliOpenTelemetryRepairs() {
+  const packageDir = path.resolve(__dirname, '../node_modules/@office-ai/aioncli-core');
+  const nodeModulesDir = path.join(packageDir, 'node_modules');
+  const sdkMetricsPackageJsonPath = path.join(
+    nodeModulesDir,
+    '@opentelemetry',
+    'sdk-metrics',
+    'package.json'
+  );
+
+  if (!fs.existsSync(sdkMetricsPackageJsonPath)) {
+    return { packageDir, repairs: [] };
+  }
+
+  const sdkMetricsPackageJson = readJsonFile(sdkMetricsPackageJsonPath);
+  const repairs = [];
+
+  for (const [dependencyName, versionSpec] of Object.entries(sdkMetricsPackageJson.dependencies ?? {})) {
+    const exactVersion = getExactVersion(versionSpec);
+    if (!exactVersion) {
+      continue;
+    }
+
+    const installedVersion = getInstalledPackageVersion(nodeModulesDir, dependencyName);
+    if (installedVersion !== exactVersion) {
+      repairs.push(`${dependencyName}@${exactVersion}`);
+    }
+  }
+
+  return { packageDir, repairs };
+}
+
+function repairAionCliOpenTelemetryDeps() {
+  const { packageDir, repairs } = getAionCliOpenTelemetryRepairs();
+  if (repairs.length === 0) {
+    return;
+  }
+
+  console.log(
+    `🔧 Repairing nested OpenTelemetry deps for @office-ai/aioncli-core: ${repairs.join(', ')}`
+  );
+
+  const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+  const result = spawnSync(
+    npmCommand,
+    ['install', '--no-save', '--ignore-scripts', '--no-package-lock', ...repairs],
+    {
+      cwd: packageDir,
+      stdio: 'inherit',
+    }
+  );
+
+  if (result.status !== 0) {
+    throw new Error(
+      `Failed to repair nested OpenTelemetry dependencies (exit code ${result.status ?? 'unknown'})`
+    );
+  }
+
+  const verification = getAionCliOpenTelemetryRepairs();
+  if (verification.repairs.length > 0) {
+    throw new Error(
+      `Nested OpenTelemetry dependency repair incomplete: ${verification.repairs.join(', ')}`
+    );
+  }
+}
+
 function viteBuildExists() {
   const outDir = path.resolve(__dirname, '../out');
   const mainDir = path.join(outDir, 'main');
@@ -422,6 +518,9 @@ try {
   if (!fs.existsSync(rendererIndex)) {
     throw new Error('Missing renderer entry: out/renderer/index.html');
   }
+
+  // Bun can flatten exact-version nested deps in a way electron-builder cannot traverse.
+  repairAionCliOpenTelemetryDeps();
 
   // If --pack-only, skip electron-builder distributable creation
   if (packOnly) {
