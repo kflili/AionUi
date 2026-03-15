@@ -28,6 +28,10 @@ type ConversationStatusInput = {
   status?: ConversationStatusValue | undefined;
 };
 
+export type ConversationStatusSnapshotOptions = {
+  touchTask?: boolean;
+};
+
 export interface ConversationStatusSnapshot {
   sessionId: string;
   conversation: TChatConversation;
@@ -104,8 +108,21 @@ export const formatStatusLastMessage = (lastMessage: StatusMessage | null): ICon
   };
 };
 
-export const deriveConversationRuntimeStatus = (sessionId: string, conversation: ConversationStatusInput, lastMessage: StatusMessage | null) => {
-  const task = WorkerManage.getTaskById(sessionId) as
+const getConversationTask = (sessionId: string, options: ConversationStatusSnapshotOptions = {}) => {
+  const touchTask = options.touchTask ?? true;
+  const workerManageWithPeek = WorkerManage as typeof WorkerManage & {
+    peekTaskById?: (id: string) => unknown;
+  };
+
+  if (!touchTask && typeof workerManageWithPeek.peekTaskById === 'function') {
+    return workerManageWithPeek.peekTaskById(sessionId);
+  }
+
+  return WorkerManage.getTaskById(sessionId);
+};
+
+export const deriveConversationRuntimeStatus = (sessionId: string, conversation: ConversationStatusInput, lastMessage: StatusMessage | null, options: ConversationStatusSnapshotOptions = {}) => {
+  const task = getConversationTask(sessionId, options) as
     | {
         status?: ConversationStatusValue;
         getConfirmations?: () => unknown[];
@@ -187,7 +204,7 @@ export const deriveConversationRuntimeStatus = (sessionId: string, conversation:
   };
 };
 
-export const getConversationStatusSnapshot = (sessionId: string): ConversationStatusSnapshot | null => {
+export const getConversationStatusSnapshot = (sessionId: string, options: ConversationStatusSnapshotOptions = {}): ConversationStatusSnapshot | null => {
   const db = getDatabase();
   const convResult = db.getConversation(sessionId);
   if (!convResult.success || !convResult.data) {
@@ -196,7 +213,7 @@ export const getConversationStatusSnapshot = (sessionId: string): ConversationSt
 
   const messagesResult = db.getConversationMessages(sessionId, 0, 1, 'DESC');
   const lastMessage = (messagesResult.data?.[0] as StatusMessage | undefined) || null;
-  const resolvedStatus = deriveConversationRuntimeStatus(sessionId, convResult.data, lastMessage);
+  const resolvedStatus = deriveConversationRuntimeStatus(sessionId, convResult.data, lastMessage, options);
 
   return {
     sessionId,
@@ -209,6 +226,8 @@ export const getConversationStatusSnapshot = (sessionId: string): ConversationSt
     lastMessage,
   };
 };
+
+export const getReadOnlyConversationStatusSnapshot = (sessionId: string): ConversationStatusSnapshot | null => getConversationStatusSnapshot(sessionId, { touchTask: false });
 
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
@@ -246,6 +265,24 @@ export class ConversationTurnCompletionService {
   forgetSession(sessionId: string): void {
     this.emittedKeys.delete(sessionId);
     this.inFlight.delete(sessionId);
+  }
+
+  getDebugState(): {
+    emittedKeyCount: number;
+    inFlightCount: number;
+    emittedKeys: Array<{ sessionId: string; key: string; timestamp: number }>;
+    inFlightSessionIds: string[];
+  } {
+    return {
+      emittedKeyCount: this.emittedKeys.size,
+      inFlightCount: this.inFlight.size,
+      emittedKeys: Array.from(this.emittedKeys.entries()).map(([sessionId, emitted]) => ({
+        sessionId,
+        key: emitted.key,
+        timestamp: emitted.timestamp,
+      })),
+      inFlightSessionIds: Array.from(this.inFlight.keys()),
+    };
   }
 
   private async settleAndEmit(sessionId: string): Promise<void> {

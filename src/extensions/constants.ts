@@ -27,6 +27,18 @@ export function getAppDataExtensionsDir(): string {
   }
 }
 
+export function getBundledExtensionsDir(): string {
+  try {
+    if (app.isPackaged) {
+      return path.join(process.resourcesPath, EXTENSIONS_DIR_NAME);
+    }
+
+    return path.join(app.getAppPath(), EXTENSIONS_DIR_NAME);
+  } catch {
+    return path.resolve(process.cwd(), EXTENSIONS_DIR_NAME);
+  }
+}
+
 export function getEnvExtensionsDirs(): string[] {
   const envPath = process.env[AIONUI_EXTENSIONS_PATH_ENV];
   if (!envPath) return [];

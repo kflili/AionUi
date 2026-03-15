@@ -31,11 +31,9 @@ export function getCodexSandboxModeForSessionMode(mode?: string | null, fallback
 }
 
 export function getCodexConfigPath(): string {
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA;
-    if (appData) {
-      return join(appData, 'codex', 'config.toml');
-    }
+  const codexHome = process.env.CODEX_HOME?.trim();
+  if (codexHome) {
+    return join(codexHome, 'config.toml');
   }
 
   return join(homedir(), '.codex', 'config.toml');

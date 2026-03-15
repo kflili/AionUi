@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>API 诊断</title>
+    <link rel="stylesheet" href="./api-diagnostics.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow" id="text-hero-eyebrow">运行时巡检</p>
+          <h1 id="text-hero-title">API 诊断</h1>
+          <p class="lede" id="text-hero-lede">用于观察 AionUi 全局执行状态，并排查本地 HTTP API 中会话停止清理、Worker 残留和内存增长问题的独立诊断工作台。</p>
+        </div>
+        <div class="status-cluster">
+          <div class="status" id="status-banner">正在等待宿主桥接...</div>
+          <div class="mode-chip" id="sampling-state-chip">自动采样已关闭</div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="text-sampling-title">采样控制</h2>
+            <p id="text-sampling-desc">自动采样只作用于当前运行期，不会改动用户保存的常规 API 配置。</p>
+          </div>
+        </div>
+
+        <div class="control-card">
+          <div class="control-copy">
+            <span class="control-label" id="text-auto-sampling-label">自动采样</span>
+            <p id="text-auto-sampling-help">控制是否持续记录运行中的 API 诊断样本。手动抓取始终可用。</p>
+          </div>
+          <label class="switch-row" for="enabled">
+            <input id="enabled" class="switch-input" type="checkbox" />
+            <span class="switch-slider" aria-hidden="true"></span>
+            <span class="switch-state" id="enabled-state-text">已关闭</span>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label class="field">
+            <span id="text-sample-interval-label">采样间隔 (ms)</span>
+            <input id="sample-interval" type="text" inputmode="numeric" placeholder="60000" />
+          </label>
+          <label class="field">
+            <span id="text-output-dir-label">输出目录</span>
+            <input id="output-dir" type="text" placeholder=".aionui/diagnostics/api" />
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <button id="apply-config" class="button button-primary">应用配置</button>
+          <button id="refresh-state" class="button">刷新状态</button>
+          <button id="open-output" class="button">打开输出目录</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head compact">
+          <div>
+            <h2 id="text-manual-title">手动抓取</h2>
+            <p id="text-manual-desc">可指定单个会话，也可以留空以抓取全局进程快照。即使自动采样关闭，手动抓取仍然可用。</p>
+          </div>
+          <label class="switch-row" for="persist-snapshot">
+            <input id="persist-snapshot" class="switch-input" type="checkbox" checked />
+            <span class="switch-slider" aria-hidden="true"></span>
+            <span class="switch-state" id="persist-state-text">落盘</span>
+          </label>
+        </div>
+
+        <div class="form-grid">
+          <label class="field field-wide">
+            <span id="text-session-id-label">会话 ID</span>
+            <input id="session-id" type="text" placeholder="留空则抓取全局快照" />
+          </label>
+        </div>
+
+        <div class="toolbar">
+          <button id="capture-snapshot" class="button button-accent">抓取快照</button>
+          <button id="copy-snapshot" class="button">复制 JSON</button>
+        </div>
+      </section>
+
+      <section class="stats-grid" id="summary-grid">
+        <article class="stat-card">
+          <span id="text-summary-rss-label">RSS</span>
+          <strong id="summary-rss">--</strong>
+        </article>
+        <article class="stat-card">
+          <span id="text-summary-heap-label">堆已用</span>
+          <strong id="summary-heap">--</strong>
+        </article>
+        <article class="stat-card">
+          <span id="text-summary-tasks-label">Worker 任务</span>
+          <strong id="summary-tasks">--</strong>
+        </article>
+        <article class="stat-card">
+          <span id="text-summary-cache-label">消息缓存</span>
+          <strong id="summary-cache">--</strong>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head compact">
+          <div>
+            <h2 id="text-activity-title">当前执行情况</h2>
+            <p id="text-activity-desc">展示 AionUi 当前仍在运行、处理中或等待确认的会话，方便直接查看整体执行状态。</p>
+          </div>
+          <div class="window-pill" id="activity-count">活跃会话：0</div>
+        </div>
+
+        <div class="activity-grid" id="activity-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head compact">
+          <div>
+            <h2 id="text-trend-title">近期采样趋势</h2>
+            <p id="text-trend-desc">展示本次应用运行期间的最新内存快照，包括自动路由采样和手动抓取结果。</p>
+          </div>
+          <div class="window-pill" id="trend-window">窗口：0/20</div>
+        </div>
+
+        <div class="trend-grid" id="trend-grid"></div>
+        <div class="timeline" id="timeline"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head compact">
+          <div>
+            <h2 id="text-snapshot-title">快照内容</h2>
+            <p id="snapshot-meta">暂未抓取任何诊断快照。</p>
+          </div>
+        </div>
+        <textarea id="snapshot-json" readonly spellcheck="false"></textarea>
+      </section>
+    </main>
+
+    <script src="./api-diagnostics.js"></script>
+  </body>
+</html>

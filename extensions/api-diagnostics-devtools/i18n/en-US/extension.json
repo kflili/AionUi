@@ -1,0 +1,9 @@
+{
+  "displayName": "API Diagnostics",
+  "description": "Detached diagnostics workbench for AionUi runtime state and the local HTTP API.",
+  "settingsTabs": {
+    "runtime-diagnostics": {
+      "name": "API Diagnostics"
+    }
+  }
+}

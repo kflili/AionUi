@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const emitSpy = vi.fn();
 let flushed = false;
+const getTaskById = vi.fn(() => undefined);
+const peekTaskById = vi.fn(() => undefined);
 
 vi.mock('@/common', () => ({
   ipcBridge: {
@@ -27,7 +29,8 @@ vi.mock('@process/message', () => ({
 
 vi.mock('@process/WorkerManage', () => ({
   default: {
-    getTaskById: vi.fn(() => undefined),
+    getTaskById,
+    peekTaskById,
   },
 }));
 
@@ -81,6 +84,10 @@ describe('ConversationTurnCompletionService', () => {
   beforeEach(() => {
     flushed = false;
     emitSpy.mockReset();
+    getTaskById.mockReset();
+    getTaskById.mockReturnValue(undefined);
+    peekTaskById.mockReset();
+    peekTaskById.mockReturnValue(undefined);
     vi.resetModules();
   });
 
@@ -100,5 +107,29 @@ describe('ConversationTurnCompletionService', () => {
         }),
       })
     );
+  });
+
+  it('supports read-only status snapshots without touching task liveness', async () => {
+    const task = {
+      status: 'finished',
+      getConfirmations: () => [],
+    };
+    peekTaskById.mockReturnValue(task);
+
+    const { getConversationStatusSnapshot } = await import('../../src/process/services/ConversationTurnCompletionService');
+
+    const snapshot = getConversationStatusSnapshot('session-1', {
+      touchTask: false,
+    });
+
+    expect(snapshot).toEqual(
+      expect.objectContaining({
+        sessionId: 'session-1',
+        status: 'finished',
+        state: 'ai_waiting_input',
+      })
+    );
+    expect(getTaskById).not.toHaveBeenCalled();
+    expect(peekTaskById).toHaveBeenCalledWith('session-1');
   });
 });

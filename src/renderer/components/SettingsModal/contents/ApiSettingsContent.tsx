@@ -10,10 +10,12 @@ import { Copy, Delete, Plus, Refresh } from '@icon-park/react';
 import { DEFAULT_CALLBACK_BODY, DEFAULT_JS_FILTER_SCRIPT } from '@/common/apiCallback';
 import { ipcBridge } from '@/common';
 import { ConfigStorage, type IApiConfig, type IProvider } from '@/common/storage';
+import { getDefaultAcpConfigOptions } from '@/common/codex/codexConfigOptions';
 import { getAgentModes } from '@/renderer/constants/agentModes';
 import AcpModelSelector from '@/renderer/components/AcpModelSelector';
 import AgentModeSelector from '@/renderer/components/AgentModeSelector';
-import type { AcpModelInfo } from '@/types/acpTypes';
+import GuidAcpConfigSelector from '@/renderer/pages/guid/components/GuidAcpConfigSelector';
+import type { AcpBackend, AcpModelInfo, AcpSessionConfigOption } from '@/types/acpTypes';
 import type { IWebUIStatus } from '@/common/ipcBridge';
 
 type HeaderItem = { key: string; value: string };
@@ -23,7 +25,7 @@ type CliOption = {
   value: string;
   label: string;
   conversationType: ConversationType;
-  backend?: string;
+  backend?: AcpBackend;
   cliPath?: string;
   customAgentId?: string;
 };
@@ -41,6 +43,7 @@ type CliModelOption = {
 };
 
 const DEFAULT_MESSAGE = 'Hello from AionUi API';
+
 const PreferenceRow: React.FC<{
   label: string;
   description?: React.ReactNode;
@@ -78,6 +81,11 @@ const parseOptionalString = (value: unknown): string | undefined => {
   }
   const trimmed = value.trim();
   return trimmed || undefined;
+};
+
+const parseOptionalAcpBackend = (value: unknown): AcpBackend | undefined => {
+  const trimmed = parseOptionalString(value);
+  return trimmed as AcpBackend | undefined;
 };
 
 const parseHeaders = (source?: Record<string, string>): HeaderItem[] => {
@@ -120,7 +128,7 @@ const getFallbackModel = () => ({
 
 const buildCliOptions = (
   agents: Array<{
-    backend?: string;
+    backend?: AcpBackend;
     name?: string;
     cliPath?: string;
     customAgentId?: string;
@@ -129,7 +137,7 @@ const buildCliOptions = (
   const options: CliOption[] = [];
 
   for (const agent of agents) {
-    const backend = parseOptionalString(agent.backend);
+    const backend = parseOptionalAcpBackend(agent.backend);
     const name = parseOptionalString(agent.name);
     const cliPath = parseOptionalString(agent.cliPath);
     const customAgentId = parseOptionalString(agent.customAgentId);
@@ -205,10 +213,13 @@ const ApiSettingsContent: React.FC = () => {
   const [providerModelOptions, setProviderModelOptions] = useState<ProviderModelOption[]>([]);
   const [acpCachedModels, setAcpCachedModels] = useState<Record<string, AcpModelInfo>>({});
   const [acpPreferredModelIds, setAcpPreferredModelIds] = useState<Record<string, string | undefined>>({});
+  const [acpCachedConfigOptions, setAcpCachedConfigOptions] = useState<Record<string, AcpSessionConfigOption[]>>({});
+  const [acpPreferredConfigOptions, setAcpPreferredConfigOptions] = useState<Record<string, Record<string, string>>>({});
 
   const [selectedCli, setSelectedCli] = useState<string>('');
   const [selectedProviderModel, setSelectedProviderModel] = useState<string>('');
   const [selectedCliModel, setSelectedCliModel] = useState<string>('');
+  const [selectedCliConfigOptions, setSelectedCliConfigOptions] = useState<Record<string, string>>({});
   const [selectedMode, setSelectedMode] = useState<string>('default');
   const [workspace, setWorkspace] = useState<string>('');
   const [message, setMessage] = useState<string>(DEFAULT_MESSAGE);
@@ -246,7 +257,7 @@ const ApiSettingsContent: React.FC = () => {
 
   const loadGeneratorOptions = useCallback(async () => {
     try {
-      const [providers, agentsResult, cachedModels, acpConfig] = await Promise.all([ipcBridge.mode.getModelConfig.invoke(), ipcBridge.acpConversation.getAvailableAgents.invoke(), ConfigStorage.get('acp.cachedModels'), ConfigStorage.get('acp.config')]);
+      const [providers, agentsResult, cachedModels, cachedConfigOptions, acpConfig] = await Promise.all([ipcBridge.mode.getModelConfig.invoke(), ipcBridge.acpConversation.getAvailableAgents.invoke(), ConfigStorage.get('acp.cachedModels'), ConfigStorage.get('acp.cachedConfigOptions'), ConfigStorage.get('acp.config')]);
 
       const nextProviderOptions = createProviderModelOptions(providers);
       setProviderModelOptions(nextProviderOptions);
@@ -255,17 +266,21 @@ const ApiSettingsContent: React.FC = () => {
       }
 
       setAcpCachedModels(cachedModels || {});
+      setAcpCachedConfigOptions(cachedConfigOptions || {});
 
       const preferredMap: Record<string, string | undefined> = {};
+      const preferredConfigMap: Record<string, Record<string, string>> = {};
       for (const [backend, backendConfig] of Object.entries(acpConfig || {})) {
         preferredMap[backend] = parseOptionalString((backendConfig as { preferredModelId?: unknown })?.preferredModelId);
+        preferredConfigMap[backend] = { ...(((backendConfig as { preferredConfigOptions?: Record<string, string> })?.preferredConfigOptions || {}) as Record<string, string>) };
       }
       setAcpPreferredModelIds(preferredMap);
+      setAcpPreferredConfigOptions(preferredConfigMap);
 
       const agents = agentsResult?.success && Array.isArray(agentsResult.data) ? agentsResult.data : [];
       const nextCliOptions = buildCliOptions(
         agents as Array<{
-          backend?: string;
+          backend?: AcpBackend;
           name?: string;
           cliPath?: string;
           customAgentId?: string;
@@ -309,6 +324,7 @@ const ApiSettingsContent: React.FC = () => {
 
   const usingAcpModelSource = selectedCliOption?.conversationType === 'acp' && !!selectedCliOption.backend;
   const requiresProviderModel = selectedCliOption?.conversationType === 'gemini';
+  const currentCliBackend = selectedCliOption?.conversationType === 'acp' ? selectedCliOption.backend : undefined;
 
   const cliModelOptions = useMemo<CliModelOption[]>(() => {
     if (!usingAcpModelSource || !selectedCliOption?.backend) {
@@ -344,6 +360,7 @@ const ApiSettingsContent: React.FC = () => {
       currentModelLabel: matchedModel?.label || modelInfo.currentModelLabel || effectiveModelId || '',
     };
   }, [usingAcpModelSource, selectedCliOption, acpCachedModels, selectedCliModel]);
+  const selectedCliInitialModelId = selectedCliModel || selectedCliLocalModelInfo?.currentModelId || undefined;
 
   useEffect(() => {
     if (!usingAcpModelSource || !selectedCliOption?.backend) {
@@ -364,6 +381,39 @@ const ApiSettingsContent: React.FC = () => {
       return candidate;
     });
   }, [usingAcpModelSource, selectedCliOption, acpPreferredModelIds, acpCachedModels, cliModelOptions]);
+
+  const currentCliConfigOptions = useMemo<AcpSessionConfigOption[]>(() => {
+    if (!currentCliBackend) {
+      return [];
+    }
+
+    const cachedOptions = acpCachedConfigOptions[currentCliBackend] || [];
+    return cachedOptions.length > 0 ? cachedOptions : getDefaultAcpConfigOptions(currentCliBackend);
+  }, [currentCliBackend, acpCachedConfigOptions]);
+
+  useEffect(() => {
+    if (!currentCliBackend) {
+      setSelectedCliConfigOptions({});
+      return;
+    }
+
+    const preferredOptions = acpPreferredConfigOptions[currentCliBackend] || {};
+    const nextSelectedOptions = currentCliConfigOptions.reduce<Record<string, string>>((acc, option) => {
+      const preferredValue = preferredOptions[option.id];
+      if (!preferredValue) {
+        return acc;
+      }
+
+      const isValueAvailable = option.options?.some((choice) => choice.value === preferredValue) ?? true;
+      if (isValueAvailable) {
+        acc[option.id] = preferredValue;
+      }
+
+      return acc;
+    }, {});
+
+    setSelectedCliConfigOptions(nextSelectedOptions);
+  }, [currentCliBackend, currentCliConfigOptions, acpPreferredConfigOptions]);
 
   const modeBackend = useMemo(() => {
     if (!selectedCliOption) return undefined;
@@ -429,6 +479,9 @@ const ApiSettingsContent: React.FC = () => {
       if (effectiveCliModel) {
         payload.currentModelId = effectiveCliModel;
       }
+      if (Object.keys(selectedCliConfigOptions).length > 0) {
+        payload.configOptionValues = selectedCliConfigOptions;
+      }
     } else if (conversationType === 'gemini' || conversationType === 'codex') {
       if (selectedMode) payload.mode = selectedMode;
       if (conversationType === 'codex' && selectedCliModel) {
@@ -437,7 +490,7 @@ const ApiSettingsContent: React.FC = () => {
     }
 
     return payload;
-  }, [requiresProviderModel, selectedProviderModelOption, selectedCliOption, message, workspace, selectedMode, selectedCliModel, acpCachedModels]);
+  }, [requiresProviderModel, selectedProviderModelOption, selectedCliOption, message, workspace, selectedMode, selectedCliModel, selectedCliConfigOptions, acpCachedModels]);
 
   const generatedPayloadText = useMemo(() => JSON.stringify(generatedPayload, null, 2), [generatedPayload]);
   const docsUrl = useMemo(() => {
@@ -601,6 +654,10 @@ const ApiSettingsContent: React.FC = () => {
 
       <div className='border-t border-border-secondary my-16px' />
 
+      <div className='mb-20px rounded border border-border-secondary bg-bg-secondary p-12px text-12px text-t-tertiary'>会话运行时诊断能力已迁移到独立扩展页“API 诊断”，方便单独迭代和调试。</div>
+
+      <div className='border-t border-border-secondary my-16px' />
+
       <div className='mb-20px'>
         <h4 className='text-14px font-600 text-t-primary mb-12px'>回调配置</h4>
         <p className='text-12px text-t-tertiary mb-16px'>会话完成后可自动回调到你的服务端。</p>
@@ -697,7 +754,7 @@ const ApiSettingsContent: React.FC = () => {
             <div>
               <label className='text-13px text-t-primary mb-6px block'>CLI 模型</label>
               <div className='min-h-32px flex items-center gap-8px'>
-                <AcpModelSelector backend={selectedCliOption?.backend} initialModelId={selectedCliModel || selectedCliLocalModelInfo?.currentModelId || undefined} localModelInfo={selectedCliLocalModelInfo} onSelectModel={setSelectedCliModel} />
+                <AcpModelSelector backend={selectedCliOption?.backend} initialModelId={selectedCliInitialModelId} localModelInfo={selectedCliLocalModelInfo} onSelectModel={setSelectedCliModel} />
               </div>
               {!cliModelOptions.length && <div className='text-12px text-t-tertiary mt-4px'>暂无缓存模型，请先在该 CLI 会话里拉取一次模型列表。</div>}
             </div>
@@ -716,6 +773,25 @@ const ApiSettingsContent: React.FC = () => {
           <div>
             <label className='text-13px text-t-primary mb-6px block'>模式 (mode)</label>
             <div className='min-h-32px flex items-center gap-8px'>{canUseModeSelector ? <AgentModeSelector backend={modeBackend} compact initialMode={selectedMode} onModeSelect={setSelectedMode} modeLabelFormatter={(mode) => mode.label} compactLabelPrefix='Mode' /> : <Select value={selectedMode} onChange={setSelectedMode} options={modeOptions.map((item) => ({ label: item.label, value: item.value }))} allowClear={false} />}</div>
+          </div>
+
+          <div>
+            <label className='text-13px text-t-primary mb-6px block'>CLI 对话选项</label>
+            <div className='min-h-32px flex flex-wrap items-center gap-8px'>
+              <GuidAcpConfigSelector
+                backend={currentCliBackend}
+                configOptions={currentCliConfigOptions}
+                selectedValues={selectedCliConfigOptions}
+                onSelectOption={(configId, value) => {
+                  setSelectedCliConfigOptions((prev) => ({
+                    ...prev,
+                    [configId]: value,
+                  }));
+                }}
+              />
+              {currentCliBackend && currentCliConfigOptions.length === 0 ? <span className='text-12px text-t-tertiary'>当前 CLI 没有额外会话选项。</span> : null}
+              {!currentCliBackend ? <span className='text-12px text-t-tertiary'>选择支持的 ACP/Codex CLI 后，这里会显示对应对话选项。</span> : null}
+            </div>
           </div>
 
           <div>

@@ -4,8 +4,8 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import type { ChildProcess } from 'child_process';
-import { spawn, execSync } from 'child_process';
+import type { ChildProcess, ExecFileOptions } from 'child_process';
+import { execFile, spawn, execSync } from 'child_process';
 import { accessSync, readFileSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
@@ -16,18 +16,15 @@ import { JSONRPC_VERSION } from '@/types/acpTypes';
 
 /**
  * Get Codex config file path based on platform
- * - Windows: %APPDATA%\codex\config.toml or ~/.codex/config.toml
- * - macOS/Linux: ~/.codex/config.toml
+ * - All platforms: $CODEX_HOME/config.toml when set
+ * - Fallback: ~/.codex/config.toml
  */
 function getCodexConfigPath(): string {
-  if (process.platform === 'win32') {
-    // Windows: try APPDATA first, then fallback to home directory
-    const appData = process.env.APPDATA;
-    if (appData) {
-      return join(appData, 'codex', 'config.toml');
-    }
+  const codexHome = process.env.CODEX_HOME?.trim();
+  if (codexHome) {
+    return join(codexHome, 'config.toml');
   }
-  // macOS/Linux or Windows fallback
+
   return join(homedir(), '.codex', 'config.toml');
 }
 
@@ -86,6 +83,86 @@ interface PendingReq {
   timeout?: NodeJS.Timeout;
 }
 
+const PROCESS_EXIT_POLL_INTERVAL_MS = 50;
+const PROCESS_EXIT_TIMEOUT_MS = 3000;
+const WINDOWS_TREE_KILL_TIMEOUT_MS = 5000;
+
+const execFileAsync = (file: string, args: string[], options?: ExecFileOptions): Promise<void> =>
+  new Promise((resolve, reject) => {
+    execFile(file, args, options ?? {}, (error) => {
+      if (error) {
+        reject(error);
+        return;
+      }
+
+      resolve();
+    });
+  });
+
+export function isProcessAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function waitForProcessExit(pid: number, timeoutMs: number = PROCESS_EXIT_TIMEOUT_MS): Promise<void> {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < timeoutMs) {
+    if (!isProcessAlive(pid)) {
+      return;
+    }
+
+    await new Promise((resolve) => {
+      setTimeout(resolve, PROCESS_EXIT_POLL_INTERVAL_MS);
+    });
+  }
+}
+
+export async function terminateCodexChildProcess(child: ChildProcess, platform: NodeJS.Platform = process.platform): Promise<void> {
+  const pid = child.pid;
+
+  if (platform === 'win32' && pid) {
+    try {
+      await execFileAsync('taskkill', ['/PID', String(pid), '/T', '/F'], {
+        windowsHide: true,
+        timeout: WINDOWS_TREE_KILL_TIMEOUT_MS,
+      });
+    } catch (error) {
+      console.warn(`[CodexConnection] taskkill /T /F failed for PID ${pid}:`, error);
+      try {
+        child.kill();
+      } catch {
+        // Ignore fallback kill errors.
+      }
+    }
+  } else {
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      // Ignore kill errors for already-exited children.
+    }
+  }
+
+  if (!pid) {
+    return;
+  }
+
+  try {
+    await waitForProcessExit(pid);
+  } catch {
+    if (platform !== 'win32') {
+      try {
+        child.kill('SIGKILL');
+      } catch {
+        // Ignore fallback kill errors.
+      }
+    }
+  }
+}
+
 export class CodexConnection {
   private child: ChildProcess | null = null;
   private nextId = 0;
@@ -111,6 +188,7 @@ export class CodexConnection {
   private isNetworkError = false;
 
   private detectedVersion: string | null = null;
+  private readonly managedTimeouts = new Set<NodeJS.Timeout>();
 
   public getVersion(): string | null {
     return this.detectedVersion;
@@ -233,7 +311,7 @@ export class CodexConnection {
 
     return new Promise((resolve, reject) => {
       try {
-        this.child = spawn(cliPath, finalArgs, {
+        const child = spawn(cliPath, finalArgs, {
           cwd,
           stdio: ['pipe', 'pipe', 'pipe'],
           env: {
@@ -242,29 +320,54 @@ export class CodexConnection {
             CODEX_AUTO_CONTINUE: '1',
           },
           shell: isWindows,
+          windowsHide: isWindows,
+        });
+        this.child = child;
+
+        let startSettled = false;
+        const settleStart = (error?: Error) => {
+          if (startSettled) {
+            return;
+          }
+
+          startSettled = true;
+          if (error) {
+            reject(error);
+            return;
+          }
+
+          resolve();
+        };
+
+        child.on('error', (error) => {
+          if (child !== this.child) {
+            return;
+          }
+
+          settleStart(new Error(`Failed to start codex process: ${error.message}`));
         });
 
-        this.child.on('error', (error) => {
-          reject(new Error(`Failed to start codex process: ${error.message}`));
-        });
+        child.on('exit', (code, signal) => {
+          if (!startSettled && child === this.child) {
+            settleStart(new Error(`Codex process exited during startup (code: ${code}, signal: ${signal})`));
+          }
 
-        this.child.on('exit', (code, signal) => {
           if (code !== 0 && code !== null) {
-            this.handleProcessExit(code, signal);
+            this.handleProcessExit(child, code, signal);
           }
         });
 
-        this.child.stderr?.on('data', (d) => {
+        child.stderr?.on('data', (d) => {
           const errorMsg = d.toString();
 
           if (errorMsg.includes('command not found') || errorMsg.includes('not recognized')) {
-            reject(new Error(`Codex CLI not found. Please ensure 'codex' is installed and in PATH. Error: ${errorMsg}`));
+            settleStart(new Error(`Codex CLI not found. Please ensure 'codex' is installed and in PATH. Error: ${errorMsg}`));
           } else if (errorMsg.includes('permission denied')) {
-            reject(new Error(`Permission denied when starting codex. Error: ${errorMsg}`));
+            settleStart(new Error(`Permission denied when starting codex. Error: ${errorMsg}`));
           } else if (errorMsg.includes('authentication') || errorMsg.includes('login')) {
-            reject(new Error(`Codex authentication required. Please run 'codex auth' first. Error: ${errorMsg}`));
+            settleStart(new Error(`Codex authentication required. Please run 'codex auth' first. Error: ${errorMsg}`));
           } else if (errorMsg.includes('unknown flag') || errorMsg.includes('invalid option') || errorMsg.includes('unrecognized')) {
-            reject(new Error(`Invalid Codex CLI arguments. Error: ${errorMsg}`));
+            settleStart(new Error(`Invalid Codex CLI arguments. Error: ${errorMsg}`));
           }
         });
 
@@ -272,7 +375,7 @@ export class CodexConnection {
         let hasOutput = false;
         let receivedJsonMessage = false;
 
-        this.child.stdout?.on('data', (d) => {
+        child.stdout?.on('data', (d) => {
           hasOutput = true;
           buffer += d.toString();
           const lines = buffer.split('\n');
@@ -301,9 +404,9 @@ export class CodexConnection {
 
               // Force enter MCP mode if we see CLI launch - but stop sending once we see API key passing
               if (line.includes('Launching Codex CLI') && !receivedJsonMessage) {
-                setTimeout(() => {
+                this.setManagedTimeout(() => {
                   if (!receivedJsonMessage) {
-                    this.child?.stdin?.write('\n');
+                    child.stdin?.write('\n');
                   }
                 }, 1000);
               }
@@ -311,7 +414,7 @@ export class CodexConnection {
               // Detect when MCP server should be ready
               if (line.includes('Passing CODEX_API_KEY')) {
                 // Set a flag to indicate the server is starting and wait longer
-                setTimeout(() => {
+                this.setManagedTimeout(() => {
                   receivedJsonMessage = true; // Mark as ready for JSON communication
                 }, 5000); // Wait 5 seconds for server to be fully ready
               }
@@ -319,18 +422,18 @@ export class CodexConnection {
           }
         });
 
-        setTimeout(() => {
-          if (this.child && !this.child.killed) {
-            resolve();
+        this.setManagedTimeout(() => {
+          if (child === this.child && !child.killed) {
+            settleStart();
           } else {
-            reject(new Error('Codex process failed to start or was killed during startup'));
+            settleStart(new Error('Codex process failed to start or was killed during startup'));
           }
         }, 5000);
 
         // Fallback timeout
-        setTimeout(() => {
-          if (!hasOutput && this.child && !this.child.killed) {
-            resolve(); // Still resolve to allow the connection attempt
+        this.setManagedTimeout(() => {
+          if (!hasOutput && child === this.child && !child.killed) {
+            settleStart(); // Still resolve to allow the connection attempt
           }
         }, 6000); // 6 second fallback
       } catch (error) {
@@ -339,31 +442,27 @@ export class CodexConnection {
     });
   }
 
-  stop(): Promise<void> {
-    if (this.child) {
-      this.child.kill();
-      this.child = null;
+  async stop(): Promise<void> {
+    const child = this.child;
+    this.child = null;
+    this.clearRuntimeState(new Error('Codex MCP connection closed'));
+
+    if (!child) {
+      return;
     }
-    // Reject all pending
-    for (const [id, p] of this.pending) {
-      p.reject(new Error('Codex MCP connection closed'));
-      if (p.timeout) clearTimeout(p.timeout);
-      this.pending.delete(id);
+
+    try {
+      child.removeAllListeners();
+      child.stdout?.removeAllListeners();
+      child.stderr?.removeAllListeners();
+      child.stdin?.removeAllListeners();
+      child.stdin?.end();
+      child.stdin?.destroy?.();
+    } catch {
+      // Ignore stream cleanup failures during shutdown.
     }
-    // Clear pending elicitations and auto-approvals
-    this.elicitationMap.clear();
-    this.pendingAutoApprovals.clear();
-    for (const request of this.pausedRequests) {
-      clearTimeout(request.timeout);
-      request.reject(new Error('Codex MCP connection closed'));
-    }
-    this.pausedRequests = [];
-    for (const [_callId, resolver] of this.permissionResolvers) {
-      resolver.reject(new Error('Codex MCP connection closed'));
-    }
-    this.permissionResolvers.clear();
-    this.isPaused = false;
-    return Promise.resolve();
+
+    await terminateCodexChildProcess(child);
   }
 
   request<T = unknown>(method: string, params?: unknown, timeoutMs = 200000): Promise<T> {
@@ -524,7 +623,7 @@ export class CodexConnection {
       this.permissionResolvers.set(callId, { resolve, reject });
 
       // Auto-timeout after 30 seconds
-      setTimeout(() => {
+      this.setManagedTimeout(() => {
         if (this.permissionResolvers.has(callId)) {
           this.permissionResolvers.delete(callId);
 
@@ -668,7 +767,7 @@ export class CodexConnection {
   private scheduleRetry(pendingRequest: PendingReq, networkError: NetworkError): void {
     this.retryCount++;
 
-    setTimeout(() => {
+    this.setManagedTimeout(() => {
       // For now, still reject since we can't easily replay the original request
       // In a more sophisticated implementation, you'd store and replay the original request
 
@@ -731,13 +830,33 @@ export class CodexConnection {
   public waitForServerReady(timeout: number = 30000): Promise<void> {
     return new Promise((resolve, reject) => {
       const startTime = Date.now();
+      let settled = false;
+
+      const settle = (error?: Error) => {
+        if (settled) {
+          return;
+        }
+
+        settled = true;
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      };
 
       const checkReady = () => {
+        if (!this.child) {
+          settle(new Error('Codex connection closed before MCP server became ready'));
+          return;
+        }
+
         // Try to ping the server
         this.ping(3000)
           .then((isReady) => {
             if (isReady) {
-              resolve();
+              settle();
               return;
             }
 
@@ -750,12 +869,12 @@ export class CodexConnection {
                 details: { timeout },
               });
 
-              reject(new Error('Timeout waiting for MCP server to be ready'));
+              settle(new Error('Timeout waiting for MCP server to be ready'));
               return;
             }
 
             // Wait and retry
-            setTimeout(checkReady, 2000);
+            this.setManagedTimeout(checkReady, 2000);
           })
           .catch(() => {
             // Ping failed, continue waiting
@@ -766,21 +885,27 @@ export class CodexConnection {
                 details: { timeout },
               });
 
-              reject(new Error('Timeout waiting for MCP server to be ready'));
+              settle(new Error('Timeout waiting for MCP server to be ready'));
               return;
             }
 
-            setTimeout(checkReady, 2000);
+            this.setManagedTimeout(checkReady, 2000);
           });
       };
 
       // Start checking after a short delay
-      setTimeout(checkReady, 3000);
+      this.setManagedTimeout(checkReady, 3000);
     });
   }
 
   // Handle process exit
-  private handleProcessExit(code: number | null, signal: NodeJS.Signals | null): void {
+  private handleProcessExit(child: ChildProcess, code: number | null, signal: NodeJS.Signals | null): void {
+    if (child !== this.child) {
+      return;
+    }
+
+    this.child = null;
+
     // Emit error to frontend about process exit
     this.onError({
       message: `Codex process exited unexpectedly (code: ${code}, signal: ${signal})`,
@@ -788,26 +913,54 @@ export class CodexConnection {
       details: { exitCode: code, signal },
     });
 
-    // Reject all pending requests
-    for (const [id, p] of this.pending) {
-      p.reject(new Error(`Codex process exited with code ${code}, signal ${signal}`));
-      if (p.timeout) clearTimeout(p.timeout);
+    this.clearRuntimeState(new Error(`Codex process exited with code ${code}, signal ${signal}`));
+  }
+
+  private setManagedTimeout(callback: () => void, delayMs: number): NodeJS.Timeout {
+    const timer = setTimeout(() => {
+      this.managedTimeouts.delete(timer);
+      callback();
+    }, delayMs);
+
+    this.managedTimeouts.add(timer);
+    return timer;
+  }
+
+  private clearRuntimeState(error: Error): void {
+    this.clearManagedTimeouts();
+
+    for (const [id, pendingRequest] of this.pending) {
+      if (pendingRequest.timeout) {
+        clearTimeout(pendingRequest.timeout);
+      }
+      pendingRequest.reject(error);
       this.pending.delete(id);
     }
 
-    // Clear state
     this.elicitationMap.clear();
     this.pendingAutoApprovals.clear();
+
     for (const request of this.pausedRequests) {
       clearTimeout(request.timeout);
-      request.reject(new Error(`Codex process exited with code ${code}, signal ${signal}`));
+      request.reject(error);
     }
     this.pausedRequests = [];
+
     for (const [_callId, resolver] of this.permissionResolvers) {
-      resolver.reject(new Error(`Codex process exited with code ${code}, signal ${signal}`));
+      resolver.reject(error);
     }
     this.permissionResolvers.clear();
+
     this.isPaused = false;
-    this.child = null;
+    this.retryCount = 0;
+    this.isNetworkError = false;
+  }
+
+  private clearManagedTimeouts(): void {
+    for (const timer of this.managedTimeouts) {
+      clearTimeout(timer);
+    }
+
+    this.managedTimeouts.clear();
   }
 }

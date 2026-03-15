@@ -46,7 +46,7 @@ const touchTask = (id: string) => {
   return entry;
 };
 
-const destroyTask = (id: string, task: AgentBaseTask<unknown>) => {
+const destroyTask = async (id: string, task: AgentBaseTask<unknown>) => {
   try {
     const cleanupCapableTask = task as AgentBaseTask<unknown> & { cleanup?: () => void };
     if (typeof cleanupCapableTask.cleanup === 'function') {
@@ -62,9 +62,16 @@ const destroyTask = (id: string, task: AgentBaseTask<unknown>) => {
     console.warn('[WorkerManage] Failed to kill task during removal:', error, { id });
   }
 
-  releaseConversationMessageCache(id);
   cronBusyGuard.remove(id);
   ConversationTurnCompletionService.getInstance().forgetSession(id);
+
+  try {
+    await releaseConversationMessageCache(id, {
+      persistPending: true,
+    });
+  } catch (error) {
+    console.warn('[WorkerManage] Failed to release conversation message cache:', error, { id });
+  }
 };
 
 const isPrunableConversation = (id: string): boolean => {
@@ -98,6 +105,10 @@ const shouldKeepTask = (entry: { id: string; task: AgentBaseTask<unknown>; lastU
 
 const getTaskById = (id: string) => {
   return touchTask(id)?.task;
+};
+
+const peekTaskById = (id: string) => {
+  return taskList.find((item) => item.id === id)?.task;
 };
 
 const buildConversation = (conversation: TChatConversation, options?: BuildConversationOptions) => {
@@ -276,15 +287,25 @@ const kill = (id: string) => {
   const index = taskList.findIndex((item) => item.id === id);
   if (index === -1) return;
   const task = taskList[index];
-  if (task) {
-    destroyTask(id, task.task);
-  }
   taskList.splice(index, 1);
+  if (task) {
+    void destroyTask(id, task.task);
+  }
+};
+
+const killAndDrain = async (id: string) => {
+  const index = taskList.findIndex((item) => item.id === id);
+  if (index === -1) return;
+  const task = taskList[index];
+  taskList.splice(index, 1);
+  if (task) {
+    await destroyTask(id, task.task);
+  }
 };
 
 const clear = () => {
   taskList.forEach((item) => {
-    destroyTask(item.id, item.task);
+    void destroyTask(item.id, item.task);
   });
   taskList.length = 0;
 };
@@ -309,7 +330,7 @@ const pruneIdleTasks = (now: number = Date.now()) => {
   removableIndexes.forEach((index) => {
     const [removed] = taskList.splice(index, 1);
     if (removed) {
-      destroyTask(removed.id, removed.task);
+      void destroyTask(removed.id, removed.task);
     }
   });
 
@@ -329,7 +350,7 @@ const pruneIdleTasks = (now: number = Date.now()) => {
     .forEach(({ index }) => {
       const [removed] = taskList.splice(index, 1);
       if (removed) {
-        destroyTask(removed.id, removed.task);
+        void destroyTask(removed.id, removed.task);
       }
     });
 };
@@ -338,15 +359,43 @@ const listTasks = () => {
   return taskList.map((t) => ({ id: t.id, type: t.task.type }));
 };
 
+const getDebugInfo = () => {
+  const now = Date.now();
+  const tasks = taskList.map((entry) => {
+    const taskWithDiagnostics = entry.task as AgentBaseTask<unknown> & {
+      getDiagnostics?: () => unknown;
+    };
+
+    return {
+      id: entry.id,
+      type: entry.task.type,
+      status: entry.task.status,
+      lastUsedAt: entry.lastUsedAt,
+      idleForMs: Math.max(now - entry.lastUsedAt, 0),
+      confirmationCount: typeof entry.task.getConfirmations === 'function' ? entry.task.getConfirmations().length : 0,
+      isPrunable: isPrunableConversation(entry.id),
+      diagnostics: typeof taskWithDiagnostics.getDiagnostics === 'function' ? taskWithDiagnostics.getDiagnostics() : undefined,
+    };
+  });
+
+  return {
+    totalTasks: tasks.length,
+    tasks,
+  };
+};
+
 const WorkerManage = {
   buildConversation,
   getTaskById,
+  peekTaskById,
   getTaskByIdRollbackBuild,
   sendMessage,
   addTask,
   listTasks,
+  getDebugInfo,
   pruneIdleTasks,
   kill,
+  killAndDrain,
   clear,
 };
 

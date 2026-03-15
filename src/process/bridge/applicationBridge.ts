@@ -11,6 +11,7 @@ import { copyDirectoryRecursively } from '../utils';
 import WorkerManage from '../WorkerManage';
 import { getZoomFactor, setZoomFactor } from '../utils/zoom';
 import { getCdpStatus, updateCdpConfig, verifyCdpReady } from '../../utils/configureChromium';
+import { apiDiagnosticsService } from '../services/ApiDiagnosticsService';
 
 export function initApplicationBridge(): void {
   ipcBridge.application.restart.provider(() => {
@@ -52,6 +53,96 @@ export function initApplicationBridge(): void {
 
   ipcBridge.application.setZoomFactor.provider(({ factor }) => {
     return Promise.resolve(setZoomFactor(factor));
+  });
+
+  ipcBridge.application.getApiDiagnosticsState.provider(() => {
+    return Promise.resolve({
+      success: true,
+      data: apiDiagnosticsService.getConfig(),
+    });
+  });
+
+  ipcBridge.application.updateApiDiagnosticsConfig.provider((config) => {
+    try {
+      return Promise.resolve({
+        success: true,
+        data: apiDiagnosticsService.updateConfig(config),
+      });
+    } catch (e) {
+      return Promise.resolve({
+        success: false,
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
+  });
+
+  ipcBridge.application.captureApiDiagnosticsSnapshot.provider(({ sessionId, persist }) => {
+    try {
+      const capture = apiDiagnosticsService.captureRouteSample({
+        route: '/ipc/application/api-diagnostics',
+        reason: 'renderer_manual_snapshot',
+        sessionId,
+        force: true,
+        persist,
+        allowWhenDisabled: true,
+      });
+
+      if (!capture.recorded || !capture.snapshot) {
+        return Promise.resolve({
+          success: false,
+          msg: 'No diagnostics snapshot was recorded',
+        });
+      }
+
+      return Promise.resolve({
+        success: true,
+        data: {
+          filePath: capture.filePath,
+          snapshot: capture.snapshot,
+        },
+      });
+    } catch (e) {
+      return Promise.resolve({
+        success: false,
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
+  });
+
+  ipcBridge.application.getApiDiagnosticsLiveSnapshot.provider((input: { sessionId?: string } | undefined) => {
+    try {
+      return Promise.resolve({
+        success: true,
+        data: {
+          snapshot: apiDiagnosticsService.getLiveSnapshot({
+            route: '/ipc/application/api-diagnostics/live',
+            reason: 'renderer_live_snapshot',
+            sessionId: input?.sessionId,
+          }),
+        },
+      });
+    } catch (e) {
+      return Promise.resolve({
+        success: false,
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
+  });
+
+  ipcBridge.application.getApiDiagnosticsHistory.provider((input: { limit?: number } | undefined) => {
+    try {
+      return Promise.resolve({
+        success: true,
+        data: {
+          captures: apiDiagnosticsService.getRecentCaptures(input?.limit),
+        },
+      });
+    } catch (e) {
+      return Promise.resolve({
+        success: false,
+        msg: e instanceof Error ? e.message : String(e),
+      });
+    }
   });
 
   // CDP status and configuration

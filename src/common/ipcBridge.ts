@@ -89,6 +89,21 @@ export interface ICdpConfig {
   port?: number;
 }
 
+export interface IApiDiagnosticsConfig {
+  enabled: boolean;
+  outputDir: string;
+  sampleIntervalMs: number;
+}
+
+export interface IApiDiagnosticsCaptureResult {
+  filePath?: string;
+  snapshot: unknown;
+}
+
+export interface IApiDiagnosticsHistoryResult {
+  captures: IApiDiagnosticsCaptureResult[];
+}
+
 export const application = {
   restart: bridge.buildProvider<void, void>('restart-app'), // 重启应用
   openDevTools: bridge.buildProvider<boolean, void>('open-dev-tools'), // 打开/关闭开发者工具，返回操作后的状态
@@ -98,6 +113,11 @@ export const application = {
   updateSystemInfo: bridge.buildProvider<IBridgeResponse, { cacheDir: string; workDir: string }>('system.update-info'), // 更新系统信息
   getZoomFactor: bridge.buildProvider<number, void>('app.get-zoom-factor'),
   setZoomFactor: bridge.buildProvider<number, { factor: number }>('app.set-zoom-factor'),
+  getApiDiagnosticsState: bridge.buildProvider<IBridgeResponse<IApiDiagnosticsConfig>, void>('app.get-api-diagnostics-state'),
+  updateApiDiagnosticsConfig: bridge.buildProvider<IBridgeResponse<IApiDiagnosticsConfig>, Partial<IApiDiagnosticsConfig>>('app.update-api-diagnostics-config'),
+  captureApiDiagnosticsSnapshot: bridge.buildProvider<IBridgeResponse<IApiDiagnosticsCaptureResult>, { sessionId?: string; persist?: boolean }>('app.capture-api-diagnostics-snapshot'),
+  getApiDiagnosticsLiveSnapshot: bridge.buildProvider<IBridgeResponse<IApiDiagnosticsCaptureResult>, { sessionId?: string } | undefined>('app.get-api-diagnostics-live-snapshot'),
+  getApiDiagnosticsHistory: bridge.buildProvider<IBridgeResponse<IApiDiagnosticsHistoryResult>, { limit?: number } | undefined>('app.get-api-diagnostics-history'),
   // CDP (Chrome DevTools Protocol) management
   getCdpStatus: bridge.buildProvider<IBridgeResponse<ICdpStatus>, void>('app.get-cdp-status'), // 获取 CDP 状态
   updateCdpConfig: bridge.buildProvider<IBridgeResponse<ICdpConfig>, Partial<ICdpConfig>>('app.update-cdp-config'), // 更新 CDP 配置

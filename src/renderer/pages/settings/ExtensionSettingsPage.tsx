@@ -7,6 +7,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { ipcBridge } from '@/common';
 import { extensions as extensionsIpc, type IExtensionSettingsTab } from '@/common/ipcBridge';
 import { useExtI18n } from '@/renderer/hooks/useExtI18n';
 import WebviewHost from '@/renderer/components/WebviewHost';
@@ -14,6 +15,16 @@ import { resolveExtensionAssetUrl } from '@/renderer/utils/platform';
 import SettingsPageWrapper from './components/SettingsPageWrapper';
 
 const isExternalSettingsUrl = (url?: string): boolean => /^https?:\/\//i.test(url || '');
+
+type ExtensionApiCallMessage = {
+  type?: string;
+  reqId?: string;
+  requestId?: string;
+  data?: {
+    action?: string;
+    payload?: unknown;
+  };
+};
 
 /**
  * Route-based page for rendering extension-contributed settings tabs.
@@ -95,7 +106,7 @@ const ExtensionSettingsPage: React.FC = () => {
       const frameWindow = iframeRef.current?.contentWindow;
       if (!frameWindow || event.source !== frameWindow) return;
 
-      const data = event.data as { type?: string; reqId?: string } | undefined;
+      const data = event.data as ExtensionApiCallMessage | undefined;
       if (!data) return;
 
       if (data.type === 'aion:get-locale') {
@@ -103,7 +114,88 @@ const ExtensionSettingsPage: React.FC = () => {
         return;
       }
 
-      if (data.type !== 'star-office:request-snapshot') return;
+      if (data.type === 'ext:api-call') {
+        const requestId = data.requestId || data.reqId;
+        const action = data.data?.action;
+        const payload = data.data?.payload;
+
+        const diagnosticsActions =
+          tab._extensionName === 'api-diagnostics-devtools'
+            ? {
+                'application.getApiDiagnosticsState': () => ipcBridge.application.getApiDiagnosticsState.invoke(),
+                'application.updateApiDiagnosticsConfig': () => ipcBridge.application.updateApiDiagnosticsConfig.invoke((payload || {}) as { enabled?: boolean; outputDir?: string; sampleIntervalMs?: number }),
+                'application.captureApiDiagnosticsSnapshot': () =>
+                  ipcBridge.application.captureApiDiagnosticsSnapshot.invoke(
+                    (payload || {}) as {
+                      sessionId?: string;
+                      persist?: boolean;
+                    }
+                  ),
+                'application.getApiDiagnosticsLiveSnapshot': () =>
+                  ipcBridge.application.getApiDiagnosticsLiveSnapshot.invoke(
+                    (payload || undefined) as {
+                      sessionId?: string;
+                    }
+                  ),
+                'application.getApiDiagnosticsHistory': () =>
+                  ipcBridge.application.getApiDiagnosticsHistory.invoke(
+                    (payload || undefined) as {
+                      limit?: number;
+                    }
+                  ),
+                'shell.showItemInFolder': async () => {
+                  if (typeof payload !== 'string' || !payload.trim()) {
+                    throw new Error('Missing path');
+                  }
+
+                  await ipcBridge.shell.showItemInFolder.invoke(payload);
+                  return { success: true };
+                },
+              }
+            : undefined;
+
+        const handler = action ? diagnosticsActions?.[action as keyof typeof diagnosticsActions] : undefined;
+
+        if (!requestId || !handler) {
+          frameWindow.postMessage(
+            {
+              type: 'ext:api-response',
+              requestId,
+              success: false,
+              error: 'Unsupported host action',
+            },
+            '*'
+          );
+          return;
+        }
+
+        try {
+          const response = await handler();
+          frameWindow.postMessage(
+            {
+              type: 'ext:api-response',
+              requestId,
+              success: true,
+              data: response,
+            },
+            '*'
+          );
+        } catch (err) {
+          console.error('[ExtensionSettingsPage] Host API call failed:', err);
+          frameWindow.postMessage(
+            {
+              type: 'ext:api-response',
+              requestId,
+              success: false,
+              error: err instanceof Error ? err.message : 'Host API call failed',
+            },
+            '*'
+          );
+        }
+        return;
+      }
+
+      if (data.type !== 'star-office:request-snapshot' || tab._extensionName !== 'star-office') return;
 
       try {
         const snapshot = await extensionsIpc.getAgentActivitySnapshot.invoke();

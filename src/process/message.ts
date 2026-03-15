@@ -12,6 +12,12 @@ import { ProcessChat } from './initStorage';
 
 const Cache = new Map<string, ConversationManageWithDB>();
 const MESSAGE_CACHE_IDLE_RELEASE_MS = 60000;
+const MESSAGE_CACHE_STREAM_FLUSH_MS = 250;
+const MESSAGE_CACHE_MAX_PENDING_OPERATIONS = 200;
+
+type ReleaseConversationMessageCacheOptions = {
+  persistPending?: boolean;
+};
 
 // Place all messages in a unified update queue based on the conversation
 // Ensure that the update mechanism for each message is consistent with the front end, meaning that the database and UI data are in sync
@@ -37,26 +43,34 @@ class ConversationManageWithDB {
 
   sync(type: 'insert' | 'accumulate', message: TMessage) {
     this.lastActivityAt = Date.now();
-    if (this.releaseTimer) {
-      clearTimeout(this.releaseTimer);
-      this.releaseTimer = undefined;
-    }
+    this.clearReleaseTimer();
     this.stack.push([type, message]);
-    if (this.timer) {
-      clearTimeout(this.timer);
-    }
+
     if (type === 'insert') {
-      this.save2DataBase();
+      void this.save2DataBase();
       return;
     }
-    this.timer = setTimeout(() => {
-      this.save2DataBase();
-    }, 2000);
+
+    if (this.stack.length >= MESSAGE_CACHE_MAX_PENDING_OPERATIONS) {
+      void this.save2DataBase();
+      return;
+    }
+
+    this.scheduleFlush();
   }
 
-  private save2DataBase() {
+  private save2DataBase(): Promise<void> {
+    if (this.stack.length === 0) {
+      return this.savePromise;
+    }
+
+    this.clearFlushTimer();
     this.savePromise = this.savePromise
       .then(() => {
+        if (this.stack.length === 0) {
+          return;
+        }
+
         const stack = this.stack.slice();
         this.stack = [];
         const messages = this.db.getConversationMessages(this.conversation_id, 0, 50, 'DESC'); //
@@ -87,40 +101,57 @@ class ConversationManageWithDB {
         });
       })
       .finally(() => {
+        if (this.stack.length > 0) {
+          this.scheduleFlush();
+          return;
+        }
+
         this.scheduleReleaseIfIdle();
       });
+
+    return this.savePromise;
   }
 
   flush(): Promise<void> {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
-    }
+    this.clearFlushTimer();
 
     if (this.stack.length === 0) {
       return this.savePromise;
     }
 
-    this.save2DataBase();
-    return this.savePromise;
+    return this.save2DataBase();
   }
 
-  release(): void {
-    if (this.timer) {
-      clearTimeout(this.timer);
-      this.timer = undefined;
+  async release(options: ReleaseConversationMessageCacheOptions = {}): Promise<void> {
+    this.clearFlushTimer();
+    this.clearReleaseTimer();
+
+    if (options.persistPending) {
+      await this.flush();
+      this.clearReleaseTimer();
     }
-    if (this.releaseTimer) {
-      clearTimeout(this.releaseTimer);
-      this.releaseTimer = undefined;
-    }
+
     Cache.delete(this.conversation_id);
   }
 
+  getDebugState(): {
+    conversationId: string;
+    pendingOperations: number;
+    hasFlushTimer: boolean;
+    hasReleaseTimer: boolean;
+    lastActivityAt: number;
+  } {
+    return {
+      conversationId: this.conversation_id,
+      pendingOperations: this.stack.length,
+      hasFlushTimer: Boolean(this.timer),
+      hasReleaseTimer: Boolean(this.releaseTimer),
+      lastActivityAt: this.lastActivityAt,
+    };
+  }
+
   private scheduleReleaseIfIdle(): void {
-    if (this.releaseTimer) {
-      clearTimeout(this.releaseTimer);
-    }
+    this.clearReleaseTimer();
 
     if (this.stack.length > 0) {
       return;
@@ -133,6 +164,31 @@ class ConversationManageWithDB {
         Cache.delete(this.conversation_id);
       }
     }, delay);
+  }
+
+  private scheduleFlush(): void {
+    if (this.timer) {
+      return;
+    }
+
+    this.timer = setTimeout(() => {
+      this.timer = undefined;
+      void this.save2DataBase();
+    }, MESSAGE_CACHE_STREAM_FLUSH_MS);
+  }
+
+  private clearFlushTimer(): void {
+    if (this.timer) {
+      clearTimeout(this.timer);
+      this.timer = undefined;
+    }
+  }
+
+  private clearReleaseTimer(): void {
+    if (this.releaseTimer) {
+      clearTimeout(this.releaseTimer);
+      this.releaseTimer = undefined;
+    }
   }
 }
 
@@ -175,7 +231,7 @@ async function ensureConversationExists(db: ReturnType<typeof getDatabase>, conv
  * Add or update a single message
  * If message exists (by id), update it; otherwise insert it
  */
-export const addOrUpdateMessage = (conversation_id: string, message: TMessage, backend?: AcpBackend): void => {
+export const addOrUpdateMessage = (conversation_id: string, message: TMessage, _backend?: AcpBackend): void => {
   // Validate message
   if (!message) {
     console.error('[Message] Cannot add or update undefined message');
@@ -198,8 +254,31 @@ export const flushConversationMessages = (conversation_id: string): Promise<void
   return manage.flush();
 };
 
-export const releaseConversationMessageCache = (conversation_id: string): void => {
-  Cache.get(conversation_id)?.release();
+export const releaseConversationMessageCache = (conversation_id: string, options?: ReleaseConversationMessageCacheOptions): Promise<void> => {
+  const manage = Cache.get(conversation_id);
+  if (!manage) {
+    return Promise.resolve();
+  }
+
+  return manage.release(options);
+};
+
+export const getConversationMessageCacheStats = (): {
+  size: number;
+  conversations: Array<{
+    conversationId: string;
+    pendingOperations: number;
+    hasFlushTimer: boolean;
+    hasReleaseTimer: boolean;
+    lastActivityAt: number;
+  }>;
+} => {
+  const conversations = Array.from(Cache.values()).map((manage) => manage.getDebugState());
+
+  return {
+    size: Cache.size,
+    conversations,
+  };
 };
 
 /**

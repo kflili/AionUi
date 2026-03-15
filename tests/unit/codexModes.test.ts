@@ -5,11 +5,17 @@
  */
 
 import { CODEX_MODE_FULL_AUTO_NO_SANDBOX, isCodexAutoApproveMode, isCodexNoSandboxMode } from '../../src/common/codex/codexModes';
-import { getCodexSandboxModeForSessionMode } from '../../src/process/utils/codexConfig';
+import { getCodexConfigPath, getCodexSandboxModeForSessionMode } from '../../src/process/utils/codexConfig';
 import { getAgentModes } from '../../src/renderer/constants/agentModes';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { homedir } from 'os';
+import { join } from 'path';
 
 describe('codex mode helpers', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+  });
+
   it('exposes an explicit no-sandbox full auto mode for Codex', () => {
     expect(getAgentModes('codex').map((mode) => mode.value)).toContain(CODEX_MODE_FULL_AUTO_NO_SANDBOX);
   });
@@ -23,5 +29,17 @@ describe('codex mode helpers', () => {
     expect(getCodexSandboxModeForSessionMode('default', 'danger-full-access')).toBe('workspace-write');
     expect(getCodexSandboxModeForSessionMode(CODEX_MODE_FULL_AUTO_NO_SANDBOX, 'workspace-write')).toBe('danger-full-access');
     expect(getCodexSandboxModeForSessionMode(undefined, 'danger-full-access')).toBe('danger-full-access');
+  });
+
+  it('reads Codex config from CODEX_HOME when provided', () => {
+    vi.stubEnv('CODEX_HOME', 'C:\\Users\\tester\\.codex-custom');
+
+    expect(getCodexConfigPath()).toBe(join('C:\\Users\\tester\\.codex-custom', 'config.toml'));
+  });
+
+  it('falls back to ~/.codex/config.toml', () => {
+    vi.stubEnv('CODEX_HOME', '');
+
+    expect(getCodexConfigPath()).toBe(join(homedir(), '.codex', 'config.toml'));
   });
 });

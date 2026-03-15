@@ -96,4 +96,24 @@ describe('extensions/ExtensionLoader', () => {
 
     expect(loadedNames).toEqual(['env-only']);
   });
+
+  it('loads bundled extensions from the project extensions directory in non-E2E runs', async () => {
+    const sandbox = createTempDir('aionui-loader-builtin-');
+    const homeDir = path.join(sandbox, 'home');
+    const projectRoot = path.join(sandbox, 'project');
+    const bundledDir = path.join(projectRoot, 'extensions');
+
+    fs.mkdirSync(projectRoot, { recursive: true });
+    fs.mkdirSync(bundledDir, { recursive: true });
+    setSandboxEnv(homeDir);
+    process.chdir(projectRoot);
+
+    createExtension(bundledDir, 'diag-bundled', 'diag-bundled', '1.2.3');
+
+    const loaded = await new ExtensionLoader().loadAll();
+    const bundled = loaded.find((extension) => extension.manifest.name === 'diag-bundled');
+
+    expect(bundled?.manifest.version).toBe('1.2.3');
+    expect(bundled?.source).toBe('builtin');
+  });
 });

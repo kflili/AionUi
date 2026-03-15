@@ -8,7 +8,7 @@ import fs from 'fs/promises';
 import * as path from 'path';
 import { existsSync } from 'fs';
 import stripJsonComments from 'strip-json-comments';
-import { getUserExtensionsDir, getAppDataExtensionsDir, getEnvExtensionsDirs, EXTENSION_MANIFEST_FILE } from './constants';
+import { getUserExtensionsDir, getAppDataExtensionsDir, getBundledExtensionsDir, getEnvExtensionsDirs, EXTENSION_MANIFEST_FILE } from './constants';
 import { ExtensionManifestSchema, type LoadedExtension, type ExtensionSource } from './types';
 import { resolveEnvInObject, UndefinedEnvVariableError } from './envResolver';
 import { resolveFileRefs } from './fileResolver';
@@ -75,6 +75,9 @@ export class ExtensionLoader {
       if (appDataDir !== userDir) {
         pushSource(appDataDir, 'appdata');
       }
+
+      const bundledDir = getBundledExtensionsDir();
+      pushSource(bundledDir, 'builtin');
     }
 
     return sources;

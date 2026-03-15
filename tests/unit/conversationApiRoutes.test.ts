@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 type MinimalConversation = {
   id: string;
@@ -25,6 +25,14 @@ type MinimalConversation = {
   };
 };
 
+const workerManageGetTaskById = vi.fn(() => undefined);
+const workerManageListTasks = vi.fn(() => []);
+const workerManageKillAndDrain = vi.fn(async () => undefined);
+const dbGetUserConversations = vi.fn(() => ({ data: [] }));
+const dbGetUserConversationsByStatuses = vi.fn(() => ({ success: true, data: [] }));
+const dbGetConversation = vi.fn(() => ({ success: false, data: undefined }));
+const cronBusyGuardGetAllStates = vi.fn(() => new Map());
+
 vi.mock('../../src/webserver/middleware/apiAuthMiddleware', () => ({
   validateApiToken: (_req: unknown, _res: unknown, next: () => void) => next(),
 }));
@@ -39,24 +47,45 @@ vi.mock('@process/services/conversationService', () => ({
 
 vi.mock('@process/WorkerManage', () => ({
   default: {
-    getTaskById: vi.fn(() => undefined),
+    getTaskById: workerManageGetTaskById,
+    listTasks: workerManageListTasks,
+    killAndDrain: workerManageKillAndDrain,
   },
 }));
 
 vi.mock('@process/database', () => ({
   getDatabase: vi.fn(() => ({
-    getUserConversations: vi.fn(() => ({ data: [] })),
+    getUserConversations: dbGetUserConversations,
+    getUserConversationsByStatuses: dbGetUserConversationsByStatuses,
+    getConversation: dbGetConversation,
   })),
 }));
 
 vi.mock('@process/services/cron/CronBusyGuard', () => ({
   cronBusyGuard: {
     isProcessing: vi.fn(() => false),
+    getAllStates: cronBusyGuardGetAllStates,
+  },
+}));
+
+vi.mock('@process/services/ApiDiagnosticsService', () => ({
+  apiDiagnosticsService: {
+    isEnabled: vi.fn(() => false),
+    getConfig: vi.fn(() => ({
+      enabled: false,
+      outputDir: 'E:/tmp',
+      sampleIntervalMs: 60000,
+    })),
+    captureRouteSample: vi.fn(() => ({
+      enabled: false,
+      recorded: false,
+    })),
   },
 }));
 
 vi.mock('@process/services/ConversationTurnCompletionService', () => ({
   getConversationStatusSnapshot: vi.fn(),
+  getReadOnlyConversationStatusSnapshot: vi.fn(),
   formatStatusLastMessage: vi.fn((message) =>
     message
       ? {
@@ -83,6 +112,23 @@ vi.mock('@/common/utils/conversationTitle', () => ({
 }));
 
 describe('conversationApiRoutes helpers', () => {
+  beforeEach(() => {
+    workerManageGetTaskById.mockReset();
+    workerManageGetTaskById.mockReturnValue(undefined);
+    workerManageListTasks.mockReset();
+    workerManageListTasks.mockReturnValue([]);
+    workerManageKillAndDrain.mockReset();
+    workerManageKillAndDrain.mockResolvedValue(undefined);
+    dbGetUserConversations.mockReset();
+    dbGetUserConversations.mockReturnValue({ data: [] });
+    dbGetUserConversationsByStatuses.mockReset();
+    dbGetUserConversationsByStatuses.mockReturnValue({ success: true, data: [] });
+    dbGetConversation.mockReset();
+    dbGetConversation.mockReturnValue({ success: false, data: undefined });
+    cronBusyGuardGetAllStates.mockReset();
+    cronBusyGuardGetAllStates.mockReturnValue(new Map());
+  });
+
   it('recognizes active snapshots from runtime and non-stopped states', async () => {
     const { isConversationStatusActive } = await import('../../src/webserver/routes/conversationApiRoutes');
 
@@ -399,6 +445,76 @@ describe('conversationApiRoutes helpers', () => {
     expect(cliFiltered.map((item) => item.sessionId)).toEqual(['conv-running']);
   });
 
+  it('collects runtime candidate ids without including idle busy-guard entries', async () => {
+    const { collectConversationStatusCandidateIds } = await import('../../src/webserver/routes/conversationApiRoutes');
+
+    const result = collectConversationStatusCandidateIds(
+      [{ id: 'task-1' }, { id: 'task-2' }],
+      new Map([
+        ['busy-1', { isProcessing: true }],
+        ['idle-1', { isProcessing: false }],
+      ])
+    );
+
+    expect(result).toEqual(['task-1', 'task-2', 'busy-1']);
+  });
+
+  it('resolves active status list conversations from runtime candidates instead of scanning full history', async () => {
+    const { getConversationStatusListConversations } = await import('../../src/webserver/routes/conversationApiRoutes');
+
+    const db = {
+      getConversation: vi.fn((conversationId: string) => {
+        if (conversationId === 'conv-runtime') {
+          return {
+            success: true,
+            data: {
+              id: 'conv-runtime',
+              name: 'Runtime',
+              type: 'codex',
+              source: 'api',
+              status: 'finished',
+              createTime: 100,
+              modifyTime: 300,
+              extra: {},
+            },
+          };
+        }
+
+        return {
+          success: false,
+          data: undefined,
+        };
+      }),
+      getUserConversations: vi.fn(() => {
+        throw new Error('full history scan should not be used for active scope');
+      }),
+      getUserConversationsByStatuses: vi.fn(() => ({
+        success: true,
+        data: [
+          {
+            id: 'conv-running',
+            name: 'Running',
+            type: 'gemini',
+            source: 'api',
+            status: 'running',
+            createTime: 50,
+            modifyTime: 200,
+            extra: {},
+          },
+        ],
+      })),
+    };
+
+    const result = getConversationStatusListConversations('active', {
+      db: db as never,
+      runtimeCandidateIds: ['conv-runtime'],
+    });
+
+    expect(db.getUserConversationsByStatuses).toHaveBeenCalledWith(['pending', 'running'], undefined, 1000);
+    expect(db.getUserConversations).not.toHaveBeenCalled();
+    expect(result.map((conversation) => conversation.id)).toEqual(['conv-runtime', 'conv-running']);
+  });
+
   it('builds conversation usage payload with summary and paginated replies', async () => {
     const { buildConversationUsageResponse } = await import('../../src/webserver/routes/conversationApiRoutes');
 
@@ -413,10 +529,8 @@ describe('conversationApiRoutes helpers', () => {
       extra: { backend: 'claude' },
     };
 
-    const result = buildConversationUsageResponse(
-      'conv-usage',
-      conversation as never,
-      {
+    const result = buildConversationUsageResponse('conv-usage', conversation as never, {
+      summary: {
         conversationId: 'conv-usage',
         backend: 'claude',
         replyCount: 2,
@@ -433,7 +547,7 @@ describe('conversationApiRoutes helpers', () => {
         lastReplyIndex: 2,
         lastRecordedAt: 500,
       },
-      {
+      usagePage: {
         data: [
           {
             id: 'usage-2',
@@ -459,8 +573,8 @@ describe('conversationApiRoutes helpers', () => {
         page: 0,
         pageSize: 1,
         hasMore: true,
-      }
-    );
+      },
+    });
 
     expect(result).toEqual(
       expect.objectContaining({

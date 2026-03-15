@@ -537,6 +537,43 @@ export class AionUIDatabase {
     }
   }
 
+  getUserConversationsByStatuses(statuses: TChatConversation['status'][], userId?: string, limit = 200): IQueryResult<TChatConversation[]> {
+    try {
+      if (statuses.length === 0) {
+        return {
+          success: true,
+          data: [],
+        };
+      }
+
+      const finalUserId = userId || this.defaultUserId;
+      const placeholders = statuses.map(() => '?').join(', ');
+      const rows = this.db
+        .prepare(
+          `
+            SELECT *
+            FROM conversations
+            WHERE user_id = ?
+              AND status IN (${placeholders})
+            ORDER BY updated_at DESC
+            LIMIT ?
+          `
+        )
+        .all(finalUserId, ...statuses, limit) as IConversationRow[];
+
+      return {
+        success: true,
+        data: rows.map(rowToConversation),
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+        data: [],
+      };
+    }
+  }
+
   updateConversation(conversationId: string, updates: Partial<TChatConversation>): IQueryResult<boolean> {
     try {
       const existing = this.getConversation(conversationId);

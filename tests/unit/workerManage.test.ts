@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const releaseConversationMessageCache = vi.fn();
+const releaseConversationMessageCache = vi.fn(() => Promise.resolve());
 const getConversation = vi.fn();
 const removeBusyState = vi.fn();
 const forgetSession = vi.fn();
@@ -67,6 +67,7 @@ describe('WorkerManage.kill', () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2026-03-12T00:00:00.000Z'));
     releaseConversationMessageCache.mockReset();
+    releaseConversationMessageCache.mockResolvedValue(undefined);
     removeBusyState.mockReset();
     forgetSession.mockReset();
     getConversation.mockReset();
@@ -119,13 +120,20 @@ describe('WorkerManage.kill', () => {
       status: 'finished',
       getConfirmations: () => [],
       kill: vi.fn(),
-    } as any;
+    } as unknown as {
+      type: 'gemini';
+      status: 'finished';
+      getConfirmations: () => [];
+      kill: () => void;
+    };
     WorkerManage.addTask('finished-1', finishedTask);
     WorkerManage.kill('finished-1');
 
     expect(finishedTask.kill).toHaveBeenCalledTimes(1);
     expect(WorkerManage.getTaskById('finished-1')).toBeUndefined();
-    expect(releaseConversationMessageCache).toHaveBeenCalledWith('finished-1');
+    expect(releaseConversationMessageCache).toHaveBeenCalledWith('finished-1', {
+      persistPending: true,
+    });
     expect(removeBusyState).toHaveBeenCalledWith('finished-1');
     expect(forgetSession).toHaveBeenCalledWith('finished-1');
   });

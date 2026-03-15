@@ -99,6 +99,16 @@ export function buildOpenApiSpec(): Record<string, any> {
               example: 'claude-sonnet-4',
               description: 'Pre-selected ACP model ID.',
             },
+            configOptionValues: {
+              type: 'object',
+              description: 'Optional ACP config options such as Codex reasoning effort.',
+              additionalProperties: {
+                type: 'string',
+              },
+              example: {
+                model_reasoning_effort: 'high',
+              },
+            },
             codexModel: {
               type: 'string',
               example: 'gpt-5-codex',

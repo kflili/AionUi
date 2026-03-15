@@ -1,0 +1,113 @@
+{
+  "page": {
+    "title": "API Diagnostics"
+  },
+  "common": {
+    "on": "On",
+    "off": "Off",
+    "persist": "Save to disk",
+    "doNotPersist": "Memory only",
+    "emptyState": "--",
+    "mb": "MB",
+    "timelineSeparator": " / "
+  },
+  "hero": {
+    "eyebrow": "Runtime inspection",
+    "title": "API Diagnostics",
+    "lede": "A detached workbench for observing AionUi runtime activity and inspecting conversation stop cleanup, worker retention, and memory growth in the local HTTP API."
+  },
+  "panel": {
+    "samplingTitle": "Sampling Control",
+    "samplingDesc": "Automatic sampling only affects the current app run and does not change users' saved API settings.",
+    "autoSamplingLabel": "Automatic sampling",
+    "autoSamplingHelp": "Control whether the app continuously records API diagnostics samples. Manual capture remains available at any time.",
+    "sampleIntervalLabel": "Sample interval (ms)",
+    "outputDirLabel": "Output directory",
+    "manualTitle": "Manual Capture",
+    "manualDesc": "Target a single session or leave it empty for a global process snapshot. Manual capture still works when automatic sampling is off.",
+    "sessionIdLabel": "Session ID",
+    "sessionIdPlaceholder": "Leave empty for a global snapshot",
+    "activityTitle": "Current Activity",
+    "activityDesc": "Shows sessions in AionUi that are currently running, processing, or waiting for confirmation so you can inspect the whole app state.",
+    "trendTitle": "Recent Sample Trends",
+    "trendDesc": "Shows the latest captures from this app run, including automatic route sampling and manual captures.",
+    "snapshotTitle": "Snapshot Payload"
+  },
+  "action": {
+    "applyConfig": "Apply config",
+    "refreshState": "Refresh state",
+    "openOutput": "Open output",
+    "captureSnapshot": "Capture snapshot",
+    "copyJson": "Copy JSON"
+  },
+  "summary": {
+    "rss": "RSS",
+    "heap": "Heap used",
+    "tasks": "Worker tasks",
+    "cache": "Message cache"
+  },
+  "trend": {
+    "window": "Window: {current}/{max}",
+    "empty": "No recent trend data yet. Turn on automatic sampling or capture a snapshot to populate the charts.",
+    "rssTitle": "RSS Trend",
+    "rssSubtitle": "Resident set size across recent samples.",
+    "heapTitle": "Heap Trend",
+    "heapSubtitle": "JS heap changes across the latest captures.",
+    "tasksTitle": "Worker Task Trend",
+    "tasksSubtitle": "Useful for spotting task retention after stop.",
+    "cacheTitle": "Cache / In-flight Trend",
+    "cacheSubtitle": "Message cache size combined with active turn residue."
+  },
+  "timeline": {
+    "empty": "No captures recorded during this app run.",
+    "capture": "Capture",
+    "runtimeSnapshot": "Runtime snapshot",
+    "rss": "RSS",
+    "heap": "Heap",
+    "tasks": "Tasks",
+    "cache": "Cache"
+  },
+  "snapshot": {
+    "empty": "No diagnostics snapshot captured yet.",
+    "latest": "Latest capture: {timestamp}.",
+    "latestWithFile": "Latest capture: {timestamp}. Last file: {filePath}"
+  },
+  "activity": {
+    "count": "Active sessions: {count}",
+    "empty": "There are no globally active sessions right now. Turn on automatic sampling or click refresh to continue monitoring AionUi.",
+    "status": "Status",
+    "detail": "Detail",
+    "workspace": "Workspace",
+    "source": "Source",
+    "model": "Type",
+    "lastMessage": "Last message",
+    "canSend": "Can send more input",
+    "cannotSend": "Waiting on runtime",
+    "unnamed": "Untitled session",
+    "none": "None"
+  },
+  "chip": {
+    "autoSamplingOn": "Automatic sampling is on",
+    "autoSamplingOff": "Automatic sampling is off"
+  },
+  "status": {
+    "waitingForBridge": "Waiting for host bridge...",
+    "loadingState": "Loading diagnostics state...",
+    "ready": "Diagnostics page is ready. Automatic sampling is {state}.",
+    "updatingSampling": "Updating automatic sampling...",
+    "samplingUpdated": "Automatic sampling was updated.",
+    "applyingConfig": "Applying runtime diagnostics config...",
+    "configApplied": "Diagnostics config was applied to this app run.",
+    "capturingSnapshot": "Capturing runtime snapshot...",
+    "snapshotCaptured": "Diagnostics snapshot captured.",
+    "snapshotCapturedPersisted": "Diagnostics snapshot captured and written to disk.",
+    "noOutputPath": "No diagnostics output path is available yet.",
+    "outputOpened": "Opened diagnostics output in the host file manager.",
+    "snapshotCopied": "Snapshot JSON copied to clipboard.",
+    "loadFailed": "Failed to load diagnostics state.",
+    "applyFailed": "Failed to apply diagnostics config.",
+    "captureFailed": "Failed to capture diagnostics snapshot.",
+    "openOutputFailed": "Failed to open diagnostics output.",
+    "copyFailed": "Failed to copy snapshot JSON."
+  }
+}

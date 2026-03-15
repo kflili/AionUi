@@ -12,7 +12,9 @@ import { ConversationService } from '@process/services/conversationService';
 import WorkerManage from '@process/WorkerManage';
 import { getDatabase } from '@process/database';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
-import { formatStatusLastMessage, getConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
+import type { getConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
+import { formatStatusLastMessage, getReadOnlyConversationStatusSnapshot } from '@process/services/ConversationTurnCompletionService';
+import { apiDiagnosticsService } from '@process/services/ApiDiagnosticsService';
 import { ipcBridge } from '@/common';
 import type { TChatConversation, TProviderWithModel } from '@/common/storage';
 import type { ConversationTokenUsageMonitorResult, ConversationTokenUsageRange, ConversationTokenUsageRecord, ConversationTokenUsageSummary } from '@/common/tokenUsage';
@@ -31,6 +33,7 @@ const SIMULATION_ACTIONS: SimulationAction[] = ['create', 'message', 'status', '
 const STOP_DISPATCH_TIMEOUT_MS = 15000;
 const STOP_VERIFY_TIMEOUT_MS = 20000;
 const STOP_VERIFY_INTERVAL_MS = 250;
+const RUNTIME_STATUS_DB_CANDIDATE_LIMIT = 1000;
 
 // Apply middleware to all routes
 router.use(validateApiToken);
@@ -44,6 +47,29 @@ const parseOptionalString = (value: unknown): string | undefined => {
   }
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+};
+
+const parseOptionalStringRecord = (value: unknown): Record<string, string> | undefined => {
+  if (value == null) {
+    return undefined;
+  }
+
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    return undefined;
+  }
+
+  const entries = Object.entries(value);
+  const nextValue = entries.reduce<Record<string, string>>((acc, [key, rawValue]) => {
+    const normalizedKey = parseOptionalString(key);
+    const normalizedValue = parseOptionalString(rawValue);
+    if (!normalizedKey || !normalizedValue) {
+      return acc;
+    }
+    acc[normalizedKey] = normalizedValue;
+    return acc;
+  }, {});
+
+  return Object.keys(nextValue).length > 0 ? nextValue : {};
 };
 
 const parseOptionalBoolean = (value: unknown): boolean | undefined => {
@@ -356,7 +382,7 @@ const matchesConversationStatusListFilters = (item: ConversationStatusListItem, 
   return true;
 };
 
-export const buildConversationStatusList = (conversations: TChatConversation[], filters: ConversationStatusListFilters = { scope: 'generating' }, getSnapshot: ConversationSnapshotGetter = getConversationStatusSnapshot): ConversationStatusListItem[] => {
+export const buildConversationStatusList = (conversations: TChatConversation[], filters: ConversationStatusListFilters = { scope: 'generating' }, getSnapshot: ConversationSnapshotGetter = getReadOnlyConversationStatusSnapshot): ConversationStatusListItem[] => {
   const items = conversations.reduce<ConversationStatusListItem[]>((result, conversation) => {
     const snapshot = getSnapshot(conversation.id);
     if (!snapshot) {
@@ -392,6 +418,125 @@ export const buildConversationStatusList = (conversations: TChatConversation[], 
   return items.sort((left, right) => (right.updatedAt || 0) - (left.updatedAt || 0));
 };
 
+type ConversationStatusLookupResult = {
+  success: boolean;
+  data?: TChatConversation;
+};
+
+type ConversationStatusListLookupResult = {
+  data: TChatConversation[];
+};
+
+type ConversationStatusBatchLookupResult = {
+  success: boolean;
+  data?: TChatConversation[];
+};
+
+type ConversationListGetter = (userId?: string, page?: number, pageSize?: number) => ConversationStatusListLookupResult;
+
+type ConversationStatusBatchGetter = (statuses: ConversationStatusValue[], userId?: string, limit?: number) => ConversationStatusBatchLookupResult;
+
+type ConversationStatusCandidateTask = {
+  id: string;
+};
+
+type ConversationBusyState = {
+  isProcessing: boolean;
+};
+
+type ConversationBusyStateMap = Map<string, ConversationBusyState>;
+
+type ConversationStatusListDatabase = {
+  getConversation: (conversationId: string) => ConversationStatusLookupResult;
+  getUserConversations: ConversationListGetter;
+  getUserConversationsByStatuses?: ConversationStatusBatchGetter;
+};
+
+type ConversationStatusListOptions = {
+  db?: ConversationStatusListDatabase;
+  runtimeCandidateIds?: string[];
+};
+
+type ConversationUsageResponseInput = {
+  summary: ConversationTokenUsageSummary;
+  usagePage: ConversationUsagePage;
+  range?: ConversationTokenUsageRange;
+};
+
+const getDefaultConversationStatusCandidateTasks = (): ConversationStatusCandidateTask[] => WorkerManage.listTasks();
+
+const getDefaultConversationBusyStates = (): ConversationBusyStateMap => cronBusyGuard.getAllStates();
+
+const getDefaultConversationStatusListDatabase = (): ConversationStatusListDatabase => getDatabase();
+
+const getDefaultConversationStatusCandidateIds = (): string[] => collectConversationStatusCandidateIds();
+
+export function collectConversationStatusCandidateIds(tasks = getDefaultConversationStatusCandidateTasks(), busyStates = getDefaultConversationBusyStates()): string[] {
+  const sessionIds = new Set<string>();
+
+  tasks.forEach(({ id }) => {
+    sessionIds.add(id);
+  });
+
+  busyStates.forEach((state, sessionId) => {
+    if (state.isProcessing) {
+      sessionIds.add(sessionId);
+    }
+  });
+
+  return Array.from(sessionIds);
+}
+
+const sortConversationsByUpdatedAtDesc = (conversations: TChatConversation[]): TChatConversation[] => [...conversations].sort((left, right) => right.modifyTime - left.modifyTime);
+
+export function getConversationStatusListConversations(scope: ConversationListScope, options: ConversationStatusListOptions = {}): TChatConversation[] {
+  const db = options.db || getDefaultConversationStatusListDatabase();
+  const runtimeCandidateIds = options.runtimeCandidateIds || getDefaultConversationStatusCandidateIds();
+
+  if (scope === 'all') {
+    return sortConversationsByUpdatedAtDesc(db.getUserConversations(undefined, 0, 10000).data || []);
+  }
+
+  const conversations = new Map<string, TChatConversation>();
+  const runtimeStatusResult =
+    typeof db.getUserConversationsByStatuses === 'function'
+      ? db.getUserConversationsByStatuses(['pending', 'running'], undefined, RUNTIME_STATUS_DB_CANDIDATE_LIMIT)
+      : (() => {
+          const allConversations = db.getUserConversations(undefined, 0, 10000).data || [];
+          return {
+            success: true,
+            data: allConversations.filter((conversation) => ['pending', 'running'].includes(conversation.status)),
+          };
+        })();
+
+  if (runtimeStatusResult.success && runtimeStatusResult.data) {
+    runtimeStatusResult.data.forEach((conversation) => {
+      conversations.set(conversation.id, conversation);
+    });
+  }
+
+  runtimeCandidateIds.forEach((sessionId) => {
+    const result = db.getConversation(sessionId);
+    if (result.success && result.data) {
+      conversations.set(sessionId, result.data);
+    }
+  });
+
+  return sortConversationsByUpdatedAtDesc(Array.from(conversations.values()));
+}
+
+const recordConversationApiDiagnostics = (input: { route: string; reason: string; sessionId?: string; force?: boolean; persist?: boolean }): void => {
+  try {
+    apiDiagnosticsService.captureRouteSample(input);
+  } catch (error) {
+    console.warn('[API] Failed to capture conversation diagnostics sample:', error, {
+      route: input.route,
+      reason: input.reason,
+      sessionId: input.sessionId,
+    });
+  }
+};
+
 const sleep = (ms: number): Promise<void> =>
   new Promise((resolve) => {
     setTimeout(resolve, ms);
@@ -416,19 +561,21 @@ const isStopConfirmed = (resolvedStatus: { runtime: { taskStatus?: ConversationS
   return !runtime.isProcessing && (runtime.pendingConfirmations ?? 0) === 0 && runtime.taskStatus !== 'running';
 };
 
-export const buildConversationUsageResponse = (sessionId: string, conversation: TChatConversation, summary: ConversationTokenUsageSummary, usagePage: ConversationUsagePage, range: ConversationTokenUsageRange = {}) => ({
-  success: true,
-  sessionId,
-  conversationType: conversation.type,
-  backend: conversation.type === 'acp' ? conversation.extra.backend : undefined,
-  range,
-  summary,
-  replies: usagePage.data,
-  total: usagePage.total,
-  page: usagePage.page,
-  pageSize: usagePage.pageSize,
-  hasMore: usagePage.hasMore,
-});
+export function buildConversationUsageResponse(sessionId: string, conversation: TChatConversation, input: ConversationUsageResponseInput) {
+  return {
+    success: true,
+    sessionId,
+    conversationType: conversation.type,
+    backend: conversation.type === 'acp' ? conversation.extra.backend : undefined,
+    range: input.range || {},
+    summary: input.summary,
+    replies: input.usagePage.data,
+    total: input.usagePage.total,
+    page: input.usagePage.page,
+    pageSize: input.usagePage.pageSize,
+    hasMore: input.usagePage.hasMore,
+  };
+}
 
 export const buildConversationUsageSummaryListResponse = (items: ConversationUsageSummaryListItem[], notFoundSessionIds: string[] = [], range: ConversationTokenUsageRange = {}) => ({
   success: true,
@@ -454,7 +601,7 @@ const waitForStopConfirmed = async (sessionId: string, timeoutMs: number): Promi
       throw new Error('Conversation not found while waiting for stop confirmation');
     }
 
-    const snapshot = getConversationStatusSnapshot(sessionId);
+    const snapshot = getReadOnlyConversationStatusSnapshot(sessionId);
     if (!snapshot) {
       throw new Error(`Conversation snapshot not found: ${sessionId}`);
     }
@@ -602,6 +749,7 @@ router.post('/create', async (req: Request, res: Response) => {
     const mode = parseOptionalString(req.body?.mode) || parseOptionalString(req.body?.sessionMode);
     const currentModelId = parseOptionalString(req.body?.currentModelId);
     const codexModel = parseOptionalString(req.body?.codexModel);
+    const configOptionValues = parseOptionalStringRecord(req.body?.configOptionValues);
     const agentName = parseOptionalString(req.body?.agentName);
     const customAgentId = parseOptionalString(req.body?.customAgentId);
     const waitForDispatch = parseOptionalBoolean(req.body?.waitForDispatch) ?? false;
@@ -635,6 +783,12 @@ router.post('/create', async (req: Request, res: Response) => {
         error: 'Invalid model. Expected an object',
       });
     }
+    if (req.body?.configOptionValues !== undefined && configOptionValues === undefined) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid configOptionValues. Expected an object whose values are strings.',
+      });
+    }
 
     const type = resolvedType.type;
     const resolvedBackend = backend || resolvedType.backendFromCli;
@@ -659,6 +813,7 @@ router.post('/create', async (req: Request, res: Response) => {
         sessionMode: mode,
         currentModelId,
         codexModel,
+        configOptionValues,
         agentName,
         customAgentId,
       },
@@ -704,6 +859,12 @@ router.post('/create', async (req: Request, res: Response) => {
           });
         });
     }
+
+    recordConversationApiDiagnostics({
+      route: '/api/v1/conversation/create',
+      reason: waitForDispatch ? 'conversation_created_waited' : 'conversation_created_async',
+      sessionId: conversation.id,
+    });
 
     res.json({
       success: true,
@@ -780,13 +941,19 @@ router.get('/status', async (req: Request, res: Response) => {
       });
     }
 
-    const snapshot = getConversationStatusSnapshot(sessionId);
+    const snapshot = getReadOnlyConversationStatusSnapshot(sessionId);
     if (!snapshot) {
       return res.status(404).json({
         success: false,
         error: 'Conversation not found',
       });
     }
+
+    recordConversationApiDiagnostics({
+      route: '/api/v1/conversation/status',
+      reason: 'status_poll',
+      sessionId,
+    });
 
     res.json({
       success: true,
@@ -800,6 +967,39 @@ router.get('/status', async (req: Request, res: Response) => {
     });
   } catch (error) {
     console.error('[API] Get status error:', error);
+    res.status(500).json({
+      success: false,
+      error: error instanceof Error ? error.message : 'Internal server error',
+    });
+  }
+});
+
+/**
+ * GET /api/v1/conversation/debug/runtime
+ * Developer-only runtime diagnostics for conversation API flows
+ */
+router.get('/debug/runtime', async (req: Request, res: Response) => {
+  try {
+    const sessionId = parseSessionIdQuery(req);
+    const persist = parseOptionalBoolean(req.query?.persist) ?? true;
+    const capture = apiDiagnosticsService.captureRouteSample({
+      route: '/api/v1/conversation/debug/runtime',
+      reason: 'manual_runtime_snapshot',
+      sessionId,
+      force: true,
+      persist,
+      allowWhenDisabled: true,
+    });
+
+    res.json({
+      success: true,
+      config: apiDiagnosticsService.getConfig(),
+      recorded: capture.recorded,
+      filePath: capture.filePath,
+      snapshot: capture.snapshot,
+    });
+  } catch (error) {
+    console.error('[API] Get runtime diagnostics error:', error);
     res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Internal server error',
@@ -823,8 +1023,8 @@ router.get('/status/list', async (_req: Request, res: Response) => {
     const canSendMessage = parseOptionalBoolean(_req.query?.canSendMessage);
 
     const db = getDatabase();
-    const allConversationsResult = db.getUserConversations(undefined, 0, 10000);
-    const items = buildConversationStatusList(allConversationsResult.data || [], {
+    const conversations = getConversationStatusListConversations(scope, { db });
+    const items = buildConversationStatusList(conversations, {
       scope,
       status,
       state,
@@ -832,6 +1032,11 @@ router.get('/status/list', async (_req: Request, res: Response) => {
       cli,
       source,
       canSendMessage,
+    });
+
+    recordConversationApiDiagnostics({
+      route: '/api/v1/conversation/status/list',
+      reason: `status_list_${scope}`,
     });
 
     res.json({
@@ -888,7 +1093,13 @@ router.post('/stop', async (req: Request, res: Response) => {
     const stopResult = await invokeStopWithTimeout(sessionId, STOP_DISPATCH_TIMEOUT_MS);
     if (!stopResult.success) {
       console.error('[API] Stop dispatch failed, forcing kill:', stopResult.msg, { sessionId });
-      WorkerManage.kill(sessionId);
+      recordConversationApiDiagnostics({
+        route: '/api/v1/conversation/stop',
+        reason: 'stop_dispatch_failed',
+        sessionId,
+        force: true,
+      });
+      await WorkerManage.killAndDrain(sessionId);
       cronBusyGuard.setProcessing(sessionId, false);
     }
 
@@ -896,11 +1107,17 @@ router.post('/stop', async (req: Request, res: Response) => {
       await waitForStopConfirmed(sessionId, STOP_VERIFY_TIMEOUT_MS);
     } catch (verifyError) {
       // Final fallback: force kill once and verify quickly again.
-      WorkerManage.kill(sessionId);
+      await WorkerManage.killAndDrain(sessionId);
       cronBusyGuard.setProcessing(sessionId, false);
       try {
         await waitForStopConfirmed(sessionId, 5000);
       } catch {
+        recordConversationApiDiagnostics({
+          route: '/api/v1/conversation/stop',
+          reason: 'stop_confirmation_timeout',
+          sessionId,
+          force: true,
+        });
         return res.status(504).json({
           success: false,
           error: verifyError instanceof Error ? verifyError.message : 'Stop confirmation failed',
@@ -910,8 +1127,15 @@ router.post('/stop', async (req: Request, res: Response) => {
 
     // Update conversation status
     db.updateConversation(sessionId, { status: 'finished' });
-    WorkerManage.kill(sessionId);
+    await WorkerManage.killAndDrain(sessionId);
     cronBusyGuard.setProcessing(sessionId, false);
+
+    recordConversationApiDiagnostics({
+      route: '/api/v1/conversation/stop',
+      reason: 'conversation_stopped',
+      sessionId,
+      force: true,
+    });
 
     res.json({
       success: true,
@@ -963,7 +1187,7 @@ router.post('/message', async (req: Request, res: Response) => {
       });
     }
 
-    const snapshot = getConversationStatusSnapshot(sessionId);
+    const snapshot = getReadOnlyConversationStatusSnapshot(sessionId);
     if (!snapshot) {
       return res.status(404).json({
         success: false,
@@ -1154,7 +1378,13 @@ router.get('/usage', async (req: Request, res: Response) => {
 
     const usagePage = db.getConversationTokenUsage(sessionId, page, pageSize, 'DESC', rangeResult.range);
 
-    res.json(buildConversationUsageResponse(sessionId, convResult.data, summaryResult.data, usagePage, rangeResult.range));
+    res.json(
+      buildConversationUsageResponse(sessionId, convResult.data, {
+        summary: summaryResult.data,
+        usagePage,
+        range: rangeResult.range,
+      })
+    );
   } catch (error) {
     console.error('[API] Get usage error:', error);
     res.status(500).json({
