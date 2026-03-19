@@ -113,7 +113,7 @@ export class AcpAgent {
   };
   private connection: AcpConnection;
   private adapter: AcpAdapter;
-  private pendingPermissions = new Map<string, { resolve: (response: { optionId: string }) => void; reject: (error: Error) => void }>();
+  private pendingPermissions = new Map<string, { resolve: (response: { optionId: string }) => void; reject: (error: Error) => void; promise: Promise<{ optionId: string }> }>();
   private statusMessageId: string | null = null;
   private readonly onStreamEvent: (data: IResponseMessage) => void;
   private readonly onSignalEvent?: (data: IResponseMessage) => void;
@@ -878,29 +878,43 @@ export class AcpAgent {
   }
 
   private handlePermissionRequest(data: AcpPermissionRequest): Promise<{ optionId: string }> {
-    return new Promise((resolve, reject) => {
-      // Ensure every permission request has a stable toolCallId so UI + pending map stay in sync
-      // 确保每个权限请求都拥有稳定的 toolCallId，保证 UI 与 pending map 对齐
-      if (data.toolCall && !data.toolCall.toolCallId) {
-        data.toolCall.toolCallId = uuid();
-      }
-      const requestId = data.toolCall.toolCallId; // 使用 toolCallId 作为 requestId
+    // Ensure every permission request has a stable toolCallId so UI + pending map stay in sync
+    // 确保每个权限请求都拥有稳定的 toolCallId，保证 UI 与 pending map 对齐
+    if (data.toolCall && !data.toolCall.toolCallId) {
+      data.toolCall.toolCallId = uuid();
+    }
+    const requestId = data.toolCall.toolCallId; // 使用 toolCallId 作为 requestId
 
-      // Check ApprovalStore for cached "always allow" decision
-      // Workaround for claude-agent-acp bug: it returns updatedPermissions but doesn't check suggestions
-      const approvalKey = createAcpApprovalKey(data.toolCall);
-      if (this.approvalStore.isApprovedForSession(approvalKey)) {
-        // Auto-approve without showing dialog - no metadata storage needed
-        resolve({ optionId: 'allow_always' });
-        return;
-      }
+    // Check ApprovalStore for cached "always allow" decision
+    // Workaround for claude-agent-acp bug: it returns updatedPermissions but doesn't check suggestions
+    const approvalKey = createAcpApprovalKey(data.toolCall);
+    if (this.approvalStore.isApprovedForSession(approvalKey)) {
+      // Auto-approve without showing dialog - no metadata storage needed
+      return Promise.resolve({ optionId: 'allow_always' });
+    }
 
-      // Clean up any existing metadata for this requestId before storing new one
-      // This handles duplicate permission requests properly
-      if (this.permissionRequestMeta.has(requestId)) {
-        this.permissionRequestMeta.delete(requestId);
+    // Fix: If same toolCallId is already pending, reuse the existing Promise
+    // instead of rejecting it. ACP backends may re-emit request_permission for
+    // tools still awaiting approval when parallel tool call states change.
+    // Previously this rejected the old Promise causing instant 7ms rejection.
+    if (this.pendingPermissions.has(requestId)) {
+      // Update metadata in case it changed
+      this.permissionRequestMeta.set(requestId, {
+        kind: data.toolCall.kind,
+        title: data.toolCall.title,
+        rawInput: data.toolCall.rawInput,
+      });
+      // Re-emit to UI to update the existing confirmation
+      try {
+        this.emitPermissionRequest(data);
+      } catch {
+        // Ignore emit errors for duplicate - original Promise is still valid
       }
+      // Return the same Promise that was already created
+      return this.pendingPermissions.get(requestId)!.promise;
+    }
 
+    const promise = new Promise<{ optionId: string }>((resolve, reject) => {
       // Store metadata for later use in confirmMessage
       this.permissionRequestMeta.set(requestId, {
         kind: data.toolCall.kind,
@@ -916,26 +930,12 @@ export class AcpAgent {
       if (this.isNavigationTool(toolName)) {
         const url = this.extractNavigationUrl(data.toolCall);
         if (url) {
-          // Emit preview_open event to show URL in preview panel
-          // 发出 preview_open 事件，在预览面板中显示 URL
           this.handleInterceptedNavigation(url, toolName);
         }
-        // Track for later extraction from result if URL not available now
-        // 跟踪以便稍后从结果中提取 URL（如果现在不可用）
         this.pendingNavigationTools.add(requestId);
       }
 
-      // 检查是否有重复的权限请求
-      if (this.pendingPermissions.has(requestId)) {
-        // 如果是重复请求，先清理旧的
-        const oldRequest = this.pendingPermissions.get(requestId);
-        if (oldRequest) {
-          oldRequest.reject(new Error('Replaced by new permission request'));
-        }
-        this.pendingPermissions.delete(requestId);
-      }
-
-      this.pendingPermissions.set(requestId, { resolve, reject });
+      this.pendingPermissions.set(requestId, { resolve, reject, promise: null! }); // promise ref set below
 
       // 确保权限消息总是被发送，即使有异步问题
       try {
@@ -953,6 +953,14 @@ export class AcpAgent {
         }
       }, 70000);
     });
+
+    // Store the promise reference so duplicate requests can reuse it
+    const entry = this.pendingPermissions.get(requestId);
+    if (entry) {
+      entry.promise = promise;
+    }
+
+    return promise;
   }
 
   private handleEndTurn(): void {
