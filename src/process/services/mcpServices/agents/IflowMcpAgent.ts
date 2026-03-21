@@ -6,12 +6,14 @@
 
 import type { McpOperationResult } from '../McpProtocol';
 import { AbstractMcpAgent } from '../McpProtocol';
-import type { IMcpServer } from '../../../../common/storage';
+import type { IMcpServer } from '@/common/config/storage';
 import { getEnhancedEnv } from '@process/utils/shellEnv';
 import { safeExec } from '@process/utils/safeExec';
 
 /** Env options for exec calls — ensures CLI is found from Finder/launchd launches */
-const getExecEnv = () => ({ env: { ...getEnhancedEnv(), NODE_OPTIONS: '', TERM: 'dumb', NO_COLOR: '1' } as NodeJS.ProcessEnv });
+const getExecEnv = () => ({
+  env: { ...getEnhancedEnv(), NODE_OPTIONS: '', TERM: 'dumb', NO_COLOR: '1' } as NodeJS.ProcessEnv,
+});
 
 /**
  * iFlow CLI MCP代理实现
@@ -53,7 +55,9 @@ export class IflowMcpAgent extends AbstractMcpAgent {
           .trim();
         /* eslint-enable no-control-regex */
         // 查找格式如: "✓ Bazi: npx bazi-mcp (stdio) - Connected" 或 "✓ Bazi: npx bazi-mcp (stdio) - 已连接"
-        const match = cleanLine.match(/[✓✗]\s+([^:]+):\s+(.+?)\s+\(([^)]+)\)\s*-\s*(Connected|Disconnected|已连接|已断开)/);
+        const match = cleanLine.match(
+          /[✓✗]\s+([^:]+):\s+(.+?)\s+\(([^)]+)\)\s*-\s*(Connected|Disconnected|已连接|已断开)/
+        );
         if (match) {
           const [, name, commandStr, transport, statusRaw] = match;
           const commandParts = commandStr.trim().split(/\s+/);
@@ -180,7 +184,12 @@ export class IflowMcpAgent extends AbstractMcpAgent {
                   addCommand += ` --env "${key}=${value}"`;
                 }
               }
-            } else if ((server.transport.type === 'sse' || server.transport.type === 'http' || server.transport.type === 'streamable_http') && 'url' in server.transport) {
+            } else if (
+              (server.transport.type === 'sse' ||
+                server.transport.type === 'http' ||
+                server.transport.type === 'streamable_http') &&
+              'url' in server.transport
+            ) {
               // iFlow CLI 使用 --transport http 处理 HTTP 和 Streamable HTTP
               const transportFlag = server.transport.type === 'streamable_http' ? 'http' : server.transport.type;
               addCommand += ` "${server.transport.url}"`;
@@ -240,13 +249,16 @@ export class IflowMcpAgent extends AbstractMcpAgent {
 
             // 检查输出是否包含"not found"，如果是则继续尝试user作用域
             if (stdout && stdout.includes('not found')) {
-              throw new Error('Server not found in project settings');
+              throw new Error('Server not found in project settings', { cause: userError });
             }
 
             return { success: true };
           } catch (projectError) {
             // 如果服务器不存在，也认为是成功的
-            if (userError instanceof Error && (userError.message.includes('not found') || userError.message.includes('does not exist'))) {
+            if (
+              userError instanceof Error &&
+              (userError.message.includes('not found') || userError.message.includes('does not exist'))
+            ) {
               return { success: true };
             }
             return { success: false, error: userError instanceof Error ? userError.message : String(userError) };

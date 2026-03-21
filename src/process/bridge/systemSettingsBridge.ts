@@ -13,8 +13,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import { ProcessConfig } from '@/process/initStorage';
-import { changeLanguage } from '@process/i18n';
+import { ProcessConfig } from '@process/utils/initStorage';
+import { changeLanguage } from '@process/services/i18n';
 
 type CloseToTrayChangeListener = (enabled: boolean) => void;
 let _changeListener: CloseToTrayChangeListener | null = null;
@@ -52,6 +52,30 @@ export function initSystemSettingsBridge(): void {
     await ProcessConfig.set('system.closeToTray', enabled);
     // 然后通知主进程更新托盘状态
     _changeListener?.(enabled);
+  });
+
+  // 获取"任务完成通知"设置 / Get "task completion notification" setting
+  ipcBridge.systemSettings.getNotificationEnabled.provider(async () => {
+    const value = await ProcessConfig.get('system.notificationEnabled');
+    return value ?? true; // 默认开启 / Default enabled
+  });
+
+  // 设置"任务完成通知" / Set "task completion notification"
+  ipcBridge.systemSettings.setNotificationEnabled.provider(async ({ enabled }) => {
+    // 先持久化到配置存储
+    await ProcessConfig.set('system.notificationEnabled', enabled);
+  });
+
+  // 获取"定时任务通知"设置 / Get "scheduled task notification" setting
+  ipcBridge.systemSettings.getCronNotificationEnabled.provider(async () => {
+    const value = await ProcessConfig.get('system.cronNotificationEnabled');
+    return value ?? false; // 默认关闭 / Default disabled
+  });
+
+  // 设置"定时任务通知" / Set "scheduled task notification"
+  ipcBridge.systemSettings.setCronNotificationEnabled.provider(async ({ enabled }) => {
+    // 先持久化到配置存储
+    await ProcessConfig.set('system.cronNotificationEnabled', enabled);
   });
 
   // 语言变更通知，同步主进程 i18n 并通知托盘重建

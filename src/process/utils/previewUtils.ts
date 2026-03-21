@@ -5,8 +5,14 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IResponseMessage } from '@/common/ipcBridge';
-import { NavigationInterceptor, NAVIGATION_TOOLS, type PreviewOpenData, type NavigationToolData, type NavigationToolName } from '@/common/navigation';
+import type { IResponseMessage } from '@/common/adapter/ipcBridge';
+import {
+  NavigationInterceptor,
+  NAVIGATION_TOOLS,
+  type PreviewOpenData,
+  type NavigationToolData,
+  type NavigationToolName,
+} from '@/common/chat/navigation';
 
 // Re-export from NavigationInterceptor for backward compatibility
 export { NAVIGATION_TOOLS, type NavigationToolName, type PreviewOpenData, type NavigationToolData };
@@ -38,7 +44,12 @@ export function handlePreviewOpenEvent(message: IResponseMessage | { type: strin
  *
  * Delegates to NavigationInterceptor.createPreviewMessage
  */
-export function createPreviewOpenMessage(url: string, conversationId: string, msgId: string, title?: string): IResponseMessage {
+export function createPreviewOpenMessage(
+  url: string,
+  conversationId: string,
+  msgId: string,
+  title?: string
+): IResponseMessage {
   const message = NavigationInterceptor.createPreviewMessage(url, conversationId, title);
   message.msg_id = msgId; // Override with provided msgId
   return message;

@@ -4,33 +4,39 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { CodexAgent } from '@/agent/codex';
-import type { NetworkError } from '@/agent/codex/connection/CodexConnection';
-import { CodexEventHandler } from '@/agent/codex/handlers/CodexEventHandler';
-import { CodexFileOperationHandler } from '@/agent/codex/handlers/CodexFileOperationHandler';
-import { CodexSessionManager } from '@/agent/codex/handlers/CodexSessionManager';
-import type { ICodexMessageEmitter } from '@/agent/codex/messaging/CodexMessageEmitter';
-import { channelEventBus } from '@/channels/agent/ChannelEventBus';
+import { CodexAgent } from '@process/agent/codex';
+import type { NetworkError } from '@process/agent/codex/connection/CodexConnection';
+import { CodexEventHandler } from '@process/agent/codex/handlers/CodexEventHandler';
+import { CodexFileOperationHandler } from '@process/agent/codex/handlers/CodexFileOperationHandler';
+import { CodexSessionManager } from '@process/agent/codex/handlers/CodexSessionManager';
+import type { ICodexMessageEmitter } from '@process/agent/codex/messaging/CodexMessageEmitter';
+import { channelEventBus } from '@process/channels/agent/ChannelEventBus';
 import { ipcBridge } from '@/common';
-import type { CronMessageMeta, IConfirmation, TMessage } from '@/common/chatLib';
-import { transformMessage } from '@/common/chatLib';
-import type { CodexAgentManagerData } from '@/common/codex/types';
-import { DEFAULT_CODEX_MODELS, DEFAULT_CODEX_MODEL_ID } from '@/common/codex/codexModels';
-import type { AcpModelInfo } from '@/types/acpTypes';
-import { PERMISSION_DECISION_MAP } from '@/common/codex/types/permissionTypes';
-import { mapPermissionDecision } from '@/common/codex/utils';
-import { AIONUI_FILES_MARKER } from '@/common/constants';
-import type { IResponseMessage } from '@/common/ipcBridge';
+import type { CronMessageMeta, IConfirmation, TMessage } from '@/common/chat/chatLib';
+import { transformMessage } from '@/common/chat/chatLib';
+import type { CodexAgentManagerData } from '@/common/types/codex/types';
+import { DEFAULT_CODEX_MODELS, DEFAULT_CODEX_MODEL_ID } from '@/common/types/codex/codexModels';
+import type { AcpModelInfo } from '@/common/types/acpTypes';
+import { PERMISSION_DECISION_MAP } from '@/common/types/codex/types/permissionTypes';
+import { mapPermissionDecision } from '@/common/types/codex/utils';
+import { AIONUI_FILES_MARKER } from '@/common/config/constants';
+import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import { uuid } from '@/common/utils';
-import { addMessage, addOrUpdateMessage } from '@process/message';
+import { addMessage, addOrUpdateMessage } from '@process/utils/message';
 import { cronBusyGuard } from '@process/services/cron/CronBusyGuard';
-import { getDatabase } from '@process/database';
-import { ProcessConfig } from '@process/initStorage';
+import { getDatabase } from '@process/services/database';
+import { ProcessConfig } from '@process/utils/initStorage';
 import BaseAgentManager from '@process/task/BaseAgentManager';
+import { IpcAgentEventEmitter } from '@process/task/IpcAgentEventEmitter';
 import { prepareFirstMessageWithSkillsIndex } from '@process/task/agentUtils';
 import { handlePreviewOpenEvent } from '@process/utils/previewUtils';
-import i18n from '@process/i18n';
-import { getConfiguredAppClientName, getConfiguredAppClientVersion, getConfiguredCodexMcpProtocolVersion, setAppConfig } from '../../common/utils/appConfig';
+import i18n from '@process/services/i18n';
+import {
+  getConfiguredAppClientName,
+  getConfiguredAppClientVersion,
+  getConfiguredCodexMcpProtocolVersion,
+  setAppConfig,
+} from '@/common/utils/appConfig';
 
 const APP_CLIENT_NAME = getConfiguredAppClientName();
 const APP_CLIENT_VERSION = getConfiguredAppClientVersion();
@@ -43,7 +49,6 @@ const CODEX_MCP_PROTOCOL_VERSION = getConfiguredCodexMcpProtocolVersion();
  * that were created before the ACP migration.
  */
 class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implements ICodexMessageEmitter {
-  workspace?: string;
   agent!: CodexAgent; // Initialized in bootstrap promise
   bootstrap: Promise<CodexAgent>;
   private isFirstMessage: boolean = true;
@@ -60,9 +65,9 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
 
   constructor(data: CodexAgentManagerData) {
     // Do not fork a worker for Codex; we run the agent in-process now
-    super('codex', data);
+    super('codex', data, new IpcAgentEventEmitter());
     this.conversation_id = data.conversation_id;
-    this.workspace = data.workspace;
+    this.workspace = data.workspace ?? '';
     this.options = data; // 保存原始数据以便后续使用 / Save original data for later use
     this.status = 'pending';
     this.currentMode = data.sessionMode || 'default';
@@ -82,7 +87,11 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
       },
       this
     );
-    const fileOperationHandler = new CodexFileOperationHandler(data.workspace || process.cwd(), data.conversation_id, this);
+    const fileOperationHandler = new CodexFileOperationHandler(
+      data.workspace || process.cwd(),
+      data.conversation_id,
+      this
+    );
 
     // 使用 SessionManager 来管理连接状态 - 参考 ACP 的模式
     // Use async bootstrap to read config and initialize agent
@@ -186,11 +195,24 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
       let suggestions: string[] = [];
 
       if (errorMessage.includes('timed out')) {
-        suggestions = ['Check if Codex CLI is installed: run "codex --version"', 'Verify authentication: run "codex auth status"', 'Check network connectivity', 'Try restarting the application'];
+        suggestions = [
+          'Check if Codex CLI is installed: run "codex --version"',
+          'Verify authentication: run "codex auth status"',
+          'Check network connectivity',
+          'Try restarting the application',
+        ];
       } else if (errorMessage.includes('command not found')) {
-        suggestions = ['Install Codex CLI: https://codex.com/install', 'Add Codex to your PATH environment variable', 'Restart your terminal/application after installation'];
+        suggestions = [
+          'Install Codex CLI: https://codex.com/install',
+          'Add Codex to your PATH environment variable',
+          'Restart your terminal/application after installation',
+        ];
       } else if (errorMessage.includes('authentication')) {
-        suggestions = ['Run "codex auth" to authenticate with your account', 'Check if your authentication token is valid', 'Try logging out and logging back in'];
+        suggestions = [
+          'Run "codex auth" to authenticate with your account',
+          'Check if your authentication token is valid',
+          'Try logging out and logging back in',
+        ];
       }
 
       // Log troubleshooting suggestions for debugging
@@ -215,7 +237,9 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
     this.status = 'running';
     try {
       await this.bootstrap;
-      const contentToSend = data.content?.includes(AIONUI_FILES_MARKER) ? data.content.split(AIONUI_FILES_MARKER)[0].trimEnd() : data.content;
+      const contentToSend = data.content?.includes(AIONUI_FILES_MARKER)
+        ? data.content.split(AIONUI_FILES_MARKER)[0].trimEnd()
+        : data.content;
 
       // Save user message to chat history only (renderer already inserts right-hand bubble)
       if (data.msg_id && data.content) {
@@ -402,7 +426,8 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
 
     // Use standardized permission decision mapping
     // Maps UI options to Codex CLI's ReviewDecision (snake_case format)
-    const decisionKey = data in PERMISSION_DECISION_MAP ? (data as keyof typeof PERMISSION_DECISION_MAP) : 'reject_once';
+    const decisionKey =
+      data in PERMISSION_DECISION_MAP ? (data as keyof typeof PERMISSION_DECISION_MAP) : 'reject_once';
     const decision = mapPermissionDecision(decisionKey) as 'approved' | 'approved_for_session' | 'denied' | 'abort';
 
     const isApproved = decision === 'approved' || decision === 'approved_for_session';
@@ -463,7 +488,9 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
     switch (error.type) {
       case 'cloudflare_blocked':
         userMessage = i18n.t('codex.network.cloudflare_blocked_title', { service: 'Codex' });
-        recoveryActions = i18n.t('codex.network.recovery_actions.cloudflare_blocked', { returnObjects: true }) as string[];
+        recoveryActions = i18n.t('codex.network.recovery_actions.cloudflare_blocked', {
+          returnObjects: true,
+        }) as string[];
         break;
 
       case 'network_timeout':
@@ -473,7 +500,9 @@ class CodexAgentManager extends BaseAgentManager<CodexAgentManagerData> implemen
 
       case 'connection_refused':
         userMessage = i18n.t('codex.network.connection_refused_title');
-        recoveryActions = i18n.t('codex.network.recovery_actions.connection_refused', { returnObjects: true }) as string[];
+        recoveryActions = i18n.t('codex.network.recovery_actions.connection_refused', {
+          returnObjects: true,
+        }) as string[];
         break;
 
       default:

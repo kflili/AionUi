@@ -1,19 +1,179 @@
-import type { IProvider } from '@/common/storage';
+import type { IProvider } from '@/common/config/storage';
+import type { ProtocolDetectionResponse, ProtocolType } from '@/common/utils/protocolDetector';
 import { ipcBridge } from '@/common';
 import { uuid } from '@/common/utils';
 import { isGoogleApisHost } from '@/common/utils/urlValidation';
-import ModalHOC from '@/renderer/utils/ModalHOC';
+import ModalHOC from '@/renderer/utils/ui/ModalHOC';
 import { Form, Input, Message, Select } from '@arco-design/web-react';
-import { LinkCloud, Edit, Search } from '@icon-park/react';
+import { LinkCloud, Edit, Search, Loading } from '@icon-park/react';
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import useModeModeList from '../../../hooks/useModeModeList';
-import useProtocolDetection from '../../../hooks/useProtocolDetection';
+import useModeModeList from '@renderer/hooks/agent/useModeModeList';
+import useProtocolDetection from '@renderer/hooks/system/useProtocolDetection';
 import AionModal from '@/renderer/components/base/AionModal';
 import ApiKeyEditorModal from './ApiKeyEditorModal';
-import ProtocolDetectionStatus from './ProtocolDetectionStatus';
-import { MODEL_PLATFORMS, NEW_API_PROTOCOL_OPTIONS, detectNewApiProtocol, getPlatformByValue, isCustomOption, isGeminiPlatform, isNewApiPlatform, type PlatformConfig } from '@/renderer/config/modelPlatforms';
-import type { DeepLinkAddProviderDetail } from '@/renderer/hooks/useDeepLink';
+import {
+  MODEL_PLATFORMS,
+  NEW_API_PROTOCOL_OPTIONS,
+  detectNewApiProtocol,
+  getPlatformByValue,
+  isCustomOption,
+  isGeminiPlatform,
+  isNewApiPlatform,
+  type PlatformConfig,
+} from '@/renderer/utils/model/modelPlatforms';
+import type { DeepLinkAddProviderDetail } from '@/renderer/hooks/system/useDeepLink';
+
+/**
+ * Protocol icon configurations
+ */
+const PROTOCOL_ICONS: Record<ProtocolType, { color: string; bgColor: string }> = {
+  openai: { color: '#10A37F', bgColor: 'rgba(16, 163, 127, 0.1)' },
+  gemini: { color: '#4285F4', bgColor: 'rgba(66, 133, 244, 0.1)' },
+  anthropic: { color: '#D97757', bgColor: 'rgba(217, 119, 87, 0.1)' },
+  unknown: { color: '#9CA3AF', bgColor: 'rgba(156, 163, 175, 0.1)' },
+};
+
+/**
+ * Get translated suggestion message
+ */
+const getSuggestionMessage = (
+  suggestion: ProtocolDetectionResponse['suggestion'],
+  t: (key: string, params?: Record<string, string>) => string
+): string => {
+  if (!suggestion) return '';
+
+  // Use i18n key for translation if available
+  if (suggestion.i18nKey) {
+    const translated = t(suggestion.i18nKey, suggestion.i18nParams);
+    // If translation result equals the key, translation failed, fallback to message
+    if (translated !== suggestion.i18nKey) {
+      return translated;
+    }
+  }
+
+  // Fallback to original message
+  return suggestion.message;
+};
+
+/**
+ * Protocol Detection Status Component
+ * Display protocol detection status, result, and suggestions
+ */
+interface ProtocolDetectionStatusProps {
+  /** Whether detecting */
+  isDetecting: boolean;
+  /** Detection result */
+  result: ProtocolDetectionResponse | null;
+  /** Currently selected platform */
+  currentPlatform?: string;
+  /** Switch platform callback */
+  onSwitchPlatform?: (platform: string) => void;
+}
+
+const ProtocolDetectionStatus: React.FC<ProtocolDetectionStatusProps> = ({
+  isDetecting,
+  result,
+  currentPlatform,
+  onSwitchPlatform,
+}) => {
+  const { t } = useTranslation();
+
+  // Detecting
+  if (isDetecting) {
+    return (
+      <div className='flex items-center gap-6px text-12px text-t-secondary py-4px'>
+        <Loading theme='outline' size={14} className='animate-spin' />
+        <span>{t('settings.protocolDetecting')}</span>
+      </div>
+    );
+  }
+
+  // No detection result
+  if (!result) {
+    return null;
+  }
+
+  const { protocol, success, suggestion, multiKeyResult } = result;
+  const iconConfig = PROTOCOL_ICONS[protocol] || PROTOCOL_ICONS.unknown;
+
+  // Detection successful
+  if (success && suggestion) {
+    const showSwitchButton =
+      suggestion.type === 'switch_platform' &&
+      suggestion.suggestedPlatform &&
+      suggestion.suggestedPlatform !== currentPlatform;
+
+    return (
+      <div className='flex flex-col gap-4px py-4px'>
+        <div className='flex items-start gap-8px text-12px'>
+          <div className='flex items-center gap-6px flex-1 min-w-0'>
+            <div
+              className='flex items-center justify-center w-16px h-16px rounded-4px shrink-0'
+              style={{
+                backgroundColor: iconConfig.bgColor,
+              }}
+            >
+              <span
+                className='text-10px font-medium'
+                style={{
+                  color: iconConfig.color,
+                }}
+              >
+                {protocol === 'openai' ? 'O' : protocol === 'gemini' ? 'G' : protocol === 'anthropic' ? 'A' : '?'}
+              </span>
+            </div>
+            <span className='text-t-secondary truncate'>{getSuggestionMessage(suggestion, t)}</span>
+          </div>
+
+          {showSwitchButton && onSwitchPlatform && (
+            <button
+              type='button'
+              className='shrink-0 px-8px py-2px rounded-4px text-11px font-medium transition-colors'
+              style={{
+                backgroundColor: iconConfig.bgColor,
+                color: iconConfig.color,
+              }}
+              onClick={() => onSwitchPlatform(suggestion.suggestedPlatform!)}
+            >
+              {t('settings.switchPlatform')}
+            </button>
+          )}
+        </div>
+
+        {/* Multi-key test result */}
+        {multiKeyResult && multiKeyResult.total > 1 && (
+          <div className='flex items-center gap-6px text-11px text-t-tertiary pl-22px'>
+            <span>
+              {multiKeyResult.invalid === 0
+                ? t('settings.multiKeyAllValid', { total: String(multiKeyResult.total) })
+                : multiKeyResult.valid === 0
+                  ? t('settings.multiKeyAllInvalid', { total: String(multiKeyResult.total) })
+                  : t('settings.multiKeyPartialValid', {
+                      valid: String(multiKeyResult.valid),
+                      invalid: String(multiKeyResult.invalid),
+                    })}
+            </span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Detection failed
+  if (!success && result.error) {
+    return (
+      <div className='flex items-center gap-6px text-12px text-warning py-4px'>
+        <div className='flex items-center justify-center w-16px h-16px rounded-4px bg-warning/10 shrink-0'>
+          <span className='text-10px font-medium'>!</span>
+        </div>
+        <span className='truncate'>{suggestion ? getSuggestionMessage(suggestion, t) : result.error}</span>
+      </div>
+    );
+  }
+
+  return null;
+};
 
 /**
  * 供应商 Logo 组件
@@ -106,12 +266,17 @@ const AddPlatformModal = ModalHOC<{
   const shouldEnableDetection = isCustom || isNonOfficialBaseUrl;
   // 只有在用户修改了输入值（相对于上次采纳建议时）才触发检测
   // Only trigger detection when input changed since last accepted suggestion
-  const inputChangedSinceLastSwitch = !lastDetectionInput || lastDetectionInput.baseUrl !== actualBaseUrl || lastDetectionInput.apiKey !== apiKey;
-  const protocolDetection = useProtocolDetection(shouldEnableDetection && inputChangedSinceLastSwitch ? actualBaseUrl : '', shouldEnableDetection && inputChangedSinceLastSwitch ? apiKey : '', {
-    debounceMs: 1000,
-    autoDetect: true,
-    timeout: 10000,
-  });
+  const inputChangedSinceLastSwitch =
+    !lastDetectionInput || lastDetectionInput.baseUrl !== actualBaseUrl || lastDetectionInput.apiKey !== apiKey;
+  const protocolDetection = useProtocolDetection(
+    shouldEnableDetection && inputChangedSinceLastSwitch ? actualBaseUrl : '',
+    shouldEnableDetection && inputChangedSinceLastSwitch ? apiKey : '',
+    {
+      debounceMs: 1000,
+      autoDetect: true,
+      timeout: 10000,
+    }
+  );
 
   // 是否显示检测结果：启用检测 且 (有结果或正在检测) 且 输入值与上次采纳时不同
   // Whether to show detection result: enabled AND (has result or detecting) AND input changed since last switch
@@ -174,7 +339,9 @@ const AddPlatformModal = ModalHOC<{
       .then((values) => {
         // 如果有 i18nKey 使用翻译后的名称，否则使用 platform 的 name
         // If i18nKey exists use translated name, otherwise use platform name
-        const name = selectedPlatform?.i18nKey ? t(selectedPlatform.i18nKey) : (selectedPlatform?.name ?? values.platform);
+        const name = selectedPlatform?.i18nKey
+          ? t(selectedPlatform.i18nKey)
+          : (selectedPlatform?.name ?? values.platform);
         const provider: IProvider = {
           id: uuid(),
           platform: selectedPlatform?.platform ?? 'custom',
@@ -216,12 +383,39 @@ const AddPlatformModal = ModalHOC<{
   };
 
   return (
-    <AionModal visible={modalProps.visible} onCancel={modalCtrl.close} header={{ title: t('settings.addModel'), showClose: true }} style={{ maxWidth: '92vw', borderRadius: 16 }} contentStyle={{ background: 'var(--bg-1)', borderRadius: 16, padding: '20px 24px 16px', overflow: 'auto' }} onOk={handleSubmit} confirmLoading={modalProps.confirmLoading} okText={t('common.confirm')} cancelText={t('common.cancel')}>
+    <AionModal
+      visible={modalProps.visible}
+      onCancel={modalCtrl.close}
+      header={{ title: t('settings.addModel'), showClose: true }}
+      style={{ maxWidth: '92vw', borderRadius: 16 }}
+      contentStyle={{ background: 'var(--bg-1)', borderRadius: 16, padding: '20px 24px 16px', overflow: 'auto' }}
+      onOk={handleSubmit}
+      confirmLoading={modalProps.confirmLoading}
+      okText={t('common.confirm')}
+      cancelText={t('common.cancel')}
+    >
       {messageContext}
-      <div className='flex flex-col gap-16px py-20px'>
+      <div className='flex flex-col gap-12px pt-8px pb-20px'>
+        <div
+          className='rd-8px px-12px py-8px text-12px leading-5 border border-solid'
+          style={{
+            borderColor: 'rgba(var(--primary-6),0.32)',
+            backgroundColor: 'rgba(var(--primary-6),0.08)',
+            color: 'rgb(var(--primary-6))',
+          }}
+        >
+          {t('settings.customModelSupportNote')}
+        </div>
+
         <Form form={form} layout='vertical' className='space-y-0'>
           {/* 模型平台选择（第一层）/ Model Platform Selection (first level) */}
-          <Form.Item initialValue='gemini' label={t('settings.modelPlatform')} field={'platform'} required rules={[{ required: true }]}>
+          <Form.Item
+            initialValue='gemini'
+            label={t('settings.modelPlatform')}
+            field={'platform'}
+            required
+            rules={[{ required: true }]}
+          >
             <Select
               showSearch
               filterOption={(inputValue, option) => {
@@ -251,7 +445,13 @@ const AddPlatformModal = ModalHOC<{
           </Form.Item>
 
           {/* Base URL - 自定义选项、标准 Gemini 和 New API 显示 / Base URL - for Custom, standard Gemini and New API */}
-          <Form.Item hidden={isBedrock || (!isCustom && !isNewApi && platformValue !== 'gemini')} label={t('settings.baseUrl')} field={'baseUrl'} required={isCustom || isNewApi} rules={[{ required: isCustom || isNewApi }]}>
+          <Form.Item
+            hidden={isBedrock || (!isCustom && !isNewApi && platformValue !== 'gemini')}
+            label={t('settings.baseUrl')}
+            field={'baseUrl'}
+            required={isCustom || isNewApi}
+            rules={[{ required: isCustom || isNewApi }]}
+          >
             <Input
               placeholder={isNewApi ? 'https://your-newapi-instance.com' : selectedPlatform?.baseUrl || ''}
               onBlur={() => {
@@ -271,7 +471,14 @@ const AddPlatformModal = ModalHOC<{
               <div className='space-y-2px'>
                 <div className='text-11px text-t-secondary mt-2 leading-4'>{t('settings.multiApiKeyTip')}</div>
                 {/* 协议检测状态 / Protocol detection status */}
-                {shouldShowDetectionResult && <ProtocolDetectionStatus isDetecting={protocolDetection.isDetecting} result={protocolDetection.result} currentPlatform={platformValue} onSwitchPlatform={handleSwitchPlatform} />}
+                {shouldShowDetectionResult && (
+                  <ProtocolDetectionStatus
+                    isDetecting={protocolDetection.isDetecting}
+                    result={protocolDetection.result}
+                    currentPlatform={platformValue}
+                    onSwitchPlatform={handleSwitchPlatform}
+                  />
+                )}
               </div>
             }
           >
@@ -279,12 +486,26 @@ const AddPlatformModal = ModalHOC<{
               onBlur={() => {
                 void modelListState.mutate();
               }}
-              suffix={<Edit theme='outline' size={16} className='cursor-pointer text-t-secondary hover:text-t-primary flex' onClick={() => setApiKeyEditorVisible(true)} />}
+              suffix={
+                <Edit
+                  theme='outline'
+                  size={16}
+                  className='cursor-pointer text-t-secondary hover:text-t-primary flex'
+                  onClick={() => setApiKeyEditorVisible(true)}
+                />
+              }
             />
           </Form.Item>
 
           {/* AWS Bedrock Authentication Method */}
-          <Form.Item hidden={!isBedrock} label={t('settings.bedrock.authMethod')} field={'bedrockAuthMethod'} initialValue='accessKey' required={isBedrock} rules={[{ required: isBedrock }]}>
+          <Form.Item
+            hidden={!isBedrock}
+            label={t('settings.bedrock.authMethod')}
+            field={'bedrockAuthMethod'}
+            initialValue='accessKey'
+            required={isBedrock}
+            rules={[{ required: isBedrock }]}
+          >
             <Select>
               <Select.Option value='accessKey'>{t('settings.bedrock.authMethodAccessKey')}</Select.Option>
               <Select.Option value='profile'>{t('settings.bedrock.authMethodProfile')}</Select.Option>
@@ -292,7 +513,15 @@ const AddPlatformModal = ModalHOC<{
           </Form.Item>
 
           {/* AWS Region */}
-          <Form.Item hidden={!isBedrock} label={t('settings.bedrock.region')} field={'bedrockRegion'} initialValue='us-east-1' required={isBedrock} rules={[{ required: isBedrock }]} extra={t('settings.bedrock.regionHint')}>
+          <Form.Item
+            hidden={!isBedrock}
+            label={t('settings.bedrock.region')}
+            field={'bedrockRegion'}
+            initialValue='us-east-1'
+            required={isBedrock}
+            rules={[{ required: isBedrock }]}
+            extra={t('settings.bedrock.regionHint')}
+          >
             <Select showSearch>
               <Select.Option value='us-east-1'>US East (N. Virginia)</Select.Option>
               <Select.Option value='us-west-2'>US West (Oregon)</Select.Option>
@@ -306,22 +535,48 @@ const AddPlatformModal = ModalHOC<{
           </Form.Item>
 
           {/* Access Key ID */}
-          <Form.Item hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'} label={t('settings.bedrock.accessKeyId')} field={'bedrockAccessKeyId'} required={isBedrock && bedrockAuthMethod === 'accessKey'} rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}>
+          <Form.Item
+            hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'}
+            label={t('settings.bedrock.accessKeyId')}
+            field={'bedrockAccessKeyId'}
+            required={isBedrock && bedrockAuthMethod === 'accessKey'}
+            rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}
+          >
             <Input.Password placeholder='AKIA...' visibilityToggle />
           </Form.Item>
 
           {/* Secret Access Key */}
-          <Form.Item hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'} label={t('settings.bedrock.secretAccessKey')} field={'bedrockSecretAccessKey'} required={isBedrock && bedrockAuthMethod === 'accessKey'} rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}>
+          <Form.Item
+            hidden={!isBedrock || bedrockAuthMethod !== 'accessKey'}
+            label={t('settings.bedrock.secretAccessKey')}
+            field={'bedrockSecretAccessKey'}
+            required={isBedrock && bedrockAuthMethod === 'accessKey'}
+            rules={[{ required: isBedrock && bedrockAuthMethod === 'accessKey' }]}
+          >
             <Input.Password visibilityToggle />
           </Form.Item>
 
           {/* AWS Profile */}
-          <Form.Item hidden={!isBedrock || bedrockAuthMethod !== 'profile'} label={t('settings.bedrock.profile')} field={'bedrockProfile'} required={isBedrock && bedrockAuthMethod === 'profile'} rules={[{ required: isBedrock && bedrockAuthMethod === 'profile' }]} extra={t('settings.bedrock.profileHint')}>
+          <Form.Item
+            hidden={!isBedrock || bedrockAuthMethod !== 'profile'}
+            label={t('settings.bedrock.profile')}
+            field={'bedrockProfile'}
+            required={isBedrock && bedrockAuthMethod === 'profile'}
+            rules={[{ required: isBedrock && bedrockAuthMethod === 'profile' }]}
+            extra={t('settings.bedrock.profileHint')}
+          >
             <Input placeholder='default' />
           </Form.Item>
 
           {/* 模型选择 / Model Selection */}
-          <Form.Item label={t('settings.modelName')} field={'model'} required rules={[{ required: true }]} validateStatus={modelListState.error ? 'error' : 'success'} help={modelListState.error}>
+          <Form.Item
+            label={t('settings.modelName')}
+            field={'model'}
+            required
+            rules={[{ required: true }]}
+            validateStatus={modelListState.error ? 'error' : 'success'}
+            help={modelListState.error}
+          >
             <Select
               loading={modelListState.isLoading}
               showSearch
@@ -341,7 +596,10 @@ const AddPlatformModal = ModalHOC<{
                         message.warning(t('settings.bedrock.fillRequiredFields'));
                         return;
                       }
-                      if (values.bedrockAuthMethod === 'accessKey' && (!values.bedrockAccessKeyId || !values.bedrockSecretAccessKey)) {
+                      if (
+                        values.bedrockAuthMethod === 'accessKey' &&
+                        (!values.bedrockAccessKeyId || !values.bedrockSecretAccessKey)
+                      ) {
                         message.warning(t('settings.bedrock.fillRequiredFields'));
                         return;
                       }
@@ -405,7 +663,10 @@ const AddPlatformModal = ModalHOC<{
 
           {/* New API 协议选择 / New API Protocol Selection */}
           {isNewApi && (
-            <Form.Item label={t('settings.modelProtocol')} extra={<span className='text-11px text-t-secondary'>{t('settings.modelProtocolTip')}</span>}>
+            <Form.Item
+              label={t('settings.modelProtocol')}
+              extra={<span className='text-11px text-t-secondary'>{t('settings.modelProtocolTip')}</span>}
+            >
               <Select value={modelProtocol} onChange={setModelProtocol} options={NEW_API_PROTOCOL_OPTIONS} />
             </Form.Item>
           )}

@@ -4,8 +4,15 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { AuthType, clearCachedCredentialFile, Config, getOauthInfoWithCache, loginWithOauth, Storage } from '@office-ai/aioncli-core';
-import { ipcBridge } from '../../common';
+import {
+  AuthType,
+  clearCachedCredentialFile,
+  Config,
+  getOauthInfoWithCache,
+  loginWithOauth,
+  Storage,
+} from '@office-ai/aioncli-core';
+import { ipcBridge } from '@/common';
 import * as fs from 'node:fs';
 
 export function initAuthBridge(): void {

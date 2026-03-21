@@ -7,8 +7,12 @@
 import { useMemo } from 'react';
 import useSWR from 'swr';
 import { ipcBridge } from '@/common';
-import type { AvailableAgent } from '@/renderer/shared/agents/types';
-import { AVAILABLE_AGENTS_SWR_KEY, filterAvailableAgentsForUi, splitConversationDropdownAgents } from '@/renderer/shared/agents/availableAgents';
+import type { AvailableAgent } from '@/renderer/utils/model/agentTypes';
+import {
+  AVAILABLE_AGENTS_SWR_KEY,
+  filterAvailableAgentsForUi,
+  splitConversationDropdownAgents,
+} from '@/renderer/utils/model/availableAgents';
 
 export type UseConversationAgentsResult = {
   /** CLI Agents (non-custom, non-preset backends, excluding gemini-CLI) */

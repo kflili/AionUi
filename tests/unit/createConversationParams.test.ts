@@ -14,8 +14,10 @@ vi.mock('@/common', () => ({
   ipcBridge: {},
 }));
 
-vi.mock('@/common/storage', async () => {
-  const actual = await vi.importActual<typeof import('../../src/common/storage')>('../../src/common/storage');
+vi.mock('@/common/config/storage', async () => {
+  const actual = await vi.importActual<typeof import('../../src/common/config/storage')>(
+    '../../src/common/config/storage'
+  );
   return {
     ...actual,
     ConfigStorage: {
@@ -24,11 +26,12 @@ vi.mock('@/common/storage', async () => {
   };
 });
 
-vi.mock('@/renderer/shared/agents/presetAssistantResources', () => ({
+vi.mock('@/renderer/utils/model/presetAssistantResources', () => ({
   loadPresetAssistantResources,
 }));
 
-const { buildPresetAssistantParams } = await import('../../src/renderer/pages/conversation/utils/createConversationParams');
+const { buildPresetAssistantParams } =
+  await import('../../src/renderer/pages/conversation/utils/createConversationParams');
 
 describe('createConversationParams', () => {
   beforeEach(() => {

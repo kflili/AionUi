@@ -11,7 +11,7 @@ import { once } from 'events';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
-import { AcpConnection } from '../../src/agent/acp/AcpConnection';
+import { AcpConnection } from '../../src/process/agent/acp/AcpConnection';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -22,7 +22,9 @@ async function waitForPidFile(pidFile: string, timeoutMs: number, shellProcess?:
 
   while (Date.now() - start < timeoutMs) {
     if (shellProcess && (shellProcess.exitCode !== null || shellProcess.signalCode !== null)) {
-      throw new Error(`Shell process exited early before PID file was created: code=${shellProcess.exitCode}, signal=${shellProcess.signalCode}`);
+      throw new Error(
+        `Shell process exited early before PID file was created: code=${shellProcess.exitCode}, signal=${shellProcess.signalCode}`
+      );
     }
 
     try {
