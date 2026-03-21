@@ -537,8 +537,8 @@ export class AcpConnection {
       // 优先检查是否为 request/notification（有 method 字段）
       if ('method' in message) {
         // 直接传递给 handleIncomingRequest，switch 会过滤未知 method
-        this.handleIncomingRequest(message as AcpIncomingMessage).catch((_error) => {
-          // Handle request errors silently
+        this.handleIncomingRequest(message as AcpIncomingMessage).catch((error) => {
+          console.warn('[ACP] handleIncomingRequest error:', error instanceof Error ? error.message : error);
         });
       } else if ('id' in message && typeof message.id === 'number' && this.pendingRequests.has(message.id)) {
         // This is a response to a previous request
