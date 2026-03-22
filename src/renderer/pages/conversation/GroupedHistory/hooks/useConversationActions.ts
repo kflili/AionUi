@@ -253,10 +253,11 @@ export const useConversationActions = ({
           return String(extra.sourceFilePath);
         }
 
-        // 2. ACP session — resolve JSONL path from acpSessionId
+        // 2. ACP/CLI session — resolve JSONL path from acpSessionId + backend
         if (extra?.acpSessionId) {
-          const filePath = await ipcBridge.cliHistory.resolveClaudeSessionFilePath.invoke({
+          const filePath = await ipcBridge.cliHistory.resolveSessionFilePath.invoke({
             sessionId: String(extra.acpSessionId),
+            backend: String(extra.backend ?? 'claude'),
           });
           if (filePath) {
             return filePath;
