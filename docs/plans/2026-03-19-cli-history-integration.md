@@ -200,9 +200,9 @@ New:
   src/process/cli-history/types.ts             — SessionSourceProvider, SessionMetadata types
   src/process/cli-history/providers/claude.ts   — Claude Code CLI provider
   src/process/cli-history/providers/copilot.ts  — Copilot CLI provider
-  src/process/cli-history/providers/codex.ts    — Codex CLI provider
+  src/process/cli-history/providers/codex.ts    — Codex CLI provider (planned)
   src/process/cli-history/converters/           — JSONL → TMessage converters (shared with Step 1)
-  src/process/cli-history/importer.ts           — Import + background conversion orchestrator
+  src/process/cli-history/importer.ts           — Import + background conversion orchestrator (planned)
 
 Modify:
   src/common/config/storage.ts     — Add sourceFilePath to ACP extra type

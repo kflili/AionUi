@@ -4,13 +4,12 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import fs from 'fs';
-import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
 import type Database from 'better-sqlite3';
 import BetterSqlite3 from 'better-sqlite3';
-import type { SessionMetadata, SessionSourceProvider } from '../types';
+import type { SessionMetadata } from '../types';
+import { BaseSessionSourceProvider } from './base';
 
 /**
  * Shape of a single row in Copilot CLI's session-store.db `sessions` table.
@@ -65,14 +64,8 @@ function rowToMetadata(row: CopilotSessionRow): SessionMetadata {
  * Discovers sessions by reading the SQLite database at ~/.copilot/session-store.db,
  * then reading individual events.jsonl files under ~/.copilot/session-state/{sessionId}/.
  */
-export class CopilotProvider implements SessionSourceProvider {
+export class CopilotProvider extends BaseSessionSourceProvider {
   readonly id = 'copilot' as const;
-
-  /**
-   * In-memory lookup from session ID to its absolute events.jsonl file path.
-   * Populated during discoverSessions() and used by readTranscript/canResume/buildReference.
-   */
-  private sessionPaths = new Map<string, string>();
 
   /**
    * Scan Copilot CLI's session-store.db for all sessions
@@ -102,50 +95,5 @@ export class CopilotProvider implements SessionSourceProvider {
     } finally {
       db?.close();
     }
-  }
-
-  /**
-   * Read the events.jsonl transcript for a session and return individual lines.
-   * Requires discoverSessions() to have been called first to populate the path lookup.
-   */
-  async readTranscript(sessionId: string): Promise<string[]> {
-    const filePath = this.resolveSessionPath(sessionId);
-    const content = await fsPromises.readFile(filePath, 'utf-8');
-    return content.split('\n').filter((line) => line.trim().length > 0);
-  }
-
-  /**
-   * Check whether the session's events.jsonl file exists on disk.
-   */
-  canResume(sessionId: string): boolean {
-    const filePath = this.sessionPaths.get(sessionId);
-    if (!filePath) return false;
-
-    try {
-      fs.accessSync(filePath, fs.constants.R_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Return the absolute file path to the session's events.jsonl file.
-   * Used by the Copy Chat Reference feature.
-   */
-  buildReference(sessionId: string): string {
-    return this.resolveSessionPath(sessionId);
-  }
-
-  /**
-   * Look up the absolute events.jsonl path for a session ID.
-   * Throws if the session has not been discovered yet.
-   */
-  private resolveSessionPath(sessionId: string): string {
-    const filePath = this.sessionPaths.get(sessionId);
-    if (!filePath) {
-      throw new Error(`Session not found: ${sessionId}. Call discoverSessions() first.`);
-    }
-    return filePath;
   }
 }

@@ -107,17 +107,17 @@ Fixed a race condition where parallel tool calls from Copilot CLI caused the fir
 
 ### What goes in AionUI vs elsewhere
 
-| Feature                           | Where                            | Plan file                      |
-| --------------------------------- | -------------------------------- | ------------------------------ |
-| Copy Chat Reference               | AionUI                           | Step 0.5                       |
-| Mode toggle (Rich UI / Terminal)  | AionUI                           | Step 1                         |
-| AgentCLI settings tab             | AionUI                           | Step 1                         |
-| JSONL → TMessage converter        | Shared (AionUI + claude-toolkit) | Steps 1, 2 & 3                 |
-| CLI History Import (into SQLite)  | AionUI                           | Step 2                         |
-| Session Source Provider           | Shared (AionUI + claude-toolkit) | Steps 2 & 3                    |
-| Knowledge consolidation pipeline  | claude-toolkit (skill)           | Step 3                         |
-| Knowledge FTS5 index + embeddings | Inside Step 3 (later phase)      | Step 3                         |
-| `/delegate` tmux                  | claude-toolkit (skill)           | Future (in architecture notes) |
+| Feature                           | Where                            | Plan file                          |
+| --------------------------------- | -------------------------------- | ---------------------------------- |
+| Copy Chat Reference               | AionUI                           | Step 0.5 ✅                        |
+| Mode toggle (Rich UI / Terminal)  | AionUI                           | Step 1                             |
+| AgentCLI settings tab             | AionUI                           | Step 1                             |
+| JSONL → TMessage converter        | Shared (AionUI + claude-toolkit) | Steps 1, 2 & 3 ✅ (Claude+Copilot) |
+| CLI History Import (into SQLite)  | AionUI                           | Step 2                             |
+| Session Source Provider           | Shared (AionUI + claude-toolkit) | Steps 2 & 3 ✅ (Claude+Copilot)    |
+| Knowledge consolidation pipeline  | claude-toolkit (skill)           | Step 3                             |
+| Knowledge FTS5 index + embeddings | Inside Step 3 (later phase)      | Step 3                             |
+| `/delegate` tmux                  | claude-toolkit (skill)           | Future (in architecture notes)     |
 
 ### Strategic principles
 

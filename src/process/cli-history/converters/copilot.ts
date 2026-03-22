@@ -143,8 +143,9 @@ function buildToolTitle(name: string, args: Record<string, unknown>): string {
     case 'glob':
       return `glob: ${String(args.pattern ?? '')}`;
     case 'rg':
-    case 'grep':
       return `rg: ${truncate(String(args.pattern ?? args.query ?? ''), 60)}`;
+    case 'grep':
+      return `grep: ${truncate(String(args.pattern ?? args.query ?? ''), 60)}`;
     case 'web_search':
       return `web_search: ${truncate(String(args.query ?? ''), 60)}`;
     case 'web_fetch':
