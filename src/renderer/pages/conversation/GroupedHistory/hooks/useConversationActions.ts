@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
 import { emitter } from '@/renderer/utils/emitter';
+import { copyText } from '@/renderer/utils/ui/clipboard';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
 import { Message, Modal } from '@arco-design/web-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -247,9 +248,13 @@ export const useConversationActions = ({
       const extra = conversation.extra as Record<string, unknown>;
       const reference = extra?.sourceFilePath ? String(extra.sourceFilePath) : `aionui:${conversation.id}`;
 
-      void navigator.clipboard.writeText(reference).then(() => {
-        Message.success(t('conversation.history.copyReferenceSuccess'));
-      });
+      void copyText(reference)
+        .then(() => {
+          Message.success(t('conversation.history.copyReferenceSuccess'));
+        })
+        .catch(() => {
+          Message.error(t('common.copyFailed'));
+        });
     },
     [t]
   );
