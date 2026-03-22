@@ -60,30 +60,47 @@ async function resolveCopilotSessionPath(sessionId: string): Promise<string | nu
 async function resolveCodexSessionPath(sessionId: string): Promise<string | null> {
   const sessionsDir = path.join(os.homedir(), '.codex', 'sessions');
 
+  // Codex uses: YYYY/MM/DD/rollout-{date}-{sessionId}.jsonl
+  // We need to scan the date hierarchy
+  let years;
   try {
-    // Codex uses: YYYY/MM/DD/rollout-{date}-{sessionId}.jsonl
-    // We need to scan the date hierarchy
-    const years = await fs.readdir(sessionsDir, { withFileTypes: true });
+    years = await fs.readdir(sessionsDir, { withFileTypes: true });
+  } catch {
+    // ~/.codex/sessions/ doesn't exist or isn't readable
+    return null;
+  }
 
-    for (const year of years.filter((e) => e.isDirectory())) {
-      const months = await fs.readdir(path.join(sessionsDir, year.name), { withFileTypes: true });
+  for (const year of years.filter((e) => e.isDirectory())) {
+    let months;
+    try {
+      months = await fs.readdir(path.join(sessionsDir, year.name), { withFileTypes: true });
+    } catch {
+      continue;
+    }
 
-      for (const month of months.filter((e) => e.isDirectory())) {
-        const days = await fs.readdir(path.join(sessionsDir, year.name, month.name), { withFileTypes: true });
+    for (const month of months.filter((e) => e.isDirectory())) {
+      let days;
+      try {
+        days = await fs.readdir(path.join(sessionsDir, year.name, month.name), { withFileTypes: true });
+      } catch {
+        continue;
+      }
 
-        for (const day of days.filter((e) => e.isDirectory())) {
-          const dayDir = path.join(sessionsDir, year.name, month.name, day.name);
-          const files = await fs.readdir(dayDir);
+      for (const day of days.filter((e) => e.isDirectory())) {
+        const dayDir = path.join(sessionsDir, year.name, month.name, day.name);
+        let files;
+        try {
+          files = await fs.readdir(dayDir);
+        } catch {
+          continue;
+        }
 
-          const match = files.find((f) => f.endsWith(`-${sessionId}.jsonl`));
-          if (match) {
-            return path.join(dayDir, match);
-          }
+        const match = files.find((f) => f.endsWith(`-${sessionId}.jsonl`));
+        if (match) {
+          return path.join(dayDir, match);
         }
       }
     }
-  } catch {
-    // ~/.codex/sessions/ doesn't exist or isn't readable
   }
 
   return null;
