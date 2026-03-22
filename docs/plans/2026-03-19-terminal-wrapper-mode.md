@@ -292,7 +292,7 @@ Add an **AgentCLI** tab to Settings (alongside Model, Agent, Tools, etc.). Route
 - `src/renderer/pages/settings/components/SettingsSider.tsx` — add "AgentCLI" nav item (after "Agent" or "Tools")
 - `src/renderer/components/layout/Router.tsx` — add `/settings/agent-cli` route
 - `src/common/config/storage.ts` — add `'agentCli.config'` to `IConfigStorageRefer`
-- `src/renderer/i18n/locales/*/settings.json` — add i18n keys
+- `src/renderer/services/i18n/locales/*/settings.json` — add i18n keys
 
 ---
 
