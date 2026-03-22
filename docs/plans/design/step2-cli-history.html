@@ -1,0 +1,2640 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AionUI — Step 2 — CLI History Integration — Unified Sidebar</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-page: #f0f1f3;
+    --bg-app: #ffffff;
+    --bg-sidebar: #f7f8fa;
+    --bg-hover: rgba(0,0,0,0.04);
+    --bg-active: #e8f3ff;
+    --border: #e5e6eb;
+    --border-light: #f0f1f3;
+    --text-primary: #1d2129;
+    --text-secondary: #4e5969;
+    --text-muted: #86909c;
+    --text-dim: #c9cdd4;
+    --accent: #4080ff;
+    --accent-hover: #3070ee;
+    --accent-light: rgba(64,128,255,0.08);
+    --accent-lighter: rgba(64,128,255,0.05);
+    --green: #00b42a;
+    --green-light: rgba(0,180,42,0.08);
+    --green-lighter: #e8ffea;
+    --orange: #ff7d00;
+    --orange-light: rgba(255,125,0,0.08);
+    --red: #f53f3f;
+    --red-light: rgba(245,63,63,0.08);
+    --purple: #722ed1;
+    --terminal-bg: #1a1a2e;
+    --radius-xs: 4px;
+    --radius-sm: 6px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    --font-mono: 'SF Mono', 'Menlo', 'Cascadia Code', 'Fira Code', monospace;
+    --sidebar-width: 200px;
+    --right-sidebar-width: 250px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+    --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
+    --shadow-card: 0 2px 8px rgba(0,0,0,0.06);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg-page);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* -- Design Page Shell -- */
+  .page-banner {
+    height: 42px;
+    background: linear-gradient(135deg, #f8f9fb 0%, #eef1f6 50%, #e8ecf4 100%);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    letter-spacing: 0.2px;
+    flex-shrink: 0;
+  }
+  .page-banner .step-badge {
+    background: var(--accent-light);
+    color: var(--accent);
+    padding: 2px 10px;
+    border-radius: var(--radius-xs);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  /* -- Option Tabs -- */
+  .option-tabs {
+    display: flex;
+    gap: 0;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    overflow-x: auto;
+  }
+  .option-tab {
+    padding: 14px 24px;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    white-space: nowrap;
+    user-select: none;
+    letter-spacing: 0.1px;
+  }
+  .option-tab:hover { color: var(--text-secondary); }
+  .option-tab.active {
+    color: var(--accent);
+    border-bottom-color: var(--accent);
+    font-weight: 600;
+  }
+
+  /* -- Option Panels -- */
+  .option-panel { display: none; padding: 28px; }
+  .option-panel.active { display: block; }
+
+  /* -- Mockup Frame -- */
+  .mockup-frame {
+    max-width: 1340px;
+    margin: 0 auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    overflow: hidden;
+    box-shadow: var(--shadow-md);
+    background: var(--bg-app);
+  }
+  .mockup-inner {
+    display: flex;
+    height: 700px;
+    overflow: hidden;
+  }
+
+  /* ================================================================
+     LEFT SIDEBAR
+     ================================================================ */
+  .sidebar {
+    width: var(--sidebar-width);
+    min-width: var(--sidebar-width);
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  .sidebar-traffic {
+    height: 40px;
+    padding: 0 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-shrink: 0;
+  }
+  .traffic-dots {
+    display: flex;
+    gap: 8px;
+  }
+  .traffic-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  .traffic-dot.close { background: #ff5f57; }
+  .traffic-dot.minimize { background: #febc2e; }
+  .traffic-dot.maximize { background: #28c840; }
+  .hamburger-icon {
+    color: var(--text-muted);
+    font-size: 14px;
+    cursor: pointer;
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-xs);
+    transition: background 0.12s;
+  }
+  .hamburger-icon:hover { background: var(--bg-hover); }
+
+  .sidebar-logo {
+    padding: 2px 14px 10px;
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    flex-shrink: 0;
+  }
+  .sidebar-logo-icon {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #4080ff 0%, #2bc4c4 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .sidebar-logo-icon svg {
+    width: 14px;
+    height: 14px;
+    fill: #fff;
+  }
+  .sidebar-logo-text {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.3px;
+  }
+
+  /* New Chat row */
+  .new-chat-row {
+    margin: 0 10px 4px;
+    display: flex;
+    align-items: center;
+    gap: 0;
+    flex-shrink: 0;
+  }
+  .new-chat-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    background: none;
+    border: none;
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background 0.12s;
+  }
+  .new-chat-btn:hover { background: var(--bg-hover); }
+  .new-chat-btn .plus {
+    font-size: 16px;
+    font-weight: 400;
+    color: var(--text-muted);
+    line-height: 1;
+  }
+  .batch-icon {
+    width: 28px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 12px;
+    transition: background 0.12s;
+    flex-shrink: 0;
+  }
+  .batch-icon:hover { background: var(--bg-hover); }
+
+  /* Conversation list */
+  .conv-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0 6px;
+    scrollbar-width: thin;
+    scrollbar-color: rgba(0,0,0,0.08) transparent;
+  }
+  .conv-list::-webkit-scrollbar { width: 4px; }
+  .conv-list::-webkit-scrollbar-track { background: transparent; }
+  .conv-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 4px; }
+
+  .time-label {
+    padding: 12px 8px 4px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+  }
+  .workspace-label {
+    padding: 4px 8px 2px 12px;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .workspace-label .chevron {
+    font-size: 9px;
+    color: var(--text-dim);
+    transition: transform 0.15s;
+  }
+  .workspace-label:hover .chevron { color: var(--text-muted); }
+
+  .conv-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 8px 6px 20px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: background 0.1s;
+    margin: 1px 0;
+    position: relative;
+  }
+  .conv-row:hover { background: var(--bg-hover); }
+  .conv-row.active { background: var(--bg-active); }
+  .conv-row.active .conv-name {
+    color: var(--text-primary);
+    font-weight: 500;
+  }
+
+  /* Show ... menu on hover */
+  .conv-row .conv-menu {
+    display: none;
+    position: absolute;
+    right: 6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-xs);
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 12px;
+    letter-spacing: 1px;
+    transition: background 0.1s;
+  }
+  .conv-row:hover .conv-menu { display: flex; }
+  .conv-row .conv-menu:hover { background: rgba(0,0,0,0.06); }
+
+  /* Agent icon with source badge */
+  .conv-icon-wrap {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    flex-shrink: 0;
+  }
+  .conv-icon {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 10px;
+    font-weight: 700;
+    color: #fff;
+  }
+  .conv-icon.copilot {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+  }
+  .conv-icon.claude-code {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  }
+  .conv-icon.codex {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+  }
+  .conv-icon.emoji {
+    background: none;
+    font-size: 14px;
+  }
+
+  /* Source dot badge */
+  .source-dot {
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    border: 1.5px solid var(--bg-sidebar);
+    z-index: 1;
+  }
+  .source-dot.orange { background: #ff7d00; }
+  .source-dot.blue { background: #165dff; }
+  .source-dot.green { background: #00b42a; }
+
+  /* Active row source dot needs different border color */
+  .conv-row.active .source-dot {
+    border-color: var(--bg-active);
+  }
+
+  .conv-name {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 20px;
+  }
+
+  /* Sidebar footer */
+  .sidebar-footer {
+    padding: 10px 14px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .settings-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 6px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .settings-row:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+  .settings-row .gear { font-size: 15px; }
+
+  /* ================================================================
+     MAIN CONTENT
+     ================================================================ */
+  .main-content {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    background: var(--bg-app);
+  }
+
+  /* Tab bar */
+  .tab-bar {
+    height: 38px;
+    min-height: 38px;
+    display: flex;
+    align-items: stretch;
+    background: var(--bg-sidebar);
+    border-bottom: 1px solid var(--border);
+    padding: 0;
+    flex-shrink: 0;
+  }
+  .tab-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 14px;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    border-right: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.1s;
+    white-space: nowrap;
+    position: relative;
+  }
+  .tab-item.active {
+    background: var(--bg-app);
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--bg-app);
+    margin-bottom: -1px;
+  }
+  .tab-item .tab-close {
+    font-size: 14px;
+    color: var(--text-dim);
+    cursor: pointer;
+    line-height: 1;
+    margin-left: 4px;
+  }
+  .tab-item .tab-close:hover { color: var(--text-secondary); }
+  .tab-add {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 16px;
+    transition: background 0.1s;
+  }
+  .tab-add:hover { background: var(--bg-hover); }
+
+  /* Header bar */
+  .header-bar {
+    height: 42px;
+    min-height: 42px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    color: var(--text-muted);
+    flex-shrink: 0;
+  }
+  .header-left .model-name {
+    font-weight: 500;
+    color: var(--text-secondary);
+  }
+  .header-left .internal-tag {
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+  .header-center {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex: 1;
+    justify-content: center;
+  }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--text-secondary);
+    font-weight: 500;
+    flex-shrink: 0;
+  }
+  .header-right .agent-icon-wrap {
+    position: relative;
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+  }
+  .header-right .agent-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+  .header-right .agent-icon.copilot {
+    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+  }
+  .header-right .agent-icon.claude-code {
+    background: linear-gradient(135deg, #d97706 0%, #b45309 100%);
+  }
+  .header-right .source-dot-header {
+    position: absolute;
+    bottom: -1px;
+    right: -1px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    border: 1.5px solid var(--bg-app);
+  }
+
+  /* ================================================================
+     MODE TOGGLE
+     ================================================================ */
+  .mode-toggle {
+    display: flex;
+    align-items: center;
+    background: #f2f3f5;
+    border-radius: 20px;
+    padding: 3px;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+  .mode-toggle-btn {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 14px;
+    border-radius: 17px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    user-select: none;
+    border: none;
+    background: none;
+    font-family: var(--font-ui);
+  }
+  .mode-toggle-btn.rich-ui {
+    color: var(--text-muted);
+  }
+  .mode-toggle-btn.rich-ui.active {
+    background: var(--accent);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(64,128,255,0.3);
+  }
+  .mode-toggle-btn.terminal {
+    color: var(--text-muted);
+  }
+  .mode-toggle-btn.terminal.active {
+    background: var(--green);
+    color: #fff;
+    box-shadow: 0 1px 4px rgba(0,180,42,0.3);
+  }
+  .mode-toggle-btn .toggle-icon {
+    font-size: 12px;
+    line-height: 1;
+  }
+  .mode-toggle-btn.terminal .toggle-icon {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: -0.5px;
+  }
+
+  /* ================================================================
+     CHAT AREA
+     ================================================================ */
+  .chat-area {
+    flex: 1;
+    overflow-y: auto;
+    padding: 20px 36px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+
+  .msg-user {
+    align-self: flex-end;
+    background: #f2f3f5;
+    padding: 10px 16px;
+    border-radius: 18px 18px 4px 18px;
+    font-size: 14px;
+    color: var(--text-primary);
+    max-width: 70%;
+  }
+
+  .msg-system {
+    align-self: center;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 14px;
+    background: var(--green-lighter);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+  .msg-system .sys-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--green);
+    flex-shrink: 0;
+  }
+
+  .msg-assistant {
+    align-self: flex-start;
+    font-size: 14px;
+    color: var(--text-primary);
+    max-width: 75%;
+    line-height: 1.65;
+  }
+  .msg-assistant p {
+    margin-bottom: 8px;
+  }
+  .msg-assistant p:last-child {
+    margin-bottom: 0;
+  }
+  .msg-assistant code {
+    background: #f2f3f5;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .msg-assistant strong {
+    font-weight: 600;
+  }
+  .msg-assistant ul {
+    margin: 4px 0;
+    padding-left: 18px;
+  }
+  .msg-assistant li {
+    margin-bottom: 2px;
+  }
+
+  /* ================================================================
+     TOOL CALL CARDS
+     ================================================================ */
+  .tool-card {
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    box-shadow: var(--shadow-sm);
+    margin: 4px 0;
+    max-width: 520px;
+  }
+  .tool-card.read {
+    border-left: 3px solid var(--accent);
+  }
+  .tool-card.edit {
+    border-left: 3px solid var(--orange);
+  }
+  .tool-card.search {
+    border-left: 3px solid var(--purple);
+  }
+  .tool-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    background: #fafbfc;
+    border-bottom: 1px solid var(--border-light);
+    cursor: pointer;
+    transition: background 0.1s;
+  }
+  .tool-card-header:hover {
+    background: #f2f3f5;
+  }
+  .tool-card-header .tool-icon {
+    font-size: 14px;
+    flex-shrink: 0;
+  }
+  .tool-card-header .tool-name {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+  .tool-card-header .tool-file {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .tool-card-header .tool-chevron {
+    font-size: 10px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+    transition: transform 0.2s;
+  }
+  .tool-card-header .tool-chevron.expanded {
+    transform: rotate(90deg);
+  }
+  .tool-card-body {
+    padding: 0;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.2s ease;
+  }
+  .tool-card-body.expanded {
+    max-height: 300px;
+  }
+  .tool-card-body-inner {
+    padding: 10px 12px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    background: #fafbfc;
+  }
+
+  /* Diff lines */
+  .diff-line {
+    padding: 0 4px;
+    white-space: pre;
+  }
+  .diff-line.add {
+    background: rgba(0,180,42,0.1);
+    color: #1a7f37;
+  }
+  .diff-line.remove {
+    background: rgba(245,63,63,0.1);
+    color: #cf222e;
+  }
+  .diff-line.context {
+    color: var(--text-muted);
+  }
+  .diff-line.header {
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  /* ================================================================
+     INPUT BOX
+     ================================================================ */
+  .input-area {
+    padding: 12px 16px 16px;
+    flex-shrink: 0;
+  }
+  .input-box {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--bg-app);
+    transition: border-color 0.15s;
+  }
+  .input-box:focus-within { border-color: var(--accent); }
+  .input-plus {
+    width: 24px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 18px;
+    flex-shrink: 0;
+    border-radius: var(--radius-xs);
+    transition: background 0.1s;
+  }
+  .input-plus:hover { background: var(--bg-hover); }
+  .input-text {
+    flex: 1;
+    font-size: 14px;
+    color: var(--text-dim);
+    white-space: nowrap;
+  }
+  .input-send {
+    width: 30px;
+    height: 30px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--accent);
+    border-radius: 50%;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.12s;
+  }
+  .input-send:hover { background: var(--accent-hover); }
+  .input-send svg {
+    width: 14px;
+    height: 14px;
+    fill: #fff;
+  }
+  .input-model-info {
+    padding: 4px 12px 0 44px;
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  /* ================================================================
+     RIGHT SIDEBAR
+     ================================================================ */
+  .right-sidebar {
+    width: var(--right-sidebar-width);
+    min-width: var(--right-sidebar-width);
+    background: var(--bg-app);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+  .right-header {
+    padding: 12px 14px;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    border-bottom: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .right-search {
+    margin: 10px 12px;
+    padding: 7px 10px;
+    background: var(--bg-sidebar);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .file-tree {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.8;
+  }
+  .ft-folder {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 6px;
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+    transition: background 0.1s;
+  }
+  .ft-folder:hover { background: var(--bg-hover); }
+  .ft-folder .ft-chevron {
+    font-size: 9px;
+    color: var(--text-dim);
+    width: 12px;
+    text-align: center;
+  }
+  .ft-folder .ft-folder-icon { color: var(--accent); font-size: 13px; }
+  .ft-file {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 2px 6px 2px 23px;
+    cursor: pointer;
+    border-radius: var(--radius-xs);
+    transition: background 0.1s;
+  }
+  .ft-file:hover { background: var(--bg-hover); }
+  .ft-file .ft-file-icon { color: var(--text-dim); font-size: 12px; }
+
+  /* ================================================================
+     CONTEXT MENU (DROPDOWN)
+     ================================================================ */
+  .context-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 6px 20px rgba(0,0,0,0.12);
+    padding: 4px 0;
+    z-index: 100;
+    min-width: 180px;
+    display: none;
+  }
+  .context-menu.visible { display: block; }
+  .context-menu-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: background 0.08s;
+    white-space: nowrap;
+  }
+  .context-menu-item:hover { background: var(--bg-hover); }
+  .context-menu-item.highlight { background: var(--accent-lighter); color: var(--accent); }
+  .context-menu-item.danger { color: var(--red); }
+  .context-menu-item.danger:hover { background: var(--red-light); }
+  .context-menu-item .cm-icon {
+    font-size: 13px;
+    width: 16px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+  .context-menu-divider {
+    height: 1px;
+    background: var(--border-light);
+    margin: 4px 0;
+  }
+
+  /* ================================================================
+     TOAST NOTIFICATION
+     ================================================================ */
+  .toast {
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--text-primary);
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: var(--radius-md);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+    display: none;
+    z-index: 200;
+    white-space: nowrap;
+    max-width: 90vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .toast.visible { display: flex; align-items: center; gap: 8px; }
+  .toast .toast-check {
+    color: var(--green);
+    font-weight: 700;
+  }
+  .toast .toast-path {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    opacity: 0.8;
+  }
+
+  /* ================================================================
+     MODAL
+     ================================================================ */
+  .modal-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 150;
+    border-radius: var(--radius-xl);
+  }
+  .modal {
+    background: #fff;
+    border-radius: var(--radius-lg);
+    box-shadow: 0 12px 40px rgba(0,0,0,0.18);
+    width: 400px;
+    max-width: 90%;
+    padding: 24px;
+  }
+  .modal-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 10px;
+  }
+  .modal-body {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.65;
+    margin-bottom: 20px;
+  }
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+  }
+  .modal-btn {
+    padding: 7px 20px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    font-family: var(--font-ui);
+    transition: all 0.12s;
+  }
+  .modal-btn.outline {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-secondary);
+  }
+  .modal-btn.outline:hover {
+    border-color: var(--text-muted);
+    background: var(--bg-hover);
+  }
+  .modal-btn.danger {
+    background: var(--red);
+    color: #fff;
+  }
+  .modal-btn.danger:hover {
+    background: #e63636;
+  }
+
+  /* ================================================================
+     SETTINGS PAGE
+     ================================================================ */
+  .settings-page {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+  }
+  .settings-nav {
+    width: 170px;
+    min-width: 170px;
+    padding: 24px 0 24px 24px;
+    border-right: 1px solid var(--border-light);
+    flex-shrink: 0;
+  }
+  .settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.12s;
+    margin-bottom: 2px;
+  }
+  .settings-nav-item:hover {
+    background: var(--bg-hover);
+    color: var(--text-secondary);
+  }
+  .settings-nav-item.active {
+    background: var(--bg-active);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  .settings-nav-item .nav-icon {
+    font-size: 14px;
+    width: 18px;
+    text-align: center;
+    flex-shrink: 0;
+  }
+
+  .settings-body {
+    flex: 1;
+    padding: 28px 40px;
+    overflow-y: auto;
+  }
+  .settings-title {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+  }
+  .settings-subtitle {
+    font-size: 13px;
+    color: var(--text-muted);
+    margin-bottom: 28px;
+  }
+
+  .settings-section {
+    margin-bottom: 28px;
+  }
+  .settings-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border-light);
+    margin-bottom: 16px;
+  }
+
+  .settings-item {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-light);
+  }
+  .settings-item-left {
+    flex: 1;
+    min-width: 0;
+  }
+  .settings-item-label {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--text-primary);
+    margin-bottom: 3px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .settings-item-desc {
+    font-size: 12px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+  .settings-item-right {
+    flex-shrink: 0;
+    margin-left: 24px;
+    display: flex;
+    align-items: center;
+  }
+
+  /* Settings mode card */
+  .settings-mode-options {
+    display: flex;
+    gap: 12px;
+    margin-top: 12px;
+  }
+  .settings-mode-card {
+    flex: 1;
+    border: 2px solid var(--border);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+  }
+  .settings-mode-card:hover {
+    border-color: var(--text-dim);
+  }
+  .settings-mode-card.selected {
+    border-color: var(--accent);
+    background: var(--accent-lighter);
+  }
+  .settings-mode-card.selected .smc-check {
+    display: flex;
+  }
+  .smc-check {
+    display: none;
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #fff;
+    font-size: 10px;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+  }
+  .smc-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 6px;
+  }
+  .smc-header .smc-icon {
+    font-size: 14px;
+  }
+  .smc-header .smc-icon-term {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  .smc-desc {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.5;
+  }
+
+  /* Segmented control for settings */
+  .segmented-control {
+    display: flex;
+    background: #f2f3f5;
+    border-radius: var(--radius-md);
+    padding: 3px;
+    gap: 2px;
+  }
+  .segmented-option {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 16px;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.18s ease;
+    white-space: nowrap;
+    user-select: none;
+  }
+  .segmented-option.selected {
+    background: #fff;
+    color: var(--text-primary);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  }
+  .segmented-option .seg-icon {
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  /* Simple toggle switch */
+  .toggle-switch {
+    width: 40px;
+    height: 22px;
+    background: var(--text-dim);
+    border-radius: 11px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+    flex-shrink: 0;
+  }
+  .toggle-switch.on {
+    background: var(--accent);
+  }
+  .toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: #fff;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
+  }
+  .toggle-switch.on::after {
+    transform: translateX(18px);
+  }
+
+  .settings-note {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-top: 8px;
+    font-style: italic;
+  }
+
+  /* CLI import row (for per-CLI toggles) */
+  .cli-import-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    border: 1px solid var(--border-light);
+    border-radius: var(--radius-sm);
+    margin-bottom: 8px;
+    transition: background 0.1s;
+  }
+  .cli-import-row:hover { background: var(--bg-hover); }
+  .cli-import-row .cli-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .cli-import-row .cli-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .cli-import-row .cli-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-primary);
+  }
+  .cli-import-row .cli-path {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+  }
+  .cli-import-row .cli-count {
+    font-size: 11px;
+    color: var(--text-dim);
+    margin-left: auto;
+    margin-right: 8px;
+    white-space: nowrap;
+  }
+
+  /* Sync button */
+  .btn-outline-sm {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 14px;
+    background: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--text-secondary);
+    cursor: pointer;
+    font-family: var(--font-ui);
+    transition: all 0.12s;
+  }
+  .btn-outline-sm:hover {
+    border-color: var(--text-muted);
+    background: var(--bg-hover);
+  }
+
+  /* Progress indicator */
+  .progress-bar-wrap {
+    margin-top: 10px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .progress-bar {
+    flex: 1;
+    height: 4px;
+    background: var(--border-light);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--accent);
+    border-radius: 2px;
+    transition: width 0.3s;
+  }
+  .progress-text {
+    font-size: 11px;
+    color: var(--text-muted);
+    white-space: nowrap;
+  }
+
+  /* ================================================================
+     COMPARISON NOTES
+     ================================================================ */
+  .comparison {
+    max-width: 1340px;
+    margin: 20px auto 0;
+    padding: 20px 24px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+  }
+  .comparison h3 {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 8px;
+  }
+  .comparison p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.7;
+  }
+  .comparison ul {
+    list-style: none;
+    margin-top: 8px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.8;
+  }
+  .comparison ul li::before {
+    content: '';
+    display: inline-block;
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: var(--accent);
+    margin-right: 8px;
+    vertical-align: middle;
+  }
+  .comparison .key-change {
+    display: inline-block;
+    background: var(--green-lighter);
+    color: #1a7f37;
+    font-size: 10px;
+    font-weight: 600;
+    padding: 1px 6px;
+    border-radius: 3px;
+    margin-left: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Banner -->
+<div class="page-banner">
+  <span class="step-badge">STEP 2</span>
+  CLI History Integration &mdash; Unified Sidebar (no separate section, full first-class conversations)
+</div>
+
+<!-- Option Tabs -->
+<div class="option-tabs" id="optionTabs">
+  <div class="option-tab active" data-target="panel1">Unified Sidebar &mdash; After Import</div>
+  <div class="option-tab" data-target="panel2">Imported Session &mdash; Full Chat View</div>
+  <div class="option-tab" data-target="panel3">Copy Chat Reference + Delete</div>
+  <div class="option-tab" data-target="panel4">Settings &mdash; CLI History Import</div>
+</div>
+
+<!-- =================================================================
+     TAB 1: UNIFIED SIDEBAR — AFTER IMPORT
+     ================================================================= -->
+<div class="option-panel active" id="panel1">
+  <div class="mockup-frame">
+    <div class="mockup-inner">
+
+      <!-- Left Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-traffic">
+          <div class="traffic-dots">
+            <div class="traffic-dot close"></div>
+            <div class="traffic-dot minimize"></div>
+            <div class="traffic-dot maximize"></div>
+          </div>
+          <div class="hamburger-icon">&#9776;</div>
+        </div>
+
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+          </div>
+          <span class="sidebar-logo-text">AionUi</span>
+        </div>
+
+        <div class="new-chat-row">
+          <button class="new-chat-btn">
+            <span class="plus">+</span> New Chat
+          </button>
+          <div class="batch-icon">&#9776;</div>
+        </div>
+
+        <div class="conv-list">
+          <!-- TODAY -->
+          <div class="time-label">Today</div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> AionUi</div>
+
+          <!-- Native AionUI conversation — Copilot icon, no dot -->
+          <div class="conv-row active">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">fix acp race condition</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Imported Claude Code — orange dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">refactor auth middleware</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> claude-toolkit</div>
+
+          <!-- Imported Claude Code — orange dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">plan knowledge system</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Native AionUI — Copilot icon, no dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">update shared rules</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- YESTERDAY -->
+          <div class="time-label">Yesterday</div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> teleX</div>
+
+          <!-- Imported from Copilot CLI — blue dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+              <div class="source-dot blue"></div>
+            </div>
+            <span class="conv-name">catch up project context</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Imported Claude Code — orange dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">implement cron system</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- LAST 7 DAYS -->
+          <div class="time-label">Last 7 Days</div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> AionUi</div>
+
+          <!-- Imported from Copilot CLI — blue dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+              <div class="source-dot blue"></div>
+            </div>
+            <span class="conv-name">debug websocket issue</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Imported from Codex — green dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon codex">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><rect x="4" y="4" width="8" height="8" rx="1"/></svg>
+              </div>
+              <div class="source-dot green"></div>
+            </div>
+            <span class="conv-name">optimize build config</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Native AionUI — Copilot icon, no dot -->
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">hi</span>
+            <div class="conv-menu">...</div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="settings-row">
+            <span class="gear">&#9881;</span> Settings
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content">
+        <div class="tab-bar">
+          <div class="tab-item active">fix acp race condition <span class="tab-close">&times;</span></div>
+          <div class="tab-add">+</div>
+        </div>
+
+        <div class="header-bar">
+          <div class="header-left">
+            <span class="model-name">Claude Opus 4.6 (1M context)</span>
+            <span class="internal-tag">(Internal only)</span>
+          </div>
+          <div class="header-center">
+            <div class="mode-toggle">
+              <button class="mode-toggle-btn rich-ui active">
+                <span class="toggle-icon">&#128172;</span>
+                Rich UI
+              </button>
+              <button class="mode-toggle-btn terminal">
+                <span class="toggle-icon">&gt;_</span>
+                Terminal
+              </button>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="agent-icon-wrap">
+              <div class="agent-icon copilot">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            GitHub Copilot
+          </div>
+        </div>
+
+        <div class="chat-area">
+          <div class="msg-user">fix the concurrent permission request race condition in ACP</div>
+
+          <div class="msg-system">
+            <span class="sys-dot"></span>
+            GitHub Copilot &bull; Active session
+          </div>
+
+          <!-- Tool card: Read -->
+          <div style="align-self:flex-start; max-width:75%;">
+            <div class="tool-card read">
+              <div class="tool-card-header" onclick="toggleCard(this)">
+                <span class="tool-icon">&#128196;</span>
+                <span class="tool-name">Read</span>
+                <span class="tool-file">src/process/acp/permission.ts</span>
+                <span class="tool-chevron">&#9656;</span>
+              </div>
+              <div class="tool-card-body">
+                <div class="tool-card-body-inner">
+                  <div class="diff-line context">export async function requestPermission(tool: string) {</div>
+                  <div class="diff-line context">  const pending = getPendingRequest()</div>
+                  <div class="diff-line context">  if (pending) return pending.result // BUG: races here</div>
+                  <div class="diff-line context">  return createPermissionDialog(tool)</div>
+                  <div class="diff-line context">}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool card: Edit (expanded) -->
+          <div style="align-self:flex-start; max-width:75%;">
+            <div class="tool-card edit">
+              <div class="tool-card-header" onclick="toggleCard(this)">
+                <span class="tool-icon">&#9998;</span>
+                <span class="tool-name">Edit</span>
+                <span class="tool-file">src/process/acp/permission.ts</span>
+                <span class="tool-chevron expanded">&#9656;</span>
+              </div>
+              <div class="tool-card-body expanded">
+                <div class="tool-card-body-inner">
+                  <div class="diff-line header">@@ -8,4 +8,12 @@</div>
+                  <div class="diff-line context"> export async function requestPermission(tool: string) {</div>
+                  <div class="diff-line remove">-  const pending = getPendingRequest()</div>
+                  <div class="diff-line remove">-  if (pending) return pending.result</div>
+                  <div class="diff-line add">+  return permissionQueue.enqueue(tool, async () => {</div>
+                  <div class="diff-line add">+    const pending = getPendingRequest(tool)</div>
+                  <div class="diff-line add">+    if (pending) {</div>
+                  <div class="diff-line add">+      return pending.promise</div>
+                  <div class="diff-line add">+    }</div>
+                  <div class="diff-line add">+    return createPermissionDialog(tool)</div>
+                  <div class="diff-line add">+  })</div>
+                  <div class="diff-line context"> }</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg-assistant">
+            <p>I've fixed the race condition by wrapping permission requests in a queue. Now concurrent calls for the same tool will correctly share the pending promise instead of creating duplicate dialogs.</p>
+            <ul>
+              <li>Added <code>permissionQueue.enqueue()</code> to serialize concurrent requests</li>
+              <li>Each tool gets its own queue slot, preventing cross-tool blocking</li>
+              <li>Existing pending requests return the shared promise</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="input-area">
+          <div class="input-box">
+            <div class="input-plus">+</div>
+            <div class="input-text">Send message to GitHub Copilot...</div>
+            <div class="input-send">
+              <svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z"/></svg>
+            </div>
+          </div>
+          <div class="input-model-info">Claude Opus 4.6 (1M context)(Internal only)</div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar -->
+      <div class="right-sidebar">
+        <div class="right-header">Workspace</div>
+        <div class="right-search">Search files...</div>
+        <div class="file-tree">
+          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> process</div>
+          <div class="ft-folder" style="padding-left:36px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> acp</div>
+          <div class="ft-file" style="padding-left:54px;"><span class="ft-file-icon">&#128196;</span> permission.ts</div>
+          <div class="ft-file" style="padding-left:54px;"><span class="ft-file-icon">&#128196;</span> queue.ts</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker</div>
+          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
+          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h3>Tab 1: Unified Sidebar &mdash; After Import <span class="key-change">Core Design</span></h3>
+    <p>Imported CLI sessions are <strong>first-class conversations</strong> mixed into the same timeline as native AionUI conversations. There is no separate section, no tabs, no "imported" header. They appear by time and workspace, exactly like native conversations.</p>
+    <ul>
+      <li>The <strong>source dot</strong> (6px colored circle) at the bottom-right of the agent icon indicates origin: orange = Claude Code, blue = Copilot CLI, green = Codex</li>
+      <li>No dot = native AionUI conversation (created within the app)</li>
+      <li>The <code>...</code> menu on hover is <strong>identical</strong> for all conversations: Copy Chat Reference, Rename, Export, Pin, Delete</li>
+      <li>Conversations are grouped by time (Today, Yesterday, Last 7 Days) then by workspace &mdash; same hierarchy for native and imported</li>
+      <li>The active conversation "fix acp race condition" is a native AionUI session shown with normal chat view</li>
+    </ul>
+  </div>
+</div>
+
+<!-- =================================================================
+     TAB 2: IMPORTED SESSION — FULL CHAT VIEW
+     ================================================================= -->
+<div class="option-panel" id="panel2">
+  <div class="mockup-frame">
+    <div class="mockup-inner">
+
+      <!-- Left Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-traffic">
+          <div class="traffic-dots">
+            <div class="traffic-dot close"></div>
+            <div class="traffic-dot minimize"></div>
+            <div class="traffic-dot maximize"></div>
+          </div>
+          <div class="hamburger-icon">&#9776;</div>
+        </div>
+
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+          </div>
+          <span class="sidebar-logo-text">AionUi</span>
+        </div>
+
+        <div class="new-chat-row">
+          <button class="new-chat-btn">
+            <span class="plus">+</span> New Chat
+          </button>
+          <div class="batch-icon">&#9776;</div>
+        </div>
+
+        <div class="conv-list">
+          <div class="time-label">Today</div>
+          <div class="workspace-label"><span class="chevron">&#9662;</span> AionUi</div>
+
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">fix acp race condition</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Active: imported Claude Code session -->
+          <div class="conv-row active">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">refactor auth middleware</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> claude-toolkit</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">plan knowledge system</span>
+            <div class="conv-menu">...</div>
+          </div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">update shared rules</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <div class="time-label">Yesterday</div>
+          <div class="workspace-label"><span class="chevron">&#9662;</span> teleX</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+              <div class="source-dot blue"></div>
+            </div>
+            <span class="conv-name">catch up project context</span>
+            <div class="conv-menu">...</div>
+          </div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">implement cron system</span>
+            <div class="conv-menu">...</div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="settings-row">
+            <span class="gear">&#9881;</span> Settings
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content — Imported Claude Code session rendered as full chat -->
+      <div class="main-content">
+        <div class="tab-bar">
+          <div class="tab-item active">refactor auth middleware <span class="tab-close">&times;</span></div>
+          <div class="tab-add">+</div>
+        </div>
+
+        <div class="header-bar">
+          <div class="header-left">
+            <span class="model-name">Claude Opus 4.6 (1M context)</span>
+            <span class="internal-tag">(Internal only)</span>
+          </div>
+          <div class="header-center">
+            <div class="mode-toggle">
+              <button class="mode-toggle-btn rich-ui active">
+                <span class="toggle-icon">&#128172;</span>
+                Rich UI
+              </button>
+              <button class="mode-toggle-btn terminal">
+                <span class="toggle-icon">&gt;_</span>
+                Terminal
+              </button>
+            </div>
+          </div>
+          <div class="header-right">
+            <div class="agent-icon-wrap">
+              <div class="agent-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot-header" style="background: #ff7d00;"></div>
+            </div>
+            Claude Code
+          </div>
+        </div>
+
+        <div class="chat-area">
+          <!-- User message -->
+          <div class="msg-user">refactor the auth middleware to use JWT validation</div>
+
+          <div class="msg-system">
+            <span class="sys-dot"></span>
+            Claude Code &bull; Active session
+          </div>
+
+          <!-- Tool card: Read (collapsed) -->
+          <div style="align-self:flex-start; max-width:75%;">
+            <div class="tool-card read">
+              <div class="tool-card-header" onclick="toggleCard(this)">
+                <span class="tool-icon">&#128196;</span>
+                <span class="tool-name">Read</span>
+                <span class="tool-file">src/auth/middleware.ts</span>
+                <span class="tool-chevron">&#9656;</span>
+              </div>
+              <div class="tool-card-body">
+                <div class="tool-card-body-inner">
+                  <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
+                  <div class="diff-line context">import { verifySession } from './session'</div>
+                  <div class="diff-line context">&nbsp;</div>
+                  <div class="diff-line context">export function authMiddleware(req: Request, res: Response, next: NextFunction) {</div>
+                  <div class="diff-line context">  const token = req.headers.authorization?.split(' ')[1]</div>
+                  <div class="diff-line context">  if (!token) return res.status(401).json({ error: 'No token' })</div>
+                  <div class="diff-line context">  // ... legacy session-based validation</div>
+                  <div class="diff-line context">}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool card: Edit (expanded with diff) -->
+          <div style="align-self:flex-start; max-width:75%;">
+            <div class="tool-card edit">
+              <div class="tool-card-header" onclick="toggleCard(this)">
+                <span class="tool-icon">&#9998;</span>
+                <span class="tool-name">Edit</span>
+                <span class="tool-file">src/auth/middleware.ts</span>
+                <span class="tool-chevron expanded">&#9656;</span>
+              </div>
+              <div class="tool-card-body expanded">
+                <div class="tool-card-body-inner">
+                  <div class="diff-line header">@@ -1,6 +1,8 @@</div>
+                  <div class="diff-line context"> import { Request, Response, NextFunction } from 'express'</div>
+                  <div class="diff-line remove">-import { verifySession } from './session'</div>
+                  <div class="diff-line add">+import jwt from 'jsonwebtoken'</div>
+                  <div class="diff-line add">+import { JWT_SECRET } from '../config/env'</div>
+                  <div class="diff-line context">&nbsp;</div>
+                  <div class="diff-line context"> export function authMiddleware(req: Request, res: Response, next: NextFunction) {</div>
+                  <div class="diff-line context">   const token = req.headers.authorization?.split(' ')[1]</div>
+                  <div class="diff-line context">   if (!token) return res.status(401).json({ error: 'No token' })</div>
+                  <div class="diff-line remove">-  const session = verifySession(token)</div>
+                  <div class="diff-line remove">-  if (!session) return res.status(401).json({ error: 'Invalid' })</div>
+                  <div class="diff-line remove">-  req.user = session.user</div>
+                  <div class="diff-line add">+  try {</div>
+                  <div class="diff-line add">+    const decoded = jwt.verify(token, JWT_SECRET)</div>
+                  <div class="diff-line add">+    req.user = decoded as JwtPayload</div>
+                  <div class="diff-line add">+  } catch (err) {</div>
+                  <div class="diff-line add">+    return res.status(401).json({ error: 'Invalid or expired token' })</div>
+                  <div class="diff-line add">+  }</div>
+                  <div class="diff-line context">   next()</div>
+                  <div class="diff-line context"> }</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Assistant message -->
+          <div class="msg-assistant">
+            <p>I've updated the auth middleware to use JWT validation. The key changes are:</p>
+            <ul>
+              <li>Replaced <code>verifySession</code> with <code>jwt.verify()</code> from <code>jsonwebtoken</code></li>
+              <li>Added proper try/catch for expired and malformed tokens</li>
+              <li>Decoded payload is attached to <code>req.user</code></li>
+            </ul>
+          </div>
+
+          <!-- Second user message -->
+          <div class="msg-user">now add a refresh token rotation mechanism</div>
+
+          <!-- Tool card: Read -->
+          <div style="align-self:flex-start; max-width:75%;">
+            <div class="tool-card read">
+              <div class="tool-card-header" onclick="toggleCard(this)">
+                <span class="tool-icon">&#128196;</span>
+                <span class="tool-name">Read</span>
+                <span class="tool-file">src/auth/tokens.ts</span>
+                <span class="tool-chevron">&#9656;</span>
+              </div>
+              <div class="tool-card-body">
+                <div class="tool-card-body-inner">
+                  <div class="diff-line context">export function generateToken(payload: JwtPayload) {</div>
+                  <div class="diff-line context">  return jwt.sign(payload, JWT_SECRET, { expiresIn: '1h' })</div>
+                  <div class="diff-line context">}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Tool card: Edit -->
+          <div style="align-self:flex-start; max-width:75%;">
+            <div class="tool-card edit">
+              <div class="tool-card-header" onclick="toggleCard(this)">
+                <span class="tool-icon">&#9998;</span>
+                <span class="tool-name">Edit</span>
+                <span class="tool-file">src/auth/tokens.ts</span>
+                <span class="tool-chevron">&#9656;</span>
+              </div>
+              <div class="tool-card-body">
+                <div class="tool-card-body-inner">
+                  <div class="diff-line header">@@ -1,3 +1,18 @@</div>
+                  <div class="diff-line add">+export function rotateRefreshToken(oldToken: string) {</div>
+                  <div class="diff-line add">+  const decoded = jwt.verify(oldToken, REFRESH_SECRET)</div>
+                  <div class="diff-line add">+  revokeToken(oldToken)</div>
+                  <div class="diff-line add">+  return generateRefreshToken(decoded.sub)</div>
+                  <div class="diff-line add">+}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="msg-assistant">
+            <p>Added refresh token rotation. Each time a refresh token is used, the old one is revoked and a new one is issued. This prevents token replay attacks.</p>
+          </div>
+        </div>
+
+        <!-- Input box — user CAN continue the conversation -->
+        <div class="input-area">
+          <div class="input-box">
+            <div class="input-plus">+</div>
+            <div class="input-text">Send message to Claude Code...</div>
+            <div class="input-send">
+              <svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z"/></svg>
+            </div>
+          </div>
+          <div class="input-model-info">Claude Opus 4.6 (1M context)(Internal only)</div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar -->
+      <div class="right-sidebar">
+        <div class="right-header">Workspace</div>
+        <div class="right-search">Search files...</div>
+        <div class="file-tree">
+          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth</div>
+          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> middleware.ts</div>
+          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> tokens.ts</div>
+          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> session.ts</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker</div>
+          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
+          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h3>Tab 2: Imported Session &mdash; Full Chat View <span class="key-change">First-Class</span></h3>
+    <p>An imported Claude Code session looks <strong>exactly</strong> like a native conversation. The JSONL data is converted to TMessage format and rendered with the same tool call cards, user bubbles, and assistant text. The only visual difference is the orange source dot on the agent icon in the header.</p>
+    <ul>
+      <li>Header right shows "Claude Code" with the orange source dot &mdash; the only indicator this is imported</li>
+      <li>Tool cards are fully interactive: expandable/collapsible with colored left borders (blue=Read, orange=Edit)</li>
+      <li>The input box says "Send message to Claude Code..." &mdash; user <strong>can</strong> continue the conversation (resume via ACP)</li>
+      <li>Multiple user turns and tool calls render identically to native ACP messages</li>
+      <li>The mode toggle (Rich UI / Terminal) is present and functional &mdash; user can switch to terminal mode</li>
+    </ul>
+  </div>
+</div>
+
+<!-- =================================================================
+     TAB 3: COPY CHAT REFERENCE + DELETE BEHAVIOR
+     ================================================================= -->
+<div class="option-panel" id="panel3">
+
+  <!-- Part 1: Copy Chat Reference -->
+  <div class="mockup-frame" style="margin-bottom: 28px; position: relative;">
+    <div class="mockup-inner" style="height: 460px;">
+
+      <!-- Left Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-traffic">
+          <div class="traffic-dots">
+            <div class="traffic-dot close"></div>
+            <div class="traffic-dot minimize"></div>
+            <div class="traffic-dot maximize"></div>
+          </div>
+          <div class="hamburger-icon">&#9776;</div>
+        </div>
+
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+          </div>
+          <span class="sidebar-logo-text">AionUi</span>
+        </div>
+
+        <div class="new-chat-row">
+          <button class="new-chat-btn">
+            <span class="plus">+</span> New Chat
+          </button>
+          <div class="batch-icon">&#9776;</div>
+        </div>
+
+        <div class="conv-list">
+          <div class="time-label">Today</div>
+          <div class="workspace-label"><span class="chevron">&#9662;</span> AionUi</div>
+
+          <div class="conv-row active">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">fix acp race condition</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <!-- Row with open context menu -->
+          <div class="conv-row" style="position: relative; background: var(--bg-hover);">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">refactor auth middleware</span>
+            <div class="conv-menu" style="display: flex;">...</div>
+
+            <!-- Context Menu - VISIBLE -->
+            <div class="context-menu visible" style="top: 28px; right: 4px; left: auto;">
+              <div class="context-menu-item highlight">
+                <span class="cm-icon">&#128203;</span> Copy Chat Reference
+              </div>
+              <div class="context-menu-item">
+                <span class="cm-icon">&#9998;</span> Rename
+              </div>
+              <div class="context-menu-item">
+                <span class="cm-icon">&#128228;</span> Export
+              </div>
+              <div class="context-menu-item">
+                <span class="cm-icon">&#128204;</span> Pin
+              </div>
+              <div class="context-menu-divider"></div>
+              <div class="context-menu-item danger">
+                <span class="cm-icon">&#128465;</span> Delete
+              </div>
+            </div>
+          </div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> claude-toolkit</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">plan knowledge system</span>
+            <div class="conv-menu">...</div>
+          </div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">update shared rules</span>
+            <div class="conv-menu">...</div>
+          </div>
+
+          <div class="time-label">Yesterday</div>
+          <div class="workspace-label"><span class="chevron">&#9662;</span> teleX</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+              <div class="source-dot blue"></div>
+            </div>
+            <span class="conv-name">catch up project context</span>
+            <div class="conv-menu">...</div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="settings-row">
+            <span class="gear">&#9881;</span> Settings
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content (dimmed/blurred to focus on sidebar interaction) -->
+      <div class="main-content" style="opacity: 0.5;">
+        <div class="tab-bar">
+          <div class="tab-item active">fix acp race condition <span class="tab-close">&times;</span></div>
+          <div class="tab-add">+</div>
+        </div>
+        <div class="header-bar">
+          <div class="header-left">
+            <span class="model-name">Claude Opus 4.6 (1M context)</span>
+          </div>
+          <div class="header-center"></div>
+          <div class="header-right">
+            <div class="agent-icon-wrap">
+              <div class="agent-icon copilot">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            GitHub Copilot
+          </div>
+        </div>
+        <div class="chat-area">
+          <div class="msg-user" style="filter: blur(1px);">fix the concurrent permission request race condition in ACP</div>
+          <div class="msg-assistant" style="filter: blur(1px);"><p>I've fixed the race condition by wrapping permission requests...</p></div>
+        </div>
+        <div class="input-area">
+          <div class="input-box" style="filter: blur(1px);">
+            <div class="input-plus">+</div>
+            <div class="input-text">Send message to GitHub Copilot...</div>
+            <div class="input-send"><svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z"/></svg></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar -->
+      <div class="right-sidebar" style="opacity: 0.5;">
+        <div class="right-header">Workspace</div>
+        <div class="right-search">Search files...</div>
+        <div class="file-tree">
+          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast visible" style="position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);">
+      <span class="toast-check">&#10003;</span>
+      Reference copied:
+      <span class="toast-path">~/.claude/projects/-Users-lili-Projects-AionUi/abc123.jsonl</span>
+    </div>
+  </div>
+
+  <!-- Part 2: Delete Confirmation -->
+  <div class="mockup-frame" style="position: relative;">
+    <div class="mockup-inner" style="height: 400px;">
+
+      <!-- Left Sidebar -->
+      <div class="sidebar" style="opacity: 0.4;">
+        <div class="sidebar-traffic">
+          <div class="traffic-dots">
+            <div class="traffic-dot close"></div>
+            <div class="traffic-dot minimize"></div>
+            <div class="traffic-dot maximize"></div>
+          </div>
+          <div class="hamburger-icon">&#9776;</div>
+        </div>
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+          </div>
+          <span class="sidebar-logo-text">AionUi</span>
+        </div>
+        <div class="conv-list">
+          <div class="time-label">Today</div>
+          <div class="workspace-label"><span class="chevron">&#9662;</span> AionUi</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">fix acp race condition</span>
+          </div>
+          <div class="conv-row" style="background: var(--red-light);">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">implement cron system</span>
+          </div>
+        </div>
+        <div class="sidebar-footer">
+          <div class="settings-row">
+            <span class="gear">&#9881;</span> Settings
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content -->
+      <div class="main-content" style="opacity: 0.3;">
+        <div class="tab-bar">
+          <div class="tab-item active">fix acp race condition <span class="tab-close">&times;</span></div>
+          <div class="tab-add">+</div>
+        </div>
+        <div class="header-bar">
+          <div class="header-left"><span class="model-name">Claude Opus 4.6 (1M context)</span></div>
+          <div class="header-center"></div>
+          <div class="header-right"></div>
+        </div>
+        <div class="chat-area"></div>
+        <div class="input-area">
+          <div class="input-box">
+            <div class="input-text">Send message...</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar -->
+      <div class="right-sidebar" style="opacity: 0.3;">
+        <div class="right-header">Workspace</div>
+      </div>
+
+      <!-- Delete Modal Overlay -->
+      <div class="modal-overlay">
+        <div class="modal">
+          <div class="modal-title">Delete conversation</div>
+          <div class="modal-body">
+            This will remove the conversation from AionUI. The original CLI session file will not be affected.
+          </div>
+          <div class="modal-actions">
+            <button class="modal-btn outline">Cancel</button>
+            <button class="modal-btn danger">Delete</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h3>Tab 3: Copy Chat Reference + Delete Behavior</h3>
+    <p><strong>Part 1 (top):</strong> The <code>...</code> context menu is <strong>identical</strong> for native and imported conversations. "Copy Chat Reference" is highlighted &mdash; it copies the original JSONL file path to the clipboard. A toast notification confirms the action at the bottom.</p>
+    <p style="margin-top: 8px;"><strong>Part 2 (bottom):</strong> The delete confirmation modal clarifies that deleting an imported conversation <strong>only removes it from AionUI's SQLite database</strong>. The original CLI session JSONL file is never modified or deleted. This is a safe, non-destructive operation.</p>
+    <ul>
+      <li>The context menu has the same items for all conversations: Copy Chat Reference, Rename, Export, Pin, Delete</li>
+      <li>No "read-only" limitation &mdash; imported conversations are fully editable (rename, pin, delete)</li>
+      <li>Copy Chat Reference returns the source JSONL path for imported sessions (useful for <code>--resume</code>)</li>
+      <li>Delete only removes from AionUI &mdash; the source file is preserved</li>
+    </ul>
+  </div>
+</div>
+
+<!-- =================================================================
+     TAB 4: SETTINGS — CLI HISTORY IMPORT
+     ================================================================= -->
+<div class="option-panel" id="panel4">
+  <div class="mockup-frame">
+    <div class="mockup-inner">
+
+      <!-- Left Sidebar -->
+      <div class="sidebar">
+        <div class="sidebar-traffic">
+          <div class="traffic-dots">
+            <div class="traffic-dot close"></div>
+            <div class="traffic-dot minimize"></div>
+            <div class="traffic-dot maximize"></div>
+          </div>
+          <div class="hamburger-icon">&#9776;</div>
+        </div>
+
+        <div class="sidebar-logo">
+          <div class="sidebar-logo-icon">
+            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
+          </div>
+          <span class="sidebar-logo-text">AionUi</span>
+        </div>
+
+        <div class="new-chat-row">
+          <button class="new-chat-btn">
+            <span class="plus">+</span> New Chat
+          </button>
+          <div class="batch-icon">&#9776;</div>
+        </div>
+
+        <div class="conv-list">
+          <div class="time-label">Today</div>
+          <div class="workspace-label"><span class="chevron">&#9662;</span> AionUi</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">fix acp race condition</span>
+          </div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">refactor auth middleware</span>
+          </div>
+
+          <div class="workspace-label"><span class="chevron">&#9662;</span> claude-toolkit</div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon claude-code">
+                <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><path d="M8 3L4 7h3v6h2V7h3L8 3z"/></svg>
+              </div>
+              <div class="source-dot orange"></div>
+            </div>
+            <span class="conv-name">plan knowledge system</span>
+          </div>
+          <div class="conv-row">
+            <div class="conv-icon-wrap">
+              <div class="conv-icon copilot">
+                <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+              </div>
+            </div>
+            <span class="conv-name">update shared rules</span>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <div class="settings-row" style="background: var(--bg-hover); color: var(--text-secondary);">
+            <span class="gear">&#9881;</span> Settings
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content — Settings Page -->
+      <div class="main-content">
+        <div class="tab-bar">
+          <div class="tab-item active">&#9881; Settings <span class="tab-close">&times;</span></div>
+          <div class="tab-add">+</div>
+        </div>
+
+        <div class="settings-page">
+          <!-- Settings Navigation -->
+          <div class="settings-nav">
+            <div class="settings-nav-item">
+              <span class="nav-icon">&#9881;</span> General
+            </div>
+            <div class="settings-nav-item">
+              <span class="nav-icon">&#128172;</span> Chat
+            </div>
+            <div class="settings-nav-item active">
+              <span class="nav-icon">&#9002;</span> AgentCLI
+            </div>
+            <div class="settings-nav-item">
+              <span class="nav-icon">&#128273;</span> API Keys
+            </div>
+            <div class="settings-nav-item">
+              <span class="nav-icon">&#128268;</span> Plugins
+            </div>
+            <div class="settings-nav-item">
+              <span class="nav-icon">&#128196;</span> About
+            </div>
+          </div>
+
+          <!-- Settings Body -->
+          <div class="settings-body">
+            <div class="settings-title">AgentCLI</div>
+            <div class="settings-subtitle">Configure CLI agent behavior and history import settings</div>
+
+            <!-- Section 1: Default Conversation Mode (from Step 1) -->
+            <div class="settings-section">
+              <div class="settings-section-title">Default Conversation Mode</div>
+
+              <div class="settings-item" style="background: var(--accent-lighter); margin: 0 -16px; padding: 14px 16px; border-radius: var(--radius-md); border-bottom: none;">
+                <div class="settings-item-left">
+                  <div class="settings-item-label">Default mode for new conversations</div>
+                  <div class="settings-item-desc">Choose how new conversations start. You can switch anytime via the toggle in the chat header.</div>
+                  <div class="settings-mode-options">
+                    <div class="settings-mode-card selected">
+                      <div class="smc-check">&#10003;</div>
+                      <div class="smc-header">
+                        <span class="smc-icon">&#128172;</span> Rich UI (ACP)
+                      </div>
+                      <div class="smc-desc">Structured tool cards, permission dialogs, expandable steps</div>
+                    </div>
+                    <div class="settings-mode-card">
+                      <div class="smc-check">&#10003;</div>
+                      <div class="smc-header">
+                        <span class="smc-icon-term">&gt;_</span> Terminal
+                      </div>
+                      <div class="smc-desc">Raw terminal, full interactive CLI experience</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Section 2: CLI History Import -->
+            <div class="settings-section">
+              <div class="settings-section-title">CLI History Import</div>
+
+              <!-- Master toggle -->
+              <div class="settings-item">
+                <div class="settings-item-left">
+                  <div class="settings-item-label">Import CLI session history</div>
+                  <div class="settings-item-desc">Automatically discover and import sessions from CLI tools into your conversation sidebar</div>
+                </div>
+                <div class="settings-item-right">
+                  <div class="toggle-switch on"></div>
+                </div>
+              </div>
+
+              <!-- Per-CLI rows -->
+              <div style="padding: 12px 0;">
+                <!-- Claude Code -->
+                <div class="cli-import-row">
+                  <div class="cli-dot" style="background: #ff7d00;"></div>
+                  <div class="cli-info">
+                    <div class="cli-name">Claude Code</div>
+                    <div class="cli-path">Imports sessions from ~/.claude/</div>
+                  </div>
+                  <div class="cli-count">47 sessions found</div>
+                  <div class="toggle-switch on" style="width: 36px; height: 20px;"></div>
+                </div>
+
+                <!-- GitHub Copilot -->
+                <div class="cli-import-row">
+                  <div class="cli-dot" style="background: #165dff;"></div>
+                  <div class="cli-info">
+                    <div class="cli-name">GitHub Copilot</div>
+                    <div class="cli-path">Imports sessions from ~/.copilot/</div>
+                  </div>
+                  <div class="cli-count">23 sessions found</div>
+                  <div class="toggle-switch on" style="width: 36px; height: 20px;"></div>
+                </div>
+
+                <!-- Codex (disabled) -->
+                <div class="cli-import-row" style="opacity: 0.6;">
+                  <div class="cli-dot" style="background: #00b42a;"></div>
+                  <div class="cli-info">
+                    <div class="cli-name">Codex</div>
+                    <div class="cli-path">Imports sessions from ~/.codex/</div>
+                  </div>
+                  <div class="cli-count">5 sessions found</div>
+                  <div class="toggle-switch" style="width: 36px; height: 20px;"></div>
+                </div>
+              </div>
+
+              <!-- Sync button -->
+              <div style="display: flex; align-items: center; gap: 12px; padding: 4px 0;">
+                <button class="btn-outline-sm">
+                  &#8635; Sync now
+                </button>
+                <div class="settings-note" style="margin: 0;">Only reads session metadata and content. Source files are never modified.</div>
+              </div>
+
+              <!-- Progress indicator -->
+              <div class="progress-bar-wrap">
+                <div class="progress-text">Background conversion: 68/75 sessions processed</div>
+                <div class="progress-bar" style="max-width: 180px;">
+                  <div class="progress-bar-fill" style="width: 90.6%;"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Sidebar (hidden in settings view typically, but shown for layout consistency) -->
+      <div class="right-sidebar">
+        <div class="right-header">Workspace</div>
+        <div class="right-search">Search files...</div>
+        <div class="file-tree">
+          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> process</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
+          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> App.tsx</div>
+          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> main.tsx</div>
+          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker</div>
+          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
+          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="comparison">
+    <h3>Tab 4: Settings &mdash; CLI History Import</h3>
+    <p>The AgentCLI settings page combines the <strong>Default Conversation Mode</strong> (from Step 1) with the new <strong>CLI History Import</strong> section. The settings nav highlights "AgentCLI" as the active tab, grouping all CLI-related configuration in one place.</p>
+    <ul>
+      <li>Master toggle controls whether CLI history import is active at all</li>
+      <li>Per-CLI rows show each supported CLI tool with its colored dot, source path, session count, and individual toggle</li>
+      <li>Claude Code (orange) and GitHub Copilot (blue) are enabled; Codex (green) is disabled and dimmed</li>
+      <li>"Sync now" button triggers a manual re-scan of all enabled CLI directories</li>
+      <li>Privacy note: "Only reads session metadata and content. Source files are never modified."</li>
+      <li>Progress indicator shows background conversion status during initial import (68/75 sessions)</li>
+      <li>The toggle switches in CLI rows are slightly smaller (36x20px) to fit the compact row layout</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+  // Tab switching
+  const tabs = document.querySelectorAll('.option-tab');
+  const panels = document.querySelectorAll('.option-panel');
+
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      panels.forEach(p => p.classList.remove('active'));
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.target).classList.add('active');
+    });
+  });
+
+  // Tool card expand/collapse
+  function toggleCard(header) {
+    const chevron = header.querySelector('.tool-chevron');
+    const body = header.parentElement.querySelector('.tool-card-body');
+    chevron.classList.toggle('expanded');
+    body.classList.toggle('expanded');
+  }
+
+  // Toggle switches (interactive)
+  document.querySelectorAll('.toggle-switch').forEach(toggle => {
+    toggle.addEventListener('click', () => {
+      toggle.classList.toggle('on');
+    });
+  });
+
+  // Settings mode cards (interactive)
+  document.querySelectorAll('.settings-mode-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const parent = card.closest('.settings-mode-options');
+      parent.querySelectorAll('.settings-mode-card').forEach(c => c.classList.remove('selected'));
+      card.classList.add('selected');
+    });
+  });
+</script>
+</body>
+</html>
