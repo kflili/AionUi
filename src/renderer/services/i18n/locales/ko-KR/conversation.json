@@ -66,7 +66,9 @@
     "pinFailed": "Pin operation failed",
     "pinnedSection": "Pinned",
     "deleteSuccess": "삭제되었습니다",
-    "deleteFailed": "삭제에 실패했습니다"
+    "deleteFailed": "삭제에 실패했습니다",
+    "copyReference": "채팅 참조 복사",
+    "copyReferenceSuccess": "채팅 참조가 복사되었습니다"
   },
   "historySearch": {
     "tooltip": "메시지 검색",

@@ -66,7 +66,9 @@
     "pinFailed": "Pin operation failed",
     "pinnedSection": "Pinned",
     "deleteSuccess": "Deleted successfully",
-    "deleteFailed": "Delete failed"
+    "deleteFailed": "Delete failed",
+    "copyReference": "Copy Chat Reference",
+    "copyReferenceSuccess": "Chat reference copied"
   },
   "historySearch": {
     "tooltip": "Search messages",

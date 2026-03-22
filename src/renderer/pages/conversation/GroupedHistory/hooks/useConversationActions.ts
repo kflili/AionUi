@@ -242,6 +242,18 @@ export const useConversationActions = ({
     [t]
   );
 
+  const handleCopyReference = useCallback(
+    (conversation: TChatConversation) => {
+      const extra = conversation.extra as Record<string, unknown>;
+      const reference = extra?.sourceFilePath ? String(extra.sourceFilePath) : `aionui:${conversation.id}`;
+
+      void navigator.clipboard.writeText(reference).then(() => {
+        Message.success(t('conversation.history.copyReferenceSuccess'));
+      });
+    },
+    [t]
+  );
+
   const handleMenuVisibleChange = useCallback((conversationId: string, visible: boolean) => {
     setDropdownVisibleId(visible ? conversationId : null);
   }, []);
@@ -263,6 +275,7 @@ export const useConversationActions = ({
     handleRenameConfirm,
     handleRenameCancel,
     handleTogglePin,
+    handleCopyReference,
     handleMenuVisibleChange,
     handleOpenMenu,
   };
