@@ -79,6 +79,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     handleRenameConfirm,
     handleRenameCancel,
     handleTogglePin,
+    handleCopyReference,
     handleMenuVisibleChange,
     handleOpenMenu,
   } = useConversationActions({
@@ -137,6 +138,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       onDelete: handleDeleteClick,
       onExport: handleExportConversation,
       onTogglePin: handleTogglePin,
+      onCopyReference: handleCopyReference,
       getJobStatus,
     }),
     [
@@ -156,6 +158,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       handleDeleteClick,
       handleExportConversation,
       handleTogglePin,
+      handleCopyReference,
       getJobStatus,
     ]
   );

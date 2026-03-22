@@ -66,7 +66,9 @@
     "pinFailed": "置顶操作失败",
     "pinnedSection": "置顶",
     "deleteSuccess": "删除成功",
-    "deleteFailed": "删除失败"
+    "deleteFailed": "删除失败",
+    "copyReference": "复制会话引用",
+    "copyReferenceSuccess": "会话引用已复制"
   },
   "historySearch": {
     "tooltip": "检索会话",

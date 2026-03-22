@@ -1038,3 +1038,13 @@ export const channel = {
   ),
   userAuthorized: bridge.buildEmitter<IChannelUser>('channel.user-authorized'),
 };
+
+// CLI history utilities
+export const cliHistory = {
+  /** Resolve a CLI session ID to its JSONL file path on disk. Scans backend-specific directories. */
+  resolveSessionFilePath: bridge.buildProvider<string | null, { sessionId: string; backend: string }>(
+    'cli-history.resolve-session-file-path'
+  ),
+  /** Get the AionUI database file path for fallback references */
+  getDbPath: bridge.buildProvider<string, void>('cli-history.get-db-path'),
+};

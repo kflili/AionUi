@@ -7,6 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
 import { emitter } from '@/renderer/utils/emitter';
+import { copyText } from '@/renderer/utils/ui/clipboard';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
 import { Message, Modal } from '@arco-design/web-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -242,6 +243,44 @@ export const useConversationActions = ({
     [t]
   );
 
+  const handleCopyReference = useCallback(
+    (conversation: TChatConversation) => {
+      const extra = conversation.extra as Record<string, unknown>;
+
+      const resolveReference = async (): Promise<string> => {
+        // 1. Imported CLI session — use source file path directly
+        if (extra?.sourceFilePath) {
+          return String(extra.sourceFilePath);
+        }
+
+        // 2. ACP/CLI session — resolve JSONL path from acpSessionId + backend
+        if (extra?.acpSessionId) {
+          const filePath = await ipcBridge.cliHistory.resolveSessionFilePath.invoke({
+            sessionId: String(extra.acpSessionId),
+            backend: String(extra.backend ?? 'claude'),
+          });
+          if (filePath) {
+            return filePath;
+          }
+        }
+
+        // 3. Fallback — aionui:{id} with db path hint
+        const dbPath = await ipcBridge.cliHistory.getDbPath.invoke();
+        return `aionui:${conversation.id} @ ${dbPath}`;
+      };
+
+      void resolveReference()
+        .then((reference) => copyText(reference))
+        .then(() => {
+          Message.success(t('conversation.history.copyReferenceSuccess'));
+        })
+        .catch(() => {
+          Message.error(t('common.copyFailed'));
+        });
+    },
+    [t]
+  );
+
   const handleMenuVisibleChange = useCallback((conversationId: string, visible: boolean) => {
     setDropdownVisibleId(visible ? conversationId : null);
   }, []);
@@ -263,6 +302,7 @@ export const useConversationActions = ({
     handleRenameConfirm,
     handleRenameCancel,
     handleTogglePin,
+    handleCopyReference,
     handleMenuVisibleChange,
     handleOpenMenu,
   };

@@ -111,11 +111,6 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
       const transformedMessage = transformMessage(message);
       switch (message.type) {
         case 'thought':
-          // Auto-recover running state if thought arrives after finish
-          if (!runningRef.current) {
-            setRunning(true);
-            runningRef.current = true;
-          }
           throttledSetThought(message.data as ThoughtData);
           break;
         case 'start':
@@ -147,22 +142,12 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
         case 'content': {
           // Mark that current turn has content output
           hasContentInTurnRef.current = true;
-          // Auto-recover running state if content arrives after finish
-          if (!runningRef.current) {
-            setRunning(true);
-            runningRef.current = true;
-          }
           // Clear thought when final answer arrives
           setThought({ subject: '', description: '' });
           addOrUpdateMessage(transformedMessage);
           break;
         }
         case 'agent_status': {
-          // Auto-recover running state if agent_status arrives after finish
-          if (!runningRef.current) {
-            setRunning(true);
-            runningRef.current = true;
-          }
           // Update ACP/Agent status
           const agentData = message.data as {
             status?: 'connecting' | 'connected' | 'authenticated' | 'session_active' | 'disconnected' | 'error';
@@ -170,8 +155,9 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           };
           if (agentData?.status) {
             setAcpStatus(agentData.status);
-            // Reset running state when authentication is complete
-            if (['authenticated', 'session_active'].includes(agentData.status)) {
+            // Reset running state when authentication is complete (only during initial
+            // connection, not while AI is actively processing a user message)
+            if (['authenticated', 'session_active'].includes(agentData.status) && !aiProcessingRef.current) {
               setRunning(false);
               runningRef.current = false;
             }
@@ -190,11 +176,6 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           addOrUpdateMessage(transformedMessage);
           break;
         case 'acp_permission':
-          // Auto-recover running state if permission request arrives after finish
-          if (!runningRef.current) {
-            setRunning(true);
-            runningRef.current = true;
-          }
           addOrUpdateMessage(transformedMessage);
           break;
         case 'acp_model_info':
@@ -247,11 +228,6 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           }
           break;
         default:
-          // Auto-recover running state if other messages arrive after finish
-          if (!runningRef.current) {
-            setRunning(true);
-            runningRef.current = true;
-          }
           addOrUpdateMessage(transformedMessage);
           break;
       }
