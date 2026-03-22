@@ -6,3 +6,5 @@
 
 export type { SessionMetadata, SessionSourceId, SessionSourceProvider } from './types';
 export { ClaudeCodeProvider } from './providers/claude';
+export { CopilotProvider } from './providers/copilot';
+export { convertCopilotJsonl } from './converters/copilot';
