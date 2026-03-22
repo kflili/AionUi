@@ -343,6 +343,10 @@ export interface IConfirmation<Option extends any = any> {
  * @description 将后端返回的消息转换为前端消息
  * */
 export const transformMessage = (message: IResponseMessage): TMessage => {
+  // Capture receipt timestamp so DB ordering reflects when messages arrived,
+  // not when they were batched and persisted (which can be 2s later).
+  const createdAt = Date.now();
+
   switch (message.type) {
     case 'error': {
       return {
@@ -351,6 +355,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'center',
         conversation_id: message.conversation_id,
+        createdAt,
         content: {
           content: message.data as string,
           type: 'error',
@@ -367,6 +372,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: message.type === 'content' ? 'left' : 'right',
         conversation_id: message.conversation_id,
+        createdAt,
         content: isRichData
           ? {
               content: (data as { content: string; cronMeta?: CronMessageMeta }).content,
@@ -382,6 +388,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         conversation_id: message.conversation_id,
         position: 'left',
+        createdAt,
         content: message.data as any,
       };
     }
@@ -391,6 +398,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         id: uuid(),
         msg_id: message.msg_id,
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
@@ -401,6 +409,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'center',
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
@@ -411,6 +420,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'left',
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
@@ -421,6 +431,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'left',
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
@@ -431,6 +442,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'left',
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
@@ -441,6 +453,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'left',
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
@@ -451,6 +464,7 @@ export const transformMessage = (message: IResponseMessage): TMessage => {
         msg_id: message.msg_id,
         position: 'left',
         conversation_id: message.conversation_id,
+        createdAt,
         content: message.data as any,
       };
     }
