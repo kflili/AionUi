@@ -239,7 +239,8 @@ Modify:
 
 - [ ] "Copy Chat Reference" action in conversation `...` menu
 - [ ] Copies correct file path for imported sessions (from `extra.sourceFilePath`)
-- [ ] Copies `aionui:{id}` for native sessions
+- [ ] Resolves JSONL path for ACP sessions via `acpSessionId` (Claude Code sessions)
+- [ ] Falls back to `aionui:{id} @ {dbPath}` for non-ACP native sessions
 - [ ] Agent can paste the reference and read the conversation using existing tools
 
 ### CLI History Import
