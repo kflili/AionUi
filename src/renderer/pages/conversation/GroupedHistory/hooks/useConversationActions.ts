@@ -246,9 +246,30 @@ export const useConversationActions = ({
   const handleCopyReference = useCallback(
     (conversation: TChatConversation) => {
       const extra = conversation.extra as Record<string, unknown>;
-      const reference = extra?.sourceFilePath ? String(extra.sourceFilePath) : `aionui:${conversation.id}`;
 
-      void copyText(reference)
+      const resolveReference = async (): Promise<string> => {
+        // 1. Imported CLI session — use source file path directly
+        if (extra?.sourceFilePath) {
+          return String(extra.sourceFilePath);
+        }
+
+        // 2. ACP session — resolve JSONL path from acpSessionId
+        if (extra?.acpSessionId) {
+          const filePath = await ipcBridge.cliHistory.resolveClaudeSessionFilePath.invoke({
+            sessionId: String(extra.acpSessionId),
+          });
+          if (filePath) {
+            return filePath;
+          }
+        }
+
+        // 3. Fallback — aionui:{id} with db path hint
+        const dbPath = await ipcBridge.cliHistory.getDbPath.invoke();
+        return `aionui:${conversation.id} @ ${dbPath}`;
+      };
+
+      void resolveReference()
+        .then((reference) => copyText(reference))
         .then(() => {
           Message.success(t('conversation.history.copyReferenceSuccess'));
         })

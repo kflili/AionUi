@@ -34,6 +34,7 @@ import { initWebuiBridge } from './webuiBridge';
 import { initSystemSettingsBridge } from './systemSettingsBridge';
 import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
+import { initCliHistoryBridge } from './cliHistoryBridge';
 import { initExtensionsBridge } from './extensionsBridge';
 
 export interface BridgeDependencies {
@@ -74,6 +75,7 @@ export function initAllBridges(deps: BridgeDependencies): void {
   initNotificationBridge();
   initTaskBridge(deps.workerTaskManager);
   initStarOfficeBridge();
+  initCliHistoryBridge();
 }
 
 /**
@@ -90,6 +92,7 @@ export async function initializeAcpDetector(): Promise<void> {
 // 导出初始化函数供单独使用
 
 export {
+  initCliHistoryBridge,
   initAcpConversationBridge,
   initApplicationBridge,
   initAuthBridge,

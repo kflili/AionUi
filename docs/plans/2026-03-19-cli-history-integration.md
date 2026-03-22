@@ -15,12 +15,12 @@ AionUI's sidebar only shows conversations started from within AionUI. CLI sessio
 
 ### Where conversations live on disk
 
-| Source | Storage | Index |
-|--------|---------|-------|
-| Claude Code CLI | `~/.claude/projects/{path-hash}/{session}.jsonl` | `sessions-index.json` |
-| Copilot CLI | `~/.copilot/session-state/{session-id}/events.jsonl` | `session-store.db` (SQLite) |
-| Codex CLI | `~/.codex/sessions/YYYY/MM/DD/rollout-{date}-{session}.jsonl` | `state_5.sqlite` |
-| AionUI | `~/Library/Application Support/AionUi/aionui/aionui.db` | Same SQLite |
+| Source          | Storage                                                       | Index                       |
+| --------------- | ------------------------------------------------------------- | --------------------------- |
+| Claude Code CLI | `~/.claude/projects/{path-hash}/{session}.jsonl`              | `sessions-index.json`       |
+| Copilot CLI     | `~/.copilot/session-state/{session-id}/events.jsonl`          | `session-store.db` (SQLite) |
+| Codex CLI       | `~/.codex/sessions/YYYY/MM/DD/rollout-{date}-{session}.jsonl` | `state_5.sqlite`            |
+| AionUI          | `~/Library/Application Support/AionUi/aionui/aionui.db`       | Same SQLite                 |
 
 Key insight: Copilot and Codex already use a **JSONL + SQLite hybrid** — JSONL for conversation content, SQLite for fast listing/indexing. This is the trend. AionUI should do the same: import CLI session metadata into its own SQLite for unified listing, with JSONL as the content source.
 
@@ -63,6 +63,7 @@ Import CLI sessions into AionUI's existing `conversations` and `messages` tables
 ### DB schema compatibility
 
 The existing schema supports imported sessions without migration:
+
 - **`type` CHECK constraint** allows `'acp'` — imported Claude Code and Copilot sessions use this. Imported Codex sessions can use `'codex'` (also allowed).
 - **`user_id NOT NULL` FK** — use `'system_default_user'` (the app's default user).
 - **`source` column** — already extensible via `ConversationSource = 'aionui' | 'telegram' | ... | (string & {})`. Add `'claude_code'`, `'copilot'`, `'codex'` as new source values.
@@ -80,13 +81,13 @@ The only visual difference: imported sessions show a small source indicator (ora
 
 Converting JSONL → TMessage[] → SQLite insertion takes time for large sessions:
 
-| Session size | Messages | Total time |
-|-------------|----------|------------|
-| 50KB (~30 msgs) | 30 | ~15ms |
-| 500KB (~150 msgs) | 150 | ~65ms |
-| 2MB (~500 msgs) | 500 | ~200ms |
-| 5MB (~1000 msgs) | 1000 | ~500ms |
-| 10MB+ (marathon) | 2000+ | ~1.2s |
+| Session size      | Messages | Total time |
+| ----------------- | -------- | ---------- |
+| 50KB (~30 msgs)   | 30       | ~15ms      |
+| 500KB (~150 msgs) | 150      | ~65ms      |
+| 2MB (~500 msgs)   | 500      | ~200ms     |
+| 5MB (~1000 msgs)  | 1000     | ~500ms     |
+| 10MB+ (marathon)  | 2000+    | ~1.2s      |
 
 **Strategy: background conversion, newest-first.**
 
@@ -107,11 +108,11 @@ Both CLI History Integration (this plan) and Knowledge Consolidation (Step 3) ne
 
 ```typescript
 type SessionSourceProvider = {
-  id: string;                                        // 'claude_code' | 'copilot' | 'codex'
-  discoverSessions(): Promise<SessionMetadata[]>;    // list sessions from native index
-  readTranscript(sessionId: string): Promise<string[]>;  // read JSONL lines
+  id: string; // 'claude_code' | 'copilot' | 'codex'
+  discoverSessions(): Promise<SessionMetadata[]>; // list sessions from native index
+  readTranscript(sessionId: string): Promise<string[]>; // read JSONL lines
   canResume(sessionId: string): boolean;
-  buildReference(sessionId: string): string;         // for Copy Chat Reference
+  buildReference(sessionId: string): string; // for Copy Chat Reference
 };
 ```
 
@@ -119,16 +120,17 @@ One provider per CLI. Each handles platform-specific path resolution internally.
 
 ### Cross-Platform Path Resolution
 
-| CLI | macOS | Linux | Windows |
-|-----|-------|-------|---------|
-| Claude Code | `~/.claude/` | `~/.claude/` | `%USERPROFILE%\.claude\` |
-| Copilot | `~/.copilot/` | `~/.copilot/` | `%USERPROFILE%\.copilot\` |
-| Codex | `~/.codex/` | `~/.codex/` | `%USERPROFILE%\.codex\` |
-| AionUI | `~/Library/Application Support/AionUi/` | `~/.config/AionUi/` | `%APPDATA%\AionUi\` |
+| CLI         | macOS                                   | Linux               | Windows                   |
+| ----------- | --------------------------------------- | ------------------- | ------------------------- |
+| Claude Code | `~/.claude/`                            | `~/.claude/`        | `%USERPROFILE%\.claude\`  |
+| Copilot     | `~/.copilot/`                           | `~/.copilot/`       | `%USERPROFILE%\.copilot\` |
+| Codex       | `~/.codex/`                             | `~/.codex/`         | `%USERPROFILE%\.codex\`   |
+| AionUI      | `~/Library/Application Support/AionUi/` | `~/.config/AionUi/` | `%APPDATA%\AionUi\`       |
 
 ### Performance: Use provider-native indexes for listing
 
 Don't scan full JSONL files to build the session list. Use each CLI's existing index:
+
 - Claude Code: `sessions-index.json` (pre-built metadata with firstPrompt, summary, messageCount)
 - Copilot: `session-store.db` (SQLite index)
 - Codex: `state_5.sqlite` (SQLite `threads` table)
@@ -143,18 +145,21 @@ Add a "Copy Chat Reference" action to the `...` menu on each conversation in the
 
 ### What gets copied
 
-| Source | Copied to clipboard | Agent reads it via |
-|--------|--------------------|--------------------|
-| Claude Code session | `~/.claude/projects/-Users-lili-Projects-teleX/abc123.jsonl` | `Read` tool (file) |
-| Copilot session | `~/.copilot/session-state/ea81c030-.../events.jsonl` | `Read` tool (file) |
-| AionUI native | `aionui:44144192` (ID + db path hint) | `Bash` tool: `sqlite3 ...` |
+| Source              | Copied to clipboard                                          | Agent reads it via         |
+| ------------------- | ------------------------------------------------------------ | -------------------------- |
+| Claude Code session | `~/.claude/projects/-Users-lili-Projects-teleX/abc123.jsonl` | `Read` tool (file)         |
+| Copilot session     | `~/.copilot/session-state/ea81c030-.../events.jsonl`         | `Read` tool (file)         |
+| AionUI native       | `aionui:44144192` (ID + db path hint)                        | `Bash` tool: `sqlite3 ...` |
 
 Works on both native and imported conversations. For imported sessions, the `extra.sourceFilePath` provides the path.
 
 ### Implementation
 
 - Add "Copy Chat Reference" to the existing `...` dropdown in `ConversationRow.tsx`
-- Resolve path from `conversation.extra.sourceFilePath` (imported) or format as `aionui:{id}` (native)
+- Three-tier reference resolution (best available path):
+  1. `conversation.extra.sourceFilePath` (imported CLI sessions) → copy file path directly
+  2. `conversation.extra.acpSessionId` → resolve to JSONL file via IPC (`resolveClaudeSessionFilePath`) scanning `~/.claude/projects/`
+  3. Fallback → `aionui:{id} @ {dbPath}` (includes SQLite path hint for agent access)
 
 ---
 
@@ -174,6 +179,7 @@ Works on both native and imported conversations. For imported sessions, the `ext
 ### Resume support
 
 Imported sessions can be resumed — same as Step 1's toggle:
+
 - Click an imported session → opens in Rich UI (messages already in SQLite) or Terminal mode (based on default)
 - User can resume via ACP (`session/new` with `resumeSessionId`) or terminal (`--resume {sessionId}`)
 - All three CLIs support resume (see Step 1 plan for per-CLI commands)
@@ -230,12 +236,14 @@ Modify:
 ## Done Means
 
 ### Step 0.5: Copy Chat Reference
+
 - [ ] "Copy Chat Reference" action in conversation `...` menu
 - [ ] Copies correct file path for imported sessions (from `extra.sourceFilePath`)
 - [ ] Copies `aionui:{id}` for native sessions
 - [ ] Agent can paste the reference and read the conversation using existing tools
 
 ### CLI History Import
+
 - [ ] Per-CLI import toggles in Settings > AgentCLI
 - [ ] Imported sessions appear in normal sidebar timeline (same as native conversations)
 - [ ] Source badge visible on imported sessions (orange/blue/green dot per CLI)
@@ -247,6 +255,7 @@ Modify:
 - [ ] Delete removes from AionUI only, not from CLI history files
 
 ### Resume
+
 - [ ] Imported sessions can be resumed via ACP or terminal mode (Step 1 toggle)
 - [ ] At least Claude Code resume works end-to-end
 - [ ] Clear error message when resume fails (auth, cwd mismatch, etc.)
