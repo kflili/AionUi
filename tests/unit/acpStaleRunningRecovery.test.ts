@@ -86,6 +86,7 @@ import type { IConversationService } from '../../src/process/services/IConversat
 import type { IWorkerTaskManager } from '../../src/process/task/IWorkerTaskManager';
 import type { TChatConversation } from '../../src/common/config/storage';
 import { isSessionIdle } from '../../src/process/bridge/cliHistoryBridge';
+import { ProcessChat } from '../../src/process/utils/initStorage';
 
 function makeService(overrides?: Partial<IConversationService>): IConversationService {
   return {
@@ -251,6 +252,45 @@ describe('ACP stale running state recovery', () => {
       });
 
       expect(result.success).toBe(true);
+    });
+  });
+
+  describe('conversationBridge.get — file-history fallback path', () => {
+    it('recovers stale running task from file-history when agent is disconnected', async () => {
+      // Simulate: not in DB, found in file storage
+      vi.mocked(service.getConversation).mockResolvedValue(undefined);
+      const fileConv = makeConversation('c1');
+      vi.mocked(ProcessChat.get).mockResolvedValue([fileConv] as any);
+
+      const disconnectedTask = {
+        status: 'running' as const,
+        agent: { isConnected: false },
+      };
+      vi.mocked(taskManager.getTask).mockReturnValue(disconnectedTask as any);
+
+      const result = await handlers['get']({ id: 'c1' });
+
+      expect(result.status).toBe('finished');
+      expect(taskManager.kill).toHaveBeenCalledWith('c1');
+    });
+
+    it('recovers stale running task from file-history when JSONL shows idle', async () => {
+      vi.mocked(service.getConversation).mockResolvedValue(undefined);
+      const fileConv = makeConversation('c1', { acpSessionId: 'session-456', backend: 'claude' });
+      vi.mocked(ProcessChat.get).mockResolvedValue([fileConv] as any);
+
+      const connectedTask = {
+        status: 'running' as const,
+        agent: { isConnected: true },
+      };
+      vi.mocked(taskManager.getTask).mockReturnValue(connectedTask as any);
+      vi.mocked(isSessionIdle).mockResolvedValue(true);
+
+      const result = await handlers['get']({ id: 'c1' });
+
+      expect(result.status).toBe('finished');
+      expect(taskManager.kill).toHaveBeenCalledWith('c1');
+      expect(isSessionIdle).toHaveBeenCalledWith('session-456', 'claude');
     });
   });
 });

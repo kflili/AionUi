@@ -18,50 +18,93 @@ vi.mock('../../src/process/utils/utils', () => ({
   getDataPath: vi.fn(() => '/tmp'),
 }));
 
+// Mock os.homedir so resolveClaudeSessionPath looks in our temp dir
+let mockHomeDir = '/tmp';
+vi.mock('node:os', async () => {
+  const actual = await vi.importActual<typeof import('node:os')>('node:os');
+  return { ...actual, homedir: () => mockHomeDir };
+});
+
 import { isSessionIdle } from '../../src/process/bridge/cliHistoryBridge';
 
 describe('isSessionIdle', () => {
   let tmpDir: string;
-  let sessionFile: string;
 
   beforeEach(async () => {
     tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'aionui-test-'));
-    sessionFile = path.join(tmpDir, 'test-session.jsonl');
+    mockHomeDir = tmpDir;
   });
 
   afterEach(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
 
-  // We need to mock resolveSessionPath to return our temp file.
-  // Since isSessionIdle calls resolveSessionPath internally, we mock the module partially.
+  it('returns true for a stale session whose last assistant event has end_turn', async () => {
+    // Create the Claude session directory structure: ~/.claude/projects/{hash}/{sessionId}.jsonl
+    const sessionId = 'session-abc123';
+    const projectDir = path.join(tmpDir, '.claude', 'projects', 'test-project');
+    await fs.mkdir(projectDir, { recursive: true });
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
 
-  it('returns true when last assistant message has end_turn', async () => {
     const lines = [
       JSON.stringify({ type: 'user', message: { role: 'user', content: 'hello' } }),
-      JSON.stringify({ type: 'assistant', message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'hi' }] } }),
+      JSON.stringify({
+        type: 'assistant',
+        message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'hi' }] },
+      }),
     ];
     await fs.writeFile(sessionFile, lines.join('\n') + '\n');
-    // Set mtime to the past to pass staleness check
+
+    // Set mtime to 30s ago to pass the staleness guard
     const pastTime = new Date(Date.now() - 30_000);
     await fs.utimes(sessionFile, pastTime, pastTime);
 
-    // isSessionIdle calls resolveSessionPath which we can't easily redirect to our temp file.
-    // Instead, test the JSONL parsing logic by extracting it or testing through the full path.
-    // For now, test with staleThresholdMs=0 to bypass the time check, and mock resolveSessionPath.
-    // We need to re-import with a different mock.
-    // Skip this approach — the integration with resolveSessionPath makes pure unit testing hard.
-    // The conversationBridge tests above verify the integration. Here we test the logic only.
+    const result = await isSessionIdle(sessionId, 'claude');
+    expect(result).toBe(true);
+  });
+
+  it('returns false when file was modified recently (staleness guard)', async () => {
+    const sessionId = 'session-fresh';
+    const projectDir = path.join(tmpDir, '.claude', 'projects', 'test-project');
+    await fs.mkdir(projectDir, { recursive: true });
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'done' }] },
+      }),
+    ];
+    await fs.writeFile(sessionFile, lines.join('\n') + '\n');
+    // Don't change mtime — file is fresh (just written)
+
+    const result = await isSessionIdle(sessionId, 'claude');
+    expect(result).toBe(false);
+  });
+
+  it('returns false when last entry is a user message (session processing)', async () => {
+    const sessionId = 'session-processing';
+    const projectDir = path.join(tmpDir, '.claude', 'projects', 'test-project');
+    await fs.mkdir(projectDir, { recursive: true });
+    const sessionFile = path.join(projectDir, `${sessionId}.jsonl`);
+
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        message: { role: 'assistant', stop_reason: 'end_turn', content: [{ type: 'text', text: 'earlier turn' }] },
+      }),
+      JSON.stringify({ type: 'user', message: { role: 'user', content: 'new question' } }),
+    ];
+    await fs.writeFile(sessionFile, lines.join('\n') + '\n');
+    const pastTime = new Date(Date.now() - 30_000);
+    await fs.utimes(sessionFile, pastTime, pastTime);
+
+    const result = await isSessionIdle(sessionId, 'claude');
+    expect(result).toBe(false);
   });
 
   it('returns false for non-existent session', async () => {
     const result = await isSessionIdle('nonexistent-session', 'claude');
-    expect(result).toBe(false);
-  });
-
-  it('returns false when resolveSessionPath returns null', async () => {
-    // With no real Claude session files on disk, this should return false
-    const result = await isSessionIdle('fake-session-id', 'claude');
     expect(result).toBe(false);
   });
 });
