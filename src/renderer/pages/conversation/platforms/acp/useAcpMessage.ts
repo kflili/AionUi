@@ -322,7 +322,7 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
       }
     }, 30_000);
     return () => clearInterval(interval);
-  }, [running, aiProcessing]);
+  }, [running, aiProcessing, t]);
 
   return {
     thought,

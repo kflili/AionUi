@@ -147,8 +147,8 @@ export async function isSessionIdle(sessionId: string, backend: string, staleThr
       const fileSize = stat.size;
       const readSize = Math.min(8192, fileSize);
       const buffer = Buffer.alloc(readSize);
-      await handle.read(buffer, 0, readSize, Math.max(0, fileSize - readSize));
-      const tail = buffer.toString('utf-8');
+      const { bytesRead } = await handle.read(buffer, 0, readSize, Math.max(0, fileSize - readSize));
+      const tail = buffer.subarray(0, bytesRead).toString('utf-8');
       const lines = tail.split('\n').filter(Boolean);
 
       // Scan from the end for the last assistant or user message
