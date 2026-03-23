@@ -312,7 +312,9 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           const contentTypes = ['content', 'agent_status', 'acp_tool_call', 'plan'];
           if (contentTypes.includes(message.type)) {
             if (this.status !== 'finished') {
-              mainLog('[ACP-lifecycle]', `status: finished (reason: content_arrived, type: ${message.type})`, { conv: this.conversation_id });
+              mainLog('[ACP-lifecycle]', `status: finished (reason: content_arrived, type: ${message.type})`, {
+                conv: this.conversation_id,
+              });
             }
             this.status = 'finished';
           }
@@ -623,7 +625,10 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         }
         // Clean up on agent failure (e.g., timeout returns { success: false } without throwing)
         if (!result.success) {
-          mainLog('[ACP-lifecycle]', `agent returned { success: false }`, { conv: this.conversation_id, error: (result as { error?: unknown }).error });
+          mainLog('[ACP-lifecycle]', `agent returned { success: false }`, {
+            conv: this.conversation_id,
+            error: (result as { error?: unknown }).error,
+          });
           this.flushBufferedStreamTextMessages();
           cronBusyGuard.setProcessing(this.conversation_id, false);
           this.status = 'finished';
@@ -638,7 +643,10 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         );
       // Clean up on agent failure (e.g., timeout returns { success: false } without throwing)
       if (!result.success) {
-        mainLog('[ACP-lifecycle]', `agent returned { success: false }`, { conv: this.conversation_id, error: (result as { error?: unknown }).error });
+        mainLog('[ACP-lifecycle]', `agent returned { success: false }`, {
+          conv: this.conversation_id,
+          error: (result as { error?: unknown }).error,
+        });
         this.flushBufferedStreamTextMessages();
         cronBusyGuard.setProcessing(this.conversation_id, false);
         this.status = 'finished';

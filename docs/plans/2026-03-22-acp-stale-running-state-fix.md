@@ -24,10 +24,12 @@ Three bugs contribute, listed by likely impact:
 **Bug A — `{ success: false }` silently swallowed without cleanup**
 
 When `AcpAgent.sendMessage()` catches a timeout or other error, it:
+
 1. Calls `emitErrorMessage()` → emits `'error'` to the renderer (renderer DOES handle this)
 2. Returns `{ success: false, error }` without throwing
 
 But `AcpAgentManager.sendMessage()` at line 557 sets `this.status = 'running'`, then at line 610-622 receives the `{ success: false }` return — **doesn't throw, so the catch block (line 631) is never reached**. Result:
+
 - `this.status` stays whatever the last stream event set it to (could still be `'running'` if no content arrived before the error)
 - `cronBusyGuard.setProcessing(false)` is never called (only runs in the catch block at line 633 or on `'finish'` signal at line 438)
 - `conversationBridge.sendMessage()` at line 402-408 ignores the return value and always returns `{ success: true }` — masking the failure upstream
@@ -35,6 +37,7 @@ But `AcpAgentManager.sendMessage()` at line 557 sets `this.status = 'running'`, 
 **Bug B — Orphaned `PromptResponse` silently dropped after timeout**
 
 `sendPrompt` has a 5-minute rolling timeout (resets on each `session_update` via `resetSessionPromptTimeouts()` at `AcpConnection.ts:564-578`). If the timeout fires:
+
 1. Pending request removed from `pendingRequests` (line 469)
 2. `AcpAgent.sendMessage()` catch block emits error to renderer AND returns `{ success: false }` (see Bug A)
 3. When the CLI eventually sends the `PromptResponse` with `stopReason: 'end_turn'`, `handleMessage()` can't find the request ID → **response silently ignored** (line 626)
@@ -90,6 +93,7 @@ return result?.success === false
 **Risk:** Low. Adds cleanup that should have always been there. The renderer already handles 'error' events from `AcpAgent.emitErrorMessage()`.
 
 **Testing:**
+
 - Mock `agent.sendMessage()` to return `{ success: false }`, verify `this.status === 'finished'` and cronBusyGuard cleared
 - Verify `conversationBridge.sendMessage()` returns `{ success: false }` when agent fails
 
@@ -162,9 +166,7 @@ if (task?.status === 'running') {
 const handleStop = async (): Promise<void> => {
   try {
     const stopPromise = ipcBridge.conversation.stop.invoke({ conversation_id });
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('stop timeout')), 3000)
-    );
+    const timeout = new Promise((_, reject) => setTimeout(() => reject(new Error('stop timeout')), 3000));
     await Promise.race([stopPromise, timeout]);
   } catch {
     await ipcBridge.conversation.reset.invoke({ id: conversation_id });
@@ -185,6 +187,7 @@ const handleStop = async (): Promise<void> => {
 **Problem:** Even with fix 1.2, the child process may still be alive (waiting for next user input) while the UI thinks it's still processing. The JSONL file is the ground truth for local sessions.
 
 **Files:**
+
 - `src/process/cli-history/converters/claude.ts` — add `isClaudeSessionIdle(lastLines)` utility
 - `src/process/bridge/conversationBridge.ts` — integrate into liveness check from fix 1.2
 
@@ -201,7 +204,9 @@ export function isClaudeSessionIdle(lastLines: string[]): boolean {
       if (entry.type === 'user') {
         return false;
       }
-    } catch { continue; }
+    } catch {
+      continue;
+    }
   }
   return false;
 }
@@ -220,6 +225,7 @@ Integrate into `conversationBridge.get`: if `task.status === 'running'` and `age
 **Problem:** No diagnostic logs for state transitions. Can't determine root cause of stuck states.
 
 **Files:**
+
 - `src/process/utils/acpLogger.ts` — new file, lightweight rotating logger
 - `src/process/agent/acp/AcpConnection.ts` — instrument timeout, end_turn, orphaned response
 - `src/process/agent/acp/index.ts` — instrument handleEndTurn, handleDisconnect, sendMessage result
@@ -230,22 +236,23 @@ Integrate into `conversationBridge.get`: if `task.status === 'running'` and `age
 
 Create a simple file-based logger that writes to `~/Library/Logs/AionUi/acp-lifecycle.log` (or use `electron-log` which is already a dependency). Instrument these critical points:
 
-| Location | What to log |
-|----------|-------------|
-| `AcpAgentManager.sendMessage` | `status: running` with conversation_id |
-| `AcpAgentManager.sendMessage` (result) | `agent returned { success: false }` with error details |
-| `AcpAgentManager.onStreamEvent` | `status: finished (reason: content_arrived, type={type})` |
-| `AcpAgentManager.onSignalEvent` | `signal: {type}` with conversation_id |
-| `AcpConnection.sendRequest` | `prompt_sent (request_id={id})` |
-| `AcpConnection.handleMessage` (response) | `prompt_response: {stopReason} (request_id={id}, elapsed={ms})` |
-| `AcpConnection.handleMessage` (orphaned) | `orphaned_response: request_id={id} not in pendingRequests` |
-| `AcpConnection` timeout handler | `prompt_timeout: request_id={id}, last_update={ms}ago` |
-| `AcpConnection.handleProcessExit` | `process_exit: code={code}, signal={signal}` |
-| `conversationBridge.get` | `liveness_check: task={status}, connected={bool}` (only when status=running) |
-| `conversationBridge.sendMessage` | `agent_result: success={bool}` (when false) |
-| `useAcpMessage` (renderer) | `ui_state: running={bool}, aiProcessing={bool}, trigger={event_type}` |
+| Location                                 | What to log                                                                  |
+| ---------------------------------------- | ---------------------------------------------------------------------------- |
+| `AcpAgentManager.sendMessage`            | `status: running` with conversation_id                                       |
+| `AcpAgentManager.sendMessage` (result)   | `agent returned { success: false }` with error details                       |
+| `AcpAgentManager.onStreamEvent`          | `status: finished (reason: content_arrived, type={type})`                    |
+| `AcpAgentManager.onSignalEvent`          | `signal: {type}` with conversation_id                                        |
+| `AcpConnection.sendRequest`              | `prompt_sent (request_id={id})`                                              |
+| `AcpConnection.handleMessage` (response) | `prompt_response: {stopReason} (request_id={id}, elapsed={ms})`              |
+| `AcpConnection.handleMessage` (orphaned) | `orphaned_response: request_id={id} not in pendingRequests`                  |
+| `AcpConnection` timeout handler          | `prompt_timeout: request_id={id}, last_update={ms}ago`                       |
+| `AcpConnection.handleProcessExit`        | `process_exit: code={code}, signal={signal}`                                 |
+| `conversationBridge.get`                 | `liveness_check: task={status}, connected={bool}` (only when status=running) |
+| `conversationBridge.sendMessage`         | `agent_result: success={bool}` (when false)                                  |
+| `useAcpMessage` (renderer)               | `ui_state: running={bool}, aiProcessing={bool}, trigger={event_type}`        |
 
 **Log format:**
+
 ```
 [2026-03-23T01:00:34.835Z] [acp] [conv:4e93288a] status: running → finished (reason: content_arrived, type: content)
 [2026-03-23T01:00:34.900Z] [acp] [conn:claude] prompt_response: end_turn (request_id: 7, elapsed: 42100ms)
@@ -265,6 +272,7 @@ Create a simple file-based logger that writes to `~/Library/Logs/AionUi/acp-life
 **Problem:** When a session is stuck, the user doesn't know it's stuck vs legitimately processing.
 
 **Files:**
+
 - `src/renderer/components/chat/SendBox.tsx` (or the shared component)
 - `src/renderer/pages/conversation/platforms/acp/useAcpMessage.ts`
 
@@ -297,32 +305,33 @@ Each fix is independent and can be shipped separately. Phase 1 is the critical p
 
 ## Estimated Effort
 
-| Fix | Lines changed | Files | Effort |
-|-----|--------------|-------|--------|
-| 1.1 `{ success: false }` cleanup + bridge propagation | ~25 | 2 | Small |
-| 1.2 Liveness check | ~15 | 1 | Small |
-| 1.3 Orphaned response handling | ~15 | 1 | Small |
-| 2.1 Force-stop via existing `conversation.reset` | ~15 | 1-5 | Small |
-| 2.2 JSONL idle check | ~40 | 2 | Medium |
-| 3.1 Lifecycle logging | ~80 | 5-6 | Medium |
-| 4.1 No-activity hint | ~25 | 2 | Small |
-| **Total** | **~215** | **~12** | **~1-2 days** |
+| Fix                                                   | Lines changed | Files   | Effort        |
+| ----------------------------------------------------- | ------------- | ------- | ------------- |
+| 1.1 `{ success: false }` cleanup + bridge propagation | ~25           | 2       | Small         |
+| 1.2 Liveness check                                    | ~15           | 1       | Small         |
+| 1.3 Orphaned response handling                        | ~15           | 1       | Small         |
+| 2.1 Force-stop via existing `conversation.reset`      | ~15           | 1-5     | Small         |
+| 2.2 JSONL idle check                                  | ~40           | 2       | Medium        |
+| 3.1 Lifecycle logging                                 | ~80           | 5-6     | Medium        |
+| 4.1 No-activity hint                                  | ~25           | 2       | Small         |
+| **Total**                                             | **~215**      | **~12** | **~1-2 days** |
 
 ---
 
 ## Testing
 
-| Fix | Test approach |
-|-----|---------------|
+| Fix | Test approach                                                                                                                                  |
+| --- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1.1 | Mock `agent.sendMessage()` to return `{ success: false }` → verify `this.status === 'finished'`, cronBusyGuard cleared, bridge returns failure |
-| 1.2 | Kill CLI child process (`kill <pid>`) → verify conversation auto-recovers on next page load |
-| 1.3 | Set `timeoutDuration` to 5s, run slow prompt → verify `onEndTurn` fires when late response arrives |
-| 2.1 | Make `task.stop()` hang (mock) → verify stop button falls back to `reset` within 3s |
-| 2.2 | Run CLI session to completion → verify `isClaudeSessionIdle()` returns true |
-| 3.1 | Trigger each instrumented path → verify log entries appear in file |
-| 4.1 | Pause streaming mid-turn → verify hint appears after 2 minutes |
+| 1.2 | Kill CLI child process (`kill <pid>`) → verify conversation auto-recovers on next page load                                                    |
+| 1.3 | Set `timeoutDuration` to 5s, run slow prompt → verify `onEndTurn` fires when late response arrives                                             |
+| 2.1 | Make `task.stop()` hang (mock) → verify stop button falls back to `reset` within 3s                                                            |
+| 2.2 | Run CLI session to completion → verify `isClaudeSessionIdle()` returns true                                                                    |
+| 3.1 | Trigger each instrumented path → verify log entries appear in file                                                                             |
+| 4.1 | Pause streaming mid-turn → verify hint appears after 2 minutes                                                                                 |
 
 **Regression tests (from GPT review):**
+
 - Remount behavior: `conversation.get()` after timeout/error returns correct status
 - Late orphaned `end_turn` arriving after a retry doesn't break the new turn
 - `cronBusyGuard` is always cleared on both `{ success: false }` and thrown-error paths
