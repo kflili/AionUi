@@ -1,2142 +1,2338 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>AionUI — Terminal Toggle v2 — Clean Full Swap Mode Switch</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>AionUI — Terminal Toggle v2 — Clean Full Swap Mode Switch</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+      }
 
-  :root {
-    --bg-page: #f0f1f3;
-    --bg-app: #ffffff;
-    --bg-sidebar: #f7f8fa;
-    --bg-hover: rgba(0,0,0,0.04);
-    --bg-active: #e8f3ff;
-    --border: #e5e6eb;
-    --border-light: #f0f1f3;
-    --text-primary: #1d2129;
-    --text-secondary: #4e5969;
-    --text-muted: #86909c;
-    --text-dim: #c9cdd4;
-    --accent: #4080ff;
-    --accent-hover: #3070ee;
-    --accent-light: rgba(64,128,255,0.08);
-    --accent-lighter: rgba(64,128,255,0.05);
-    --green: #00b42a;
-    --green-light: rgba(0,180,42,0.08);
-    --green-lighter: #e8ffea;
-    --orange: #ff7d00;
-    --orange-light: rgba(255,125,0,0.08);
-    --red: #f53f3f;
-    --red-light: rgba(245,63,63,0.08);
-    --purple: #722ed1;
-    --terminal-bg: #1a1a2e;
-    --radius-xs: 4px;
-    --radius-sm: 6px;
-    --radius-md: 8px;
-    --radius-lg: 12px;
-    --radius-xl: 16px;
-    --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
-    --font-mono: 'SF Mono', 'Menlo', 'Cascadia Code', 'Fira Code', monospace;
-    --sidebar-width: 200px;
-    --right-sidebar-width: 250px;
-    --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
-    --shadow-md: 0 4px 16px rgba(0,0,0,0.08);
-    --shadow-card: 0 2px 8px rgba(0,0,0,0.06);
-  }
+      :root {
+        --bg-page: #f0f1f3;
+        --bg-app: #ffffff;
+        --bg-sidebar: #f7f8fa;
+        --bg-hover: rgba(0, 0, 0, 0.04);
+        --bg-active: #e8f3ff;
+        --border: #e5e6eb;
+        --border-light: #f0f1f3;
+        --text-primary: #1d2129;
+        --text-secondary: #4e5969;
+        --text-muted: #86909c;
+        --text-dim: #c9cdd4;
+        --accent: #4080ff;
+        --accent-hover: #3070ee;
+        --accent-light: rgba(64, 128, 255, 0.08);
+        --accent-lighter: rgba(64, 128, 255, 0.05);
+        --green: #00b42a;
+        --green-light: rgba(0, 180, 42, 0.08);
+        --green-lighter: #e8ffea;
+        --orange: #ff7d00;
+        --orange-light: rgba(255, 125, 0, 0.08);
+        --red: #f53f3f;
+        --red-light: rgba(245, 63, 63, 0.08);
+        --purple: #722ed1;
+        --terminal-bg: #1a1a2e;
+        --radius-xs: 4px;
+        --radius-sm: 6px;
+        --radius-md: 8px;
+        --radius-lg: 12px;
+        --radius-xl: 16px;
+        --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+        --font-mono: 'SF Mono', 'Menlo', 'Cascadia Code', 'Fira Code', monospace;
+        --sidebar-width: 200px;
+        --right-sidebar-width: 250px;
+        --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+        --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.08);
+        --shadow-card: 0 2px 8px rgba(0, 0, 0, 0.06);
+      }
 
-  html, body {
-    height: 100%;
-    background: var(--bg-page);
-    color: var(--text-primary);
-    font-family: var(--font-ui);
-    font-size: 14px;
-    line-height: 1.5;
-    -webkit-font-smoothing: antialiased;
-  }
+      html,
+      body {
+        height: 100%;
+        background: var(--bg-page);
+        color: var(--text-primary);
+        font-family: var(--font-ui);
+        font-size: 14px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+      }
 
-  /* -- Design Page Shell -- */
-  .page-banner {
-    height: 42px;
-    background: linear-gradient(135deg, #f8f9fb 0%, #eef1f6 50%, #e8ecf4 100%);
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-secondary);
-    letter-spacing: 0.2px;
-    flex-shrink: 0;
-  }
-  .page-banner .step-badge {
-    background: var(--accent-light);
-    color: var(--accent);
-    padding: 2px 10px;
-    border-radius: var(--radius-xs);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
-  .page-banner .v2-badge {
-    background: var(--green-light);
-    color: var(--green);
-    padding: 2px 10px;
-    border-radius: var(--radius-xs);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: 0.5px;
-  }
+      /* -- Design Page Shell -- */
+      .page-banner {
+        height: 42px;
+        background: linear-gradient(135deg, #f8f9fb 0%, #eef1f6 50%, #e8ecf4 100%);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 10px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-secondary);
+        letter-spacing: 0.2px;
+        flex-shrink: 0;
+      }
+      .page-banner .step-badge {
+        background: var(--accent-light);
+        color: var(--accent);
+        padding: 2px 10px;
+        border-radius: var(--radius-xs);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
+      .page-banner .v2-badge {
+        background: var(--green-light);
+        color: var(--green);
+        padding: 2px 10px;
+        border-radius: var(--radius-xs);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+      }
 
-  /* -- Option Tabs -- */
-  .option-tabs {
-    display: flex;
-    gap: 0;
-    background: #fff;
-    border-bottom: 1px solid var(--border);
-    padding: 0 32px;
-    overflow-x: auto;
-  }
-  .option-tab {
-    padding: 14px 24px;
-    font-size: 13px;
-    font-weight: 500;
-    color: var(--text-muted);
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
-    transition: all 0.15s;
-    white-space: nowrap;
-    user-select: none;
-    letter-spacing: 0.1px;
-  }
-  .option-tab:hover { color: var(--text-secondary); }
-  .option-tab.active {
-    color: var(--accent);
-    border-bottom-color: var(--accent);
-    font-weight: 600;
-  }
+      /* -- Option Tabs -- */
+      .option-tabs {
+        display: flex;
+        gap: 0;
+        background: #fff;
+        border-bottom: 1px solid var(--border);
+        padding: 0 32px;
+        overflow-x: auto;
+      }
+      .option-tab {
+        padding: 14px 24px;
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--text-muted);
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.15s;
+        white-space: nowrap;
+        user-select: none;
+        letter-spacing: 0.1px;
+      }
+      .option-tab:hover {
+        color: var(--text-secondary);
+      }
+      .option-tab.active {
+        color: var(--accent);
+        border-bottom-color: var(--accent);
+        font-weight: 600;
+      }
 
-  /* -- Option Panels -- */
-  .option-panel { display: none; padding: 28px; }
-  .option-panel.active { display: block; }
+      /* -- Option Panels -- */
+      .option-panel {
+        display: none;
+        padding: 28px;
+      }
+      .option-panel.active {
+        display: block;
+      }
 
-  /* -- Mockup Frame -- */
-  .mockup-frame {
-    max-width: 1340px;
-    margin: 0 auto;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-xl);
-    overflow: hidden;
-    box-shadow: var(--shadow-md);
-    background: var(--bg-app);
-  }
-  .mockup-inner {
-    display: flex;
-    height: 700px;
-    overflow: hidden;
-  }
+      /* -- Mockup Frame -- */
+      .mockup-frame {
+        max-width: 1340px;
+        margin: 0 auto;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-xl);
+        overflow: hidden;
+        box-shadow: var(--shadow-md);
+        background: var(--bg-app);
+      }
+      .mockup-inner {
+        display: flex;
+        height: 700px;
+        overflow: hidden;
+      }
 
-  /* ================================================================
+      /* ================================================================
      LEFT SIDEBAR
      ================================================================ */
-  .sidebar {
-    width: var(--sidebar-width);
-    min-width: var(--sidebar-width);
-    background: var(--bg-sidebar);
-    border-right: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    user-select: none;
-  }
+      .sidebar {
+        width: var(--sidebar-width);
+        min-width: var(--sidebar-width);
+        background: var(--bg-sidebar);
+        border-right: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        user-select: none;
+      }
 
-  .sidebar-traffic {
-    height: 40px;
-    padding: 0 14px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    flex-shrink: 0;
-  }
-  .traffic-dots {
-    display: flex;
-    gap: 8px;
-  }
-  .traffic-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-  }
-  .traffic-dot.close { background: #ff5f57; }
-  .traffic-dot.minimize { background: #febc2e; }
-  .traffic-dot.maximize { background: #28c840; }
-  .hamburger-icon {
-    color: var(--text-muted);
-    font-size: 14px;
-    cursor: pointer;
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-xs);
-    transition: background 0.12s;
-  }
-  .hamburger-icon:hover { background: var(--bg-hover); }
+      .sidebar-traffic {
+        height: 40px;
+        padding: 0 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-shrink: 0;
+      }
+      .traffic-dots {
+        display: flex;
+        gap: 8px;
+      }
+      .traffic-dot {
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+      }
+      .traffic-dot.close {
+        background: #ff5f57;
+      }
+      .traffic-dot.minimize {
+        background: #febc2e;
+      }
+      .traffic-dot.maximize {
+        background: #28c840;
+      }
+      .hamburger-icon {
+        color: var(--text-muted);
+        font-size: 14px;
+        cursor: pointer;
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-xs);
+        transition: background 0.12s;
+      }
+      .hamburger-icon:hover {
+        background: var(--bg-hover);
+      }
 
-  .sidebar-logo {
-    padding: 2px 14px 10px;
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    flex-shrink: 0;
-  }
-  .sidebar-logo-icon {
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #4080ff 0%, #2bc4c4 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
-  .sidebar-logo-icon svg {
-    width: 14px;
-    height: 14px;
-    fill: #fff;
-  }
-  .sidebar-logo-text {
-    font-size: 15px;
-    font-weight: 600;
-    color: var(--text-primary);
-    letter-spacing: -0.3px;
-  }
+      .sidebar-logo {
+        padding: 2px 14px 10px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        flex-shrink: 0;
+      }
+      .sidebar-logo-icon {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4080ff 0%, #2bc4c4 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
+      .sidebar-logo-icon svg {
+        width: 14px;
+        height: 14px;
+        fill: #fff;
+      }
+      .sidebar-logo-text {
+        font-size: 15px;
+        font-weight: 600;
+        color: var(--text-primary);
+        letter-spacing: -0.3px;
+      }
 
-  /* New Chat row */
-  .new-chat-row {
-    margin: 0 10px 4px;
-    display: flex;
-    align-items: center;
-    gap: 0;
-    flex-shrink: 0;
-  }
-  .new-chat-btn {
-    flex: 1;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 10px;
-    background: none;
-    border: none;
-    border-radius: var(--radius-sm);
-    color: var(--text-primary);
-    font-family: var(--font-ui);
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background 0.12s;
-  }
-  .new-chat-btn:hover { background: var(--bg-hover); }
-  .new-chat-btn .plus {
-    font-size: 16px;
-    font-weight: 400;
-    color: var(--text-muted);
-    line-height: 1;
-  }
-  .batch-icon {
-    width: 28px;
-    height: 28px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-xs);
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 12px;
-    transition: background 0.12s;
-    flex-shrink: 0;
-  }
-  .batch-icon:hover { background: var(--bg-hover); }
+      /* New Chat row */
+      .new-chat-row {
+        margin: 0 10px 4px;
+        display: flex;
+        align-items: center;
+        gap: 0;
+        flex-shrink: 0;
+      }
+      .new-chat-btn {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 10px;
+        background: none;
+        border: none;
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+        font-family: var(--font-ui);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: background 0.12s;
+      }
+      .new-chat-btn:hover {
+        background: var(--bg-hover);
+      }
+      .new-chat-btn .plus {
+        font-size: 16px;
+        font-weight: 400;
+        color: var(--text-muted);
+        line-height: 1;
+      }
+      .batch-icon {
+        width: 28px;
+        height: 28px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: var(--radius-xs);
+        cursor: pointer;
+        color: var(--text-muted);
+        font-size: 12px;
+        transition: background 0.12s;
+        flex-shrink: 0;
+      }
+      .batch-icon:hover {
+        background: var(--bg-hover);
+      }
 
-  /* Conversation list */
-  .conv-list {
-    flex: 1;
-    overflow-y: auto;
-    padding: 0 6px;
-    scrollbar-width: thin;
-    scrollbar-color: rgba(0,0,0,0.08) transparent;
-  }
-  .conv-list::-webkit-scrollbar { width: 4px; }
-  .conv-list::-webkit-scrollbar-track { background: transparent; }
-  .conv-list::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 4px; }
+      /* Conversation list */
+      .conv-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 6px;
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.08) transparent;
+      }
+      .conv-list::-webkit-scrollbar {
+        width: 4px;
+      }
+      .conv-list::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .conv-list::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.08);
+        border-radius: 4px;
+      }
 
-  .time-label {
-    padding: 12px 8px 4px;
-    font-size: 11px;
-    font-weight: 600;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.6px;
-  }
-  .workspace-label {
-    padding: 4px 8px 2px 12px;
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-muted);
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-  }
-  .workspace-label .chevron {
-    font-size: 9px;
-    color: var(--text-dim);
-    transition: transform 0.15s;
-  }
-  .workspace-label:hover .chevron { color: var(--text-muted); }
+      .time-label {
+        padding: 12px 8px 4px;
+        font-size: 11px;
+        font-weight: 600;
+        color: var(--text-muted);
+        text-transform: uppercase;
+        letter-spacing: 0.6px;
+      }
+      .workspace-label {
+        padding: 4px 8px 2px 12px;
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-muted);
+        display: flex;
+        align-items: center;
+        gap: 4px;
+        cursor: pointer;
+      }
+      .workspace-label .chevron {
+        font-size: 9px;
+        color: var(--text-dim);
+        transition: transform 0.15s;
+      }
+      .workspace-label:hover .chevron {
+        color: var(--text-muted);
+      }
 
-  .conv-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 8px 6px 20px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    transition: background 0.1s;
-    margin: 1px 0;
-  }
-  .conv-row:hover { background: var(--bg-hover); }
-  .conv-row.active { background: var(--bg-active); }
-  .conv-row.active .conv-name {
-    color: var(--text-primary);
-    font-weight: 500;
-  }
+      .conv-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 8px 6px 20px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        transition: background 0.1s;
+        margin: 1px 0;
+      }
+      .conv-row:hover {
+        background: var(--bg-hover);
+      }
+      .conv-row.active {
+        background: var(--bg-active);
+      }
+      .conv-row.active .conv-name {
+        color: var(--text-primary);
+        font-weight: 500;
+      }
 
-  .conv-icon {
-    width: 20px;
-    height: 20px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-    font-size: 10px;
-    font-weight: 700;
-    color: #fff;
-  }
-  .conv-icon.copilot {
-    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
-  }
-  .conv-icon.copilot-blue {
-    background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
-  }
-  .conv-icon.emoji {
-    background: none;
-    font-size: 14px;
-  }
-  .conv-name {
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 20px;
-  }
+      .conv-icon {
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        font-size: 10px;
+        font-weight: 700;
+        color: #fff;
+      }
+      .conv-icon.copilot {
+        background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+      }
+      .conv-icon.copilot-blue {
+        background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+      }
+      .conv-icon.emoji {
+        background: none;
+        font-size: 14px;
+      }
+      .conv-name {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 20px;
+      }
 
-  /* Sidebar footer */
-  .sidebar-footer {
-    padding: 10px 14px;
-    border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .settings-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 6px;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 13px;
-    transition: background 0.12s, color 0.12s;
-  }
-  .settings-row:hover {
-    background: var(--bg-hover);
-    color: var(--text-secondary);
-  }
-  .settings-row .gear { font-size: 15px; }
+      /* Sidebar footer */
+      .sidebar-footer {
+        padding: 10px 14px;
+        border-top: 1px solid var(--border);
+        flex-shrink: 0;
+      }
+      .settings-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 6px;
+        border-radius: var(--radius-sm);
+        cursor: pointer;
+        color: var(--text-muted);
+        font-size: 13px;
+        transition:
+          background 0.12s,
+          color 0.12s;
+      }
+      .settings-row:hover {
+        background: var(--bg-hover);
+        color: var(--text-secondary);
+      }
+      .settings-row .gear {
+        font-size: 15px;
+      }
 
-  /* ================================================================
+      /* ================================================================
      MAIN CONTENT
      ================================================================ */
-  .main-content {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    background: var(--bg-app);
-  }
+      .main-content {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        background: var(--bg-app);
+      }
 
-  /* Tab bar */
-  .tab-bar {
-    height: 38px;
-    min-height: 38px;
-    display: flex;
-    align-items: stretch;
-    background: var(--bg-sidebar);
-    border-bottom: 1px solid var(--border);
-    padding: 0;
-    flex-shrink: 0;
-  }
-  .tab-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 14px;
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    border-right: 1px solid var(--border);
-    cursor: pointer;
-    transition: background 0.1s;
-    white-space: nowrap;
-    position: relative;
-  }
-  .tab-item.active {
-    background: var(--bg-app);
-    color: var(--text-primary);
-    border-bottom: 1px solid var(--bg-app);
-    margin-bottom: -1px;
-  }
-  .tab-item .tab-close {
-    font-size: 14px;
-    color: var(--text-dim);
-    cursor: pointer;
-    line-height: 1;
-    margin-left: 4px;
-  }
-  .tab-item .tab-close:hover { color: var(--text-secondary); }
-  .tab-add {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 34px;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 16px;
-    transition: background 0.1s;
-  }
-  .tab-add:hover { background: var(--bg-hover); }
+      /* Tab bar */
+      .tab-bar {
+        height: 38px;
+        min-height: 38px;
+        display: flex;
+        align-items: stretch;
+        background: var(--bg-sidebar);
+        border-bottom: 1px solid var(--border);
+        padding: 0;
+        flex-shrink: 0;
+      }
+      .tab-item {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 0 14px;
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        border-right: 1px solid var(--border);
+        cursor: pointer;
+        transition: background 0.1s;
+        white-space: nowrap;
+        position: relative;
+      }
+      .tab-item.active {
+        background: var(--bg-app);
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--bg-app);
+        margin-bottom: -1px;
+      }
+      .tab-item .tab-close {
+        font-size: 14px;
+        color: var(--text-dim);
+        cursor: pointer;
+        line-height: 1;
+        margin-left: 4px;
+      }
+      .tab-item .tab-close:hover {
+        color: var(--text-secondary);
+      }
+      .tab-add {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 34px;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 16px;
+        transition: background 0.1s;
+      }
+      .tab-add:hover {
+        background: var(--bg-hover);
+      }
 
-  /* Header bar */
-  .header-bar {
-    height: 42px;
-    min-height: 42px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 0 16px;
-    border-bottom: 1px solid var(--border-light);
-    flex-shrink: 0;
-  }
-  .header-left {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 12px;
-    color: var(--text-muted);
-    flex-shrink: 0;
-  }
-  .header-left .model-name {
-    font-weight: 500;
-    color: var(--text-secondary);
-  }
-  .header-left .internal-tag {
-    font-size: 11px;
-    color: var(--text-dim);
-  }
-  .header-center {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex: 1;
-    justify-content: center;
-  }
-  .header-right {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    color: var(--text-secondary);
-    font-weight: 500;
-    flex-shrink: 0;
-  }
-  .header-right .agent-icon {
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
-  }
+      /* Header bar */
+      .header-bar {
+        height: 42px;
+        min-height: 42px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0 16px;
+        border-bottom: 1px solid var(--border-light);
+        flex-shrink: 0;
+      }
+      .header-left {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        color: var(--text-muted);
+        flex-shrink: 0;
+      }
+      .header-left .model-name {
+        font-weight: 500;
+        color: var(--text-secondary);
+      }
+      .header-left .internal-tag {
+        font-size: 11px;
+        color: var(--text-dim);
+      }
+      .header-center {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        flex: 1;
+        justify-content: center;
+      }
+      .header-right {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 500;
+        flex-shrink: 0;
+      }
+      .header-right .agent-icon {
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #1f2937 0%, #374151 100%);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+      }
 
-  /* ================================================================
+      /* ================================================================
      MODE TOGGLE
      ================================================================ */
-  .mode-toggle {
-    display: flex;
-    align-items: center;
-    background: #f2f3f5;
-    border-radius: 20px;
-    padding: 3px;
-    gap: 2px;
-    flex-shrink: 0;
-  }
-  .mode-toggle-btn {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 4px 14px;
-    border-radius: 17px;
-    font-size: 11px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-    user-select: none;
-    border: none;
-    background: none;
-    font-family: var(--font-ui);
-  }
-  .mode-toggle-btn.rich-ui {
-    color: var(--text-muted);
-  }
-  .mode-toggle-btn.rich-ui.active {
-    background: var(--accent);
-    color: #fff;
-    box-shadow: 0 1px 4px rgba(64,128,255,0.3);
-  }
-  .mode-toggle-btn.terminal {
-    color: var(--text-muted);
-  }
-  .mode-toggle-btn.terminal.active {
-    background: var(--green);
-    color: #fff;
-    box-shadow: 0 1px 4px rgba(0,180,42,0.3);
-  }
-  .mode-toggle-btn .toggle-icon {
-    font-size: 12px;
-    line-height: 1;
-  }
-  .mode-toggle-btn.terminal .toggle-icon {
-    font-family: var(--font-mono);
-    font-size: 11px;
-    font-weight: 600;
-    letter-spacing: -0.5px;
-  }
+      .mode-toggle {
+        display: flex;
+        align-items: center;
+        background: #f2f3f5;
+        border-radius: 20px;
+        padding: 3px;
+        gap: 2px;
+        flex-shrink: 0;
+      }
+      .mode-toggle-btn {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 4px 14px;
+        border-radius: 17px;
+        font-size: 11px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        white-space: nowrap;
+        user-select: none;
+        border: none;
+        background: none;
+        font-family: var(--font-ui);
+      }
+      .mode-toggle-btn.rich-ui {
+        color: var(--text-muted);
+      }
+      .mode-toggle-btn.rich-ui.active {
+        background: var(--accent);
+        color: #fff;
+        box-shadow: 0 1px 4px rgba(64, 128, 255, 0.3);
+      }
+      .mode-toggle-btn.terminal {
+        color: var(--text-muted);
+      }
+      .mode-toggle-btn.terminal.active {
+        background: var(--green);
+        color: #fff;
+        box-shadow: 0 1px 4px rgba(0, 180, 42, 0.3);
+      }
+      .mode-toggle-btn .toggle-icon {
+        font-size: 12px;
+        line-height: 1;
+      }
+      .mode-toggle-btn.terminal .toggle-icon {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: -0.5px;
+      }
 
-  /* ================================================================
+      /* ================================================================
      CHAT AREA
      ================================================================ */
-  .chat-area {
-    flex: 1;
-    overflow-y: auto;
-    padding: 20px 36px;
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
-  }
+      .chat-area {
+        flex: 1;
+        overflow-y: auto;
+        padding: 20px 36px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+      }
 
-  .msg-user {
-    align-self: flex-end;
-    background: #f2f3f5;
-    padding: 10px 16px;
-    border-radius: 18px 18px 4px 18px;
-    font-size: 14px;
-    color: var(--text-primary);
-    max-width: 70%;
-  }
+      .msg-user {
+        align-self: flex-end;
+        background: #f2f3f5;
+        padding: 10px 16px;
+        border-radius: 18px 18px 4px 18px;
+        font-size: 14px;
+        color: var(--text-primary);
+        max-width: 70%;
+      }
 
-  .msg-system {
-    align-self: center;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    background: var(--green-lighter);
-    border-radius: 20px;
-    font-size: 12px;
-    color: var(--text-secondary);
-  }
-  .msg-system .sys-dot {
-    width: 7px;
-    height: 7px;
-    border-radius: 50%;
-    background: var(--green);
-    flex-shrink: 0;
-  }
+      .msg-system {
+        align-self: center;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        background: var(--green-lighter);
+        border-radius: 20px;
+        font-size: 12px;
+        color: var(--text-secondary);
+      }
+      .msg-system .sys-dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--green);
+        flex-shrink: 0;
+      }
 
-  .msg-assistant {
-    align-self: flex-start;
-    font-size: 14px;
-    color: var(--text-primary);
-    max-width: 75%;
-    line-height: 1.65;
-  }
-  .msg-assistant p {
-    margin-bottom: 8px;
-  }
-  .msg-assistant p:last-child {
-    margin-bottom: 0;
-  }
-  .msg-assistant code {
-    background: #f2f3f5;
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    color: var(--accent);
-  }
-  .msg-assistant strong {
-    font-weight: 600;
-  }
-  .msg-assistant ul {
-    margin: 4px 0;
-    padding-left: 18px;
-  }
-  .msg-assistant li {
-    margin-bottom: 2px;
-  }
+      .msg-assistant {
+        align-self: flex-start;
+        font-size: 14px;
+        color: var(--text-primary);
+        max-width: 75%;
+        line-height: 1.65;
+      }
+      .msg-assistant p {
+        margin-bottom: 8px;
+      }
+      .msg-assistant p:last-child {
+        margin-bottom: 0;
+      }
+      .msg-assistant code {
+        background: #f2f3f5;
+        padding: 1px 5px;
+        border-radius: 3px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        color: var(--accent);
+      }
+      .msg-assistant strong {
+        font-weight: 600;
+      }
+      .msg-assistant ul {
+        margin: 4px 0;
+        padding-left: 18px;
+      }
+      .msg-assistant li {
+        margin-bottom: 2px;
+      }
 
-  /* ================================================================
+      /* ================================================================
      TOOL CALL CARDS
      ================================================================ */
-  .tool-card {
-    border: 1px solid var(--border);
-    border-radius: var(--radius-md);
-    overflow: hidden;
-    box-shadow: var(--shadow-sm);
-    margin: 4px 0;
-    max-width: 520px;
-  }
-  .tool-card.read {
-    border-left: 3px solid var(--accent);
-  }
-  .tool-card.edit {
-    border-left: 3px solid var(--orange);
-  }
-  .tool-card-header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 12px;
-    background: #fafbfc;
-    border-bottom: 1px solid var(--border-light);
-    cursor: pointer;
-    transition: background 0.1s;
-  }
-  .tool-card-header:hover {
-    background: #f2f3f5;
-  }
-  .tool-card-header .tool-icon {
-    font-size: 14px;
-    flex-shrink: 0;
-  }
-  .tool-card-header .tool-name {
-    font-size: 12px;
-    font-weight: 600;
-    color: var(--text-primary);
-  }
-  .tool-card-header .tool-file {
-    font-size: 12px;
-    color: var(--text-muted);
-    font-family: var(--font-mono);
-    flex: 1;
-    min-width: 0;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .tool-card-header .tool-chevron {
-    font-size: 10px;
-    color: var(--text-dim);
-    flex-shrink: 0;
-    transition: transform 0.2s;
-  }
-  .tool-card-header .tool-chevron.expanded {
-    transform: rotate(90deg);
-  }
-  .tool-card-body {
-    padding: 0;
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.2s ease;
-  }
-  .tool-card-body.expanded {
-    max-height: 300px;
-  }
-  .tool-card-body-inner {
-    padding: 10px 12px;
-    font-family: var(--font-mono);
-    font-size: 12px;
-    line-height: 1.6;
-    background: #fafbfc;
-  }
+      .tool-card {
+        border: 1px solid var(--border);
+        border-radius: var(--radius-md);
+        overflow: hidden;
+        box-shadow: var(--shadow-sm);
+        margin: 4px 0;
+        max-width: 520px;
+      }
+      .tool-card.read {
+        border-left: 3px solid var(--accent);
+      }
+      .tool-card.edit {
+        border-left: 3px solid var(--orange);
+      }
+      .tool-card-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        background: #fafbfc;
+        border-bottom: 1px solid var(--border-light);
+        cursor: pointer;
+        transition: background 0.1s;
+      }
+      .tool-card-header:hover {
+        background: #f2f3f5;
+      }
+      .tool-card-header .tool-icon {
+        font-size: 14px;
+        flex-shrink: 0;
+      }
+      .tool-card-header .tool-name {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-primary);
+      }
+      .tool-card-header .tool-file {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-family: var(--font-mono);
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .tool-card-header .tool-chevron {
+        font-size: 10px;
+        color: var(--text-dim);
+        flex-shrink: 0;
+        transition: transform 0.2s;
+      }
+      .tool-card-header .tool-chevron.expanded {
+        transform: rotate(90deg);
+      }
+      .tool-card-body {
+        padding: 0;
+        max-height: 0;
+        overflow: hidden;
+        transition: max-height 0.2s ease;
+      }
+      .tool-card-body.expanded {
+        max-height: 300px;
+      }
+      .tool-card-body-inner {
+        padding: 10px 12px;
+        font-family: var(--font-mono);
+        font-size: 12px;
+        line-height: 1.6;
+        background: #fafbfc;
+      }
 
-  /* Diff lines */
-  .diff-line {
-    padding: 0 4px;
-    white-space: pre;
-  }
-  .diff-line.add {
-    background: rgba(0,180,42,0.1);
-    color: #1a7f37;
-  }
-  .diff-line.remove {
-    background: rgba(245,63,63,0.1);
-    color: #cf222e;
-  }
-  .diff-line.context {
-    color: var(--text-muted);
-  }
-  .diff-line.header {
-    color: var(--accent);
-    font-weight: 500;
-  }
+      /* Diff lines */
+      .diff-line {
+        padding: 0 4px;
+        white-space: pre;
+      }
+      .diff-line.add {
+        background: rgba(0, 180, 42, 0.1);
+        color: #1a7f37;
+      }
+      .diff-line.remove {
+        background: rgba(245, 63, 63, 0.1);
+        color: #cf222e;
+      }
+      .diff-line.context {
+        color: var(--text-muted);
+      }
+      .diff-line.header {
+        color: var(--accent);
+        font-weight: 500;
+      }
 
-  /* ================================================================
+      /* ================================================================
      INPUT BOX
      ================================================================ */
-  .input-area {
-    padding: 12px 16px 16px;
-    flex-shrink: 0;
-  }
-  .input-box {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-    background: var(--bg-app);
-    transition: border-color 0.15s;
-  }
-  .input-box:focus-within { border-color: var(--accent); }
-  .input-plus {
-    width: 24px;
-    height: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: var(--text-muted);
-    cursor: pointer;
-    font-size: 18px;
-    flex-shrink: 0;
-    border-radius: var(--radius-xs);
-    transition: background 0.1s;
-  }
-  .input-plus:hover { background: var(--bg-hover); }
-  .input-text {
-    flex: 1;
-    font-size: 14px;
-    color: var(--text-dim);
-    white-space: nowrap;
-  }
-  .input-send {
-    width: 30px;
-    height: 30px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: var(--accent);
-    border-radius: 50%;
-    cursor: pointer;
-    flex-shrink: 0;
-    transition: background 0.12s;
-  }
-  .input-send:hover { background: var(--accent-hover); }
-  .input-send svg {
-    width: 14px;
-    height: 14px;
-    fill: #fff;
-  }
-  .input-model-info {
-    padding: 4px 12px 0 44px;
-    font-size: 11px;
-    color: var(--text-dim);
-  }
+      .input-area {
+        padding: 12px 16px 16px;
+        flex-shrink: 0;
+      }
+      .input-box {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 10px 12px;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+        background: var(--bg-app);
+        transition: border-color 0.15s;
+      }
+      .input-box:focus-within {
+        border-color: var(--accent);
+      }
+      .input-plus {
+        width: 24px;
+        height: 24px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-muted);
+        cursor: pointer;
+        font-size: 18px;
+        flex-shrink: 0;
+        border-radius: var(--radius-xs);
+        transition: background 0.1s;
+      }
+      .input-plus:hover {
+        background: var(--bg-hover);
+      }
+      .input-text {
+        flex: 1;
+        font-size: 14px;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
+      .input-send {
+        width: 30px;
+        height: 30px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--accent);
+        border-radius: 50%;
+        cursor: pointer;
+        flex-shrink: 0;
+        transition: background 0.12s;
+      }
+      .input-send:hover {
+        background: var(--accent-hover);
+      }
+      .input-send svg {
+        width: 14px;
+        height: 14px;
+        fill: #fff;
+      }
+      .input-model-info {
+        padding: 4px 12px 0 44px;
+        font-size: 11px;
+        color: var(--text-dim);
+      }
 
-  /* ================================================================
+      /* ================================================================
      RIGHT SIDEBAR
      ================================================================ */
-  .right-sidebar {
-    width: var(--right-sidebar-width);
-    min-width: var(--right-sidebar-width);
-    background: var(--bg-app);
-    border-left: 1px solid var(--border);
-    display: flex;
-    flex-direction: column;
-    user-select: none;
-  }
-  .right-header {
-    padding: 12px 14px;
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    border-bottom: 1px solid var(--border-light);
-    flex-shrink: 0;
-  }
-  .right-search {
-    margin: 10px 12px;
-    padding: 7px 10px;
-    background: var(--bg-sidebar);
-    border: 1px solid var(--border);
-    border-radius: var(--radius-sm);
-    font-size: 12px;
-    color: var(--text-dim);
-    flex-shrink: 0;
-  }
-  .file-tree {
-    flex: 1;
-    overflow-y: auto;
-    padding: 4px 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    line-height: 1.8;
-  }
-  .ft-folder {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 6px;
-    cursor: pointer;
-    border-radius: var(--radius-xs);
-    transition: background 0.1s;
-  }
-  .ft-folder:hover { background: var(--bg-hover); }
-  .ft-folder .ft-chevron {
-    font-size: 9px;
-    color: var(--text-dim);
-    width: 12px;
-    text-align: center;
-  }
-  .ft-folder .ft-folder-icon { color: var(--accent); font-size: 13px; }
-  .ft-file {
-    display: flex;
-    align-items: center;
-    gap: 5px;
-    padding: 2px 6px 2px 23px;
-    cursor: pointer;
-    border-radius: var(--radius-xs);
-    transition: background 0.1s;
-  }
-  .ft-file:hover { background: var(--bg-hover); }
-  .ft-file .ft-file-icon { color: var(--text-dim); font-size: 12px; }
+      .right-sidebar {
+        width: var(--right-sidebar-width);
+        min-width: var(--right-sidebar-width);
+        background: var(--bg-app);
+        border-left: 1px solid var(--border);
+        display: flex;
+        flex-direction: column;
+        user-select: none;
+      }
+      .right-header {
+        padding: 12px 14px;
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        border-bottom: 1px solid var(--border-light);
+        flex-shrink: 0;
+      }
+      .right-search {
+        margin: 10px 12px;
+        padding: 7px 10px;
+        background: var(--bg-sidebar);
+        border: 1px solid var(--border);
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+        color: var(--text-dim);
+        flex-shrink: 0;
+      }
+      .file-tree {
+        flex: 1;
+        overflow-y: auto;
+        padding: 4px 8px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.8;
+      }
+      .ft-folder {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 6px;
+        cursor: pointer;
+        border-radius: var(--radius-xs);
+        transition: background 0.1s;
+      }
+      .ft-folder:hover {
+        background: var(--bg-hover);
+      }
+      .ft-folder .ft-chevron {
+        font-size: 9px;
+        color: var(--text-dim);
+        width: 12px;
+        text-align: center;
+      }
+      .ft-folder .ft-folder-icon {
+        color: var(--accent);
+        font-size: 13px;
+      }
+      .ft-file {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        padding: 2px 6px 2px 23px;
+        cursor: pointer;
+        border-radius: var(--radius-xs);
+        transition: background 0.1s;
+      }
+      .ft-file:hover {
+        background: var(--bg-hover);
+      }
+      .ft-file .ft-file-icon {
+        color: var(--text-dim);
+        font-size: 12px;
+      }
 
-  /* ================================================================
+      /* ================================================================
      TERMINAL AREA (Full swap)
      ================================================================ */
-  .terminal-pane {
-    flex: 1;
-    background: var(--terminal-bg);
-    overflow-y: auto;
-    font-family: var(--font-mono);
-    font-size: 13px;
-    line-height: 1.55;
-    color: #d1d1d6;
-    padding: 16px 20px;
-  }
-  .terminal-pane::-webkit-scrollbar { width: 6px; }
-  .terminal-pane::-webkit-scrollbar-track { background: transparent; }
-  .terminal-pane::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+      .terminal-pane {
+        flex: 1;
+        background: var(--terminal-bg);
+        overflow-y: auto;
+        font-family: var(--font-mono);
+        font-size: 13px;
+        line-height: 1.55;
+        color: #d1d1d6;
+        padding: 16px 20px;
+      }
+      .terminal-pane::-webkit-scrollbar {
+        width: 6px;
+      }
+      .terminal-pane::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      .terminal-pane::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.1);
+        border-radius: 3px;
+      }
 
-  /* Terminal text colors */
-  .t-green { color: #00ff41; }
-  .t-cyan { color: #00d4ff; }
-  .t-yellow { color: #ffd60a; }
-  .t-red { color: #ff453a; }
-  .t-magenta { color: #bf5af2; }
-  .t-blue { color: #4080ff; }
-  .t-dim { color: #8e8e93; }
-  .t-white { color: #e5e5e7; }
-  .t-bold { font-weight: 600; }
+      /* Terminal text colors */
+      .t-green {
+        color: #00ff41;
+      }
+      .t-cyan {
+        color: #00d4ff;
+      }
+      .t-yellow {
+        color: #ffd60a;
+      }
+      .t-red {
+        color: #ff453a;
+      }
+      .t-magenta {
+        color: #bf5af2;
+      }
+      .t-blue {
+        color: #4080ff;
+      }
+      .t-dim {
+        color: #8e8e93;
+      }
+      .t-white {
+        color: #e5e5e7;
+      }
+      .t-bold {
+        font-weight: 600;
+      }
 
-  .cursor-block {
-    display: inline-block;
-    width: 7.8px;
-    height: 15px;
-    background: #d1d1d6;
-    vertical-align: text-bottom;
-    animation: blink 1s step-end infinite;
-  }
-  @keyframes blink {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0; }
-  }
+      .cursor-block {
+        display: inline-block;
+        width: 7.8px;
+        height: 15px;
+        background: #d1d1d6;
+        vertical-align: text-bottom;
+        animation: blink 1s step-end infinite;
+      }
+      @keyframes blink {
+        0%,
+        100% {
+          opacity: 1;
+        }
+        50% {
+          opacity: 0;
+        }
+      }
 
-  /* ================================================================
+      /* ================================================================
      SETTINGS PAGE
      ================================================================ */
-  .settings-page {
-    flex: 1;
-    overflow-y: auto;
-    padding: 32px 48px;
-  }
-  .settings-title {
-    font-size: 20px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 4px;
-  }
-  .settings-subtitle {
-    font-size: 13px;
-    color: var(--text-muted);
-    margin-bottom: 28px;
-  }
+      .settings-page {
+        flex: 1;
+        overflow-y: auto;
+        padding: 32px 48px;
+      }
+      .settings-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 4px;
+      }
+      .settings-subtitle {
+        font-size: 13px;
+        color: var(--text-muted);
+        margin-bottom: 28px;
+      }
 
-  .settings-section {
-    margin-bottom: 28px;
-  }
-  .settings-section-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    padding-bottom: 8px;
-    border-bottom: 1px solid var(--border-light);
-    margin-bottom: 16px;
-  }
+      .settings-section {
+        margin-bottom: 28px;
+      }
+      .settings-section-title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        padding-bottom: 8px;
+        border-bottom: 1px solid var(--border-light);
+        margin-bottom: 16px;
+      }
 
-  .settings-item {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    padding: 14px 0;
-    border-bottom: 1px solid var(--border-light);
-  }
-  .settings-item-left {
-    flex: 1;
-    min-width: 0;
-  }
-  .settings-item-label {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--text-primary);
-    margin-bottom: 3px;
-  }
-  .settings-item-desc {
-    font-size: 12px;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
-  .settings-item-right {
-    flex-shrink: 0;
-    margin-left: 24px;
-    display: flex;
-    align-items: center;
-  }
+      .settings-item {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border-light);
+      }
+      .settings-item-left {
+        flex: 1;
+        min-width: 0;
+      }
+      .settings-item-label {
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-primary);
+        margin-bottom: 3px;
+      }
+      .settings-item-desc {
+        font-size: 12px;
+        color: var(--text-muted);
+        line-height: 1.5;
+      }
+      .settings-item-right {
+        flex-shrink: 0;
+        margin-left: 24px;
+        display: flex;
+        align-items: center;
+      }
 
-  /* Settings mode card */
-  .settings-mode-options {
-    display: flex;
-    gap: 12px;
-    margin-top: 12px;
-  }
-  .settings-mode-card {
-    flex: 1;
-    border: 2px solid var(--border);
-    border-radius: var(--radius-md);
-    padding: 14px 16px;
-    cursor: pointer;
-    transition: all 0.15s;
-    position: relative;
-  }
-  .settings-mode-card:hover {
-    border-color: var(--text-dim);
-  }
-  .settings-mode-card.selected {
-    border-color: var(--accent);
-    background: var(--accent-lighter);
-  }
-  .settings-mode-card.selected .smc-check {
-    display: flex;
-  }
-  .smc-check {
-    display: none;
-    position: absolute;
-    top: 8px;
-    right: 8px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: var(--accent);
-    color: #fff;
-    font-size: 10px;
-    align-items: center;
-    justify-content: center;
-    font-weight: 700;
-  }
-  .smc-header {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 6px;
-  }
-  .smc-header .smc-icon {
-    font-size: 14px;
-  }
-  .smc-header .smc-icon-term {
-    font-family: var(--font-mono);
-    font-size: 12px;
-    font-weight: 700;
-  }
-  .smc-desc {
-    font-size: 11px;
-    color: var(--text-muted);
-    line-height: 1.5;
-  }
+      /* Settings mode card */
+      .settings-mode-options {
+        display: flex;
+        gap: 12px;
+        margin-top: 12px;
+      }
+      .settings-mode-card {
+        flex: 1;
+        border: 2px solid var(--border);
+        border-radius: var(--radius-md);
+        padding: 14px 16px;
+        cursor: pointer;
+        transition: all 0.15s;
+        position: relative;
+      }
+      .settings-mode-card:hover {
+        border-color: var(--text-dim);
+      }
+      .settings-mode-card.selected {
+        border-color: var(--accent);
+        background: var(--accent-lighter);
+      }
+      .settings-mode-card.selected .smc-check {
+        display: flex;
+      }
+      .smc-check {
+        display: none;
+        position: absolute;
+        top: 8px;
+        right: 8px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: var(--accent);
+        color: #fff;
+        font-size: 10px;
+        align-items: center;
+        justify-content: center;
+        font-weight: 700;
+      }
+      .smc-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 6px;
+      }
+      .smc-header .smc-icon {
+        font-size: 14px;
+      }
+      .smc-header .smc-icon-term {
+        font-family: var(--font-mono);
+        font-size: 12px;
+        font-weight: 700;
+      }
+      .smc-desc {
+        font-size: 11px;
+        color: var(--text-muted);
+        line-height: 1.5;
+      }
 
-  /* Segmented control for settings */
-  .segmented-control {
-    display: flex;
-    background: #f2f3f5;
-    border-radius: var(--radius-md);
-    padding: 3px;
-    gap: 2px;
-  }
-  .segmented-option {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 16px;
-    border-radius: var(--radius-sm);
-    font-size: 12px;
-    font-weight: 500;
-    color: var(--text-muted);
-    cursor: pointer;
-    transition: all 0.18s ease;
-    white-space: nowrap;
-    user-select: none;
-  }
-  .segmented-option.selected {
-    background: #fff;
-    color: var(--text-primary);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
-  }
-  .segmented-option .seg-icon {
-    font-size: 13px;
-    line-height: 1;
-  }
+      /* Segmented control for settings */
+      .segmented-control {
+        display: flex;
+        background: #f2f3f5;
+        border-radius: var(--radius-md);
+        padding: 3px;
+        gap: 2px;
+      }
+      .segmented-option {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 16px;
+        border-radius: var(--radius-sm);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-muted);
+        cursor: pointer;
+        transition: all 0.18s ease;
+        white-space: nowrap;
+        user-select: none;
+      }
+      .segmented-option.selected {
+        background: #fff;
+        color: var(--text-primary);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+      }
+      .segmented-option .seg-icon {
+        font-size: 13px;
+        line-height: 1;
+      }
 
-  /* Simple toggle switch */
-  .toggle-switch {
-    width: 40px;
-    height: 22px;
-    background: var(--text-dim);
-    border-radius: 11px;
-    position: relative;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-  .toggle-switch.on {
-    background: var(--accent);
-  }
-  .toggle-switch::after {
-    content: '';
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: #fff;
-    transition: transform 0.2s;
-    box-shadow: 0 1px 2px rgba(0,0,0,0.15);
-  }
-  .toggle-switch.on::after {
-    transform: translateX(18px);
-  }
+      /* Simple toggle switch */
+      .toggle-switch {
+        width: 40px;
+        height: 22px;
+        background: var(--text-dim);
+        border-radius: 11px;
+        position: relative;
+        cursor: pointer;
+        transition: background 0.2s;
+      }
+      .toggle-switch.on {
+        background: var(--accent);
+      }
+      .toggle-switch::after {
+        content: '';
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 18px;
+        height: 18px;
+        border-radius: 50%;
+        background: #fff;
+        transition: transform 0.2s;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+      }
+      .toggle-switch.on::after {
+        transform: translateX(18px);
+      }
 
-  .settings-note {
-    font-size: 11px;
-    color: var(--text-dim);
-    margin-top: 8px;
-    font-style: italic;
-  }
+      .settings-note {
+        font-size: 11px;
+        color: var(--text-dim);
+        margin-top: 8px;
+        font-style: italic;
+      }
 
-  /* ================================================================
+      /* ================================================================
      SESSION DIVIDER (for JSONL history rendering)
      ================================================================ */
-  .session-divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 4px 0;
-    margin: 6px 0;
-  }
-  .session-divider::before,
-  .session-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
-  }
-  .session-divider-text {
-    font-size: 11px;
-    font-weight: 500;
-    color: var(--text-dim);
-    white-space: nowrap;
-  }
+      .session-divider {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 4px 0;
+        margin: 6px 0;
+      }
+      .session-divider::before,
+      .session-divider::after {
+        content: '';
+        flex: 1;
+        height: 1px;
+        background: var(--border);
+      }
+      .session-divider-text {
+        font-size: 11px;
+        font-weight: 500;
+        color: var(--text-dim);
+        white-space: nowrap;
+      }
 
-  /* History restored banner */
-  .history-banner {
-    align-self: center;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 6px 14px;
-    background: var(--accent-lighter);
-    border: 1px solid rgba(64,128,255,0.15);
-    border-radius: var(--radius-md);
-    font-size: 11px;
-    color: var(--text-secondary);
-    margin-bottom: 4px;
-  }
-  .history-banner .hb-icon {
-    font-size: 13px;
-    color: var(--accent);
-  }
-  .history-banner .hb-dismiss {
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 14px;
-    margin-left: 4px;
-    line-height: 1;
-  }
-  .history-banner .hb-dismiss:hover {
-    color: var(--text-muted);
-  }
+      /* History restored banner */
+      .history-banner {
+        align-self: center;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 14px;
+        background: var(--accent-lighter);
+        border: 1px solid rgba(64, 128, 255, 0.15);
+        border-radius: var(--radius-md);
+        font-size: 11px;
+        color: var(--text-secondary);
+        margin-bottom: 4px;
+      }
+      .history-banner .hb-icon {
+        font-size: 13px;
+        color: var(--accent);
+      }
+      .history-banner .hb-dismiss {
+        color: var(--text-dim);
+        cursor: pointer;
+        font-size: 14px;
+        margin-left: 4px;
+        line-height: 1;
+      }
+      .history-banner .hb-dismiss:hover {
+        color: var(--text-muted);
+      }
 
-  /* ================================================================
+      /* ================================================================
      COMPARISON NOTES
      ================================================================ */
-  .comparison {
-    max-width: 1340px;
-    margin: 20px auto 0;
-    padding: 20px 24px;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: var(--radius-lg);
-  }
-  .comparison h3 {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 8px;
-  }
-  .comparison p {
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.7;
-  }
-  .comparison ul {
-    list-style: none;
-    margin-top: 8px;
-    font-size: 12px;
-    color: var(--text-secondary);
-    line-height: 1.8;
-  }
-  .comparison ul li::before {
-    content: '';
-    display: inline-block;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
-    background: var(--accent);
-    margin-right: 8px;
-    vertical-align: middle;
-  }
-  .comparison .key-change {
-    display: inline-block;
-    background: var(--green-lighter);
-    color: #1a7f37;
-    font-size: 10px;
-    font-weight: 600;
-    padding: 1px 6px;
-    border-radius: 3px;
-    margin-left: 6px;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-  }
-</style>
-</head>
-<body>
+      .comparison {
+        max-width: 1340px;
+        margin: 20px auto 0;
+        padding: 20px 24px;
+        background: #fff;
+        border: 1px solid var(--border);
+        border-radius: var(--radius-lg);
+      }
+      .comparison h3 {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--text-primary);
+        margin-bottom: 8px;
+      }
+      .comparison p {
+        font-size: 13px;
+        color: var(--text-secondary);
+        line-height: 1.7;
+      }
+      .comparison ul {
+        list-style: none;
+        margin-top: 8px;
+        font-size: 12px;
+        color: var(--text-secondary);
+        line-height: 1.8;
+      }
+      .comparison ul li::before {
+        content: '';
+        display: inline-block;
+        width: 5px;
+        height: 5px;
+        border-radius: 50%;
+        background: var(--accent);
+        margin-right: 8px;
+        vertical-align: middle;
+      }
+      .comparison .key-change {
+        display: inline-block;
+        background: var(--green-lighter);
+        color: #1a7f37;
+        font-size: 10px;
+        font-weight: 600;
+        padding: 1px 6px;
+        border-radius: 3px;
+        margin-left: 6px;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Banner -->
+    <div class="page-banner">
+      <span class="step-badge">STEP 1</span>
+      Terminal Toggle <span class="v2-badge">V2</span> &mdash; Clean Full Swap &mdash; No split view, no fading, no
+      dividers
+    </div>
 
-<!-- Banner -->
-<div class="page-banner">
-  <span class="step-badge">STEP 1</span>
-  Terminal Toggle <span class="v2-badge">V2</span> &mdash; Clean Full Swap &mdash; No split view, no fading, no dividers
-</div>
+    <!-- Option Tabs -->
+    <div class="option-tabs" id="optionTabs">
+      <div class="option-tab active" data-target="panel1">Rich UI Mode (Before Toggle)</div>
+      <div class="option-tab" data-target="panel2">Terminal Mode (After Toggle)</div>
+      <div class="option-tab" data-target="panel3">Terminal &rarr; Rich UI (JSONL History)</div>
+    </div>
 
-<!-- Option Tabs -->
-<div class="option-tabs" id="optionTabs">
-  <div class="option-tab active" data-target="panel1">Rich UI Mode (Before Toggle)</div>
-  <div class="option-tab" data-target="panel2">Terminal Mode (After Toggle)</div>
-  <div class="option-tab" data-target="panel3">Terminal &rarr; Rich UI (JSONL History)</div>
-</div>
-
-<!-- =================================================================
+    <!-- =================================================================
      TAB 1: RICH UI MODE (BEFORE TOGGLE)
      ================================================================= -->
-<div class="option-panel active" id="panel1">
-  <div class="mockup-frame">
-    <div class="mockup-inner">
-
-      <!-- Left Sidebar -->
-      <div class="sidebar">
-        <div class="sidebar-traffic">
-          <div class="traffic-dots">
-            <div class="traffic-dot close"></div>
-            <div class="traffic-dot minimize"></div>
-            <div class="traffic-dot maximize"></div>
-          </div>
-          <div class="hamburger-icon">&#9776;</div>
-        </div>
-
-        <div class="sidebar-logo">
-          <div class="sidebar-logo-icon">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
-          </div>
-          <span class="sidebar-logo-text">AionUi</span>
-        </div>
-
-        <div class="new-chat-row">
-          <button class="new-chat-btn">
-            <span class="plus">+</span> New Chat
-          </button>
-          <div class="batch-icon">&#9776;</div>
-        </div>
-
-        <div class="conv-list">
-          <div class="time-label">Today</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
-          <div class="conv-row active">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">hi2</span>
-          </div>
-          <div class="conv-row">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">hi</span>
-          </div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
-          <div class="conv-row">
-            <div class="conv-icon emoji">&#127802;</div>
-            <span class="conv-name">/resume</span>
-          </div>
-
-          <div class="time-label">Yesterday</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
-          <div class="conv-row">
-            <div class="conv-icon copilot">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">catch up the project c...</span>
-          </div>
-        </div>
-
-        <div class="sidebar-footer">
-          <div class="settings-row">
-            <span class="gear">&#9881;</span> Settings
-          </div>
-        </div>
-      </div>
-
-      <!-- Main Content -->
-      <div class="main-content">
-        <div class="tab-bar">
-          <div class="tab-item active">hi2 <span class="tab-close">&times;</span></div>
-          <div class="tab-add">+</div>
-        </div>
-
-        <div class="header-bar">
-          <div class="header-left">
-            <span class="model-name">Claude Opus 4.6 (1M context)</span>
-            <span class="internal-tag">(Internal only)</span>
-          </div>
-          <div class="header-center">
-            <!-- MODE TOGGLE - Rich UI active -->
-            <div class="mode-toggle">
-              <button class="mode-toggle-btn rich-ui active">
-                <span class="toggle-icon">&#128172;</span>
-                Rich UI
-              </button>
-              <button class="mode-toggle-btn terminal">
-                <span class="toggle-icon">&gt;_</span>
-                Terminal
-              </button>
-            </div>
-          </div>
-          <div class="header-right">
-            <div class="agent-icon">
-              <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            GitHub Copilot
-          </div>
-        </div>
-
-        <div class="chat-area">
-          <!-- User message -->
-          <div class="msg-user">refactor the auth middleware to use JWT validation</div>
-
-          <!-- System badge -->
-          <div class="msg-system">
-            <span class="sys-dot"></span>
-            GitHub Copilot &bull; Active session
-          </div>
-
-          <!-- Tool card: Read (collapsed) -->
-          <div style="align-self:flex-start; max-width:75%;">
-            <div class="tool-card read">
-              <div class="tool-card-header" onclick="toggleCard(this)">
-                <span class="tool-icon">&#128196;</span>
-                <span class="tool-name">Read</span>
-                <span class="tool-file">src/auth/middleware.ts</span>
-                <span class="tool-chevron">&#9656;</span>
+    <div class="option-panel active" id="panel1">
+      <div class="mockup-frame">
+        <div class="mockup-inner">
+          <!-- Left Sidebar -->
+          <div class="sidebar">
+            <div class="sidebar-traffic">
+              <div class="traffic-dots">
+                <div class="traffic-dot close"></div>
+                <div class="traffic-dot minimize"></div>
+                <div class="traffic-dot maximize"></div>
               </div>
-              <div class="tool-card-body">
-                <div class="tool-card-body-inner">
-                  <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
-                  <div class="diff-line context">import { verifySession } from './session'</div>
-                  <div class="diff-line context">&nbsp;</div>
-                  <div class="diff-line context">export function authMiddleware(req: Request, res: Response, next: NextFunction) {</div>
-                  <div class="diff-line context">  const token = req.headers.authorization?.split(' ')[1]</div>
-                  <div class="diff-line context">  if (!token) return res.status(401).json({ error: 'No token' })</div>
-                  <div class="diff-line context">  // ... legacy session-based validation</div>
-                  <div class="diff-line context">}</div>
+              <div class="hamburger-icon">&#9776;</div>
+            </div>
+
+            <div class="sidebar-logo">
+              <div class="sidebar-logo-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" /></svg>
+              </div>
+              <span class="sidebar-logo-text">AionUi</span>
+            </div>
+
+            <div class="new-chat-row">
+              <button class="new-chat-btn"><span class="plus">+</span> New Chat</button>
+              <div class="batch-icon">&#9776;</div>
+            </div>
+
+            <div class="conv-list">
+              <div class="time-label">Today</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
+              <div class="conv-row active">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi2</span>
+              </div>
+              <div class="conv-row">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi</span>
+              </div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
+              <div class="conv-row">
+                <div class="conv-icon emoji">&#127802;</div>
+                <span class="conv-name">/resume</span>
+              </div>
+
+              <div class="time-label">Yesterday</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
+              <div class="conv-row">
+                <div class="conv-icon copilot">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">catch up the project c...</span>
+              </div>
+            </div>
+
+            <div class="sidebar-footer">
+              <div class="settings-row"><span class="gear">&#9881;</span> Settings</div>
+            </div>
+          </div>
+
+          <!-- Main Content -->
+          <div class="main-content">
+            <div class="tab-bar">
+              <div class="tab-item active">hi2 <span class="tab-close">&times;</span></div>
+              <div class="tab-add">+</div>
+            </div>
+
+            <div class="header-bar">
+              <div class="header-left">
+                <span class="model-name">Claude Opus 4.6 (1M context)</span>
+                <span class="internal-tag">(Internal only)</span>
+              </div>
+              <div class="header-center">
+                <!-- MODE TOGGLE - Rich UI active -->
+                <div class="mode-toggle">
+                  <button class="mode-toggle-btn rich-ui active">
+                    <span class="toggle-icon">&#128172;</span>
+                    Rich UI
+                  </button>
+                  <button class="mode-toggle-btn terminal">
+                    <span class="toggle-icon">&gt;_</span>
+                    Terminal
+                  </button>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Tool card: Edit (expanded, showing diff) -->
-          <div style="align-self:flex-start; max-width:75%;">
-            <div class="tool-card edit">
-              <div class="tool-card-header" onclick="toggleCard(this)">
-                <span class="tool-icon">&#9998;</span>
-                <span class="tool-name">Edit</span>
-                <span class="tool-file">src/auth/middleware.ts</span>
-                <span class="tool-chevron expanded">&#9656;</span>
+              <div class="header-right">
+                <div class="agent-icon">
+                  <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                GitHub Copilot
               </div>
-              <div class="tool-card-body expanded">
-                <div class="tool-card-body-inner">
-                  <div class="diff-line header">@@ -1,6 +1,8 @@</div>
-                  <div class="diff-line context"> import { Request, Response, NextFunction } from 'express'</div>
-                  <div class="diff-line remove">-import { verifySession } from './session'</div>
-                  <div class="diff-line add">+import jwt from 'jsonwebtoken'</div>
-                  <div class="diff-line add">+import { JWT_SECRET } from '../config/env'</div>
-                  <div class="diff-line context">&nbsp;</div>
-                  <div class="diff-line context"> export function authMiddleware(req: Request, res: Response, next: NextFunction) {</div>
-                  <div class="diff-line context">   const token = req.headers.authorization?.split(' ')[1]</div>
-                  <div class="diff-line context">   if (!token) return res.status(401).json({ error: 'No token' })</div>
-                  <div class="diff-line remove">-  const session = verifySession(token)</div>
-                  <div class="diff-line remove">-  if (!session) return res.status(401).json({ error: 'Invalid' })</div>
-                  <div class="diff-line remove">-  req.user = session.user</div>
-                  <div class="diff-line add">+  try {</div>
-                  <div class="diff-line add">+    const decoded = jwt.verify(token, JWT_SECRET)</div>
-                  <div class="diff-line add">+    req.user = decoded as JwtPayload</div>
-                  <div class="diff-line add">+  } catch (err) {</div>
-                  <div class="diff-line add">+    return res.status(401).json({ error: 'Invalid or expired token' })</div>
-                  <div class="diff-line add">+  }</div>
-                  <div class="diff-line context">   next()</div>
-                  <div class="diff-line context"> }</div>
+            </div>
+
+            <div class="chat-area">
+              <!-- User message -->
+              <div class="msg-user">refactor the auth middleware to use JWT validation</div>
+
+              <!-- System badge -->
+              <div class="msg-system">
+                <span class="sys-dot"></span>
+                GitHub Copilot &bull; Active session
+              </div>
+
+              <!-- Tool card: Read (collapsed) -->
+              <div style="align-self: flex-start; max-width: 75%">
+                <div class="tool-card read">
+                  <div class="tool-card-header" onclick="toggleCard(this)">
+                    <span class="tool-icon">&#128196;</span>
+                    <span class="tool-name">Read</span>
+                    <span class="tool-file">src/auth/middleware.ts</span>
+                    <span class="tool-chevron">&#9656;</span>
+                  </div>
+                  <div class="tool-card-body">
+                    <div class="tool-card-body-inner">
+                      <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
+                      <div class="diff-line context">import { verifySession } from './session'</div>
+                      <div class="diff-line context">&nbsp;</div>
+                      <div class="diff-line context">
+                        export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+                      </div>
+                      <div class="diff-line context">const token = req.headers.authorization?.split(' ')[1]</div>
+                      <div class="diff-line context">
+                        if (!token) return res.status(401).json({ error: 'No token' })
+                      </div>
+                      <div class="diff-line context">// ... legacy session-based validation</div>
+                      <div class="diff-line context">}</div>
+                    </div>
+                  </div>
                 </div>
               </div>
+
+              <!-- Tool card: Edit (expanded, showing diff) -->
+              <div style="align-self: flex-start; max-width: 75%">
+                <div class="tool-card edit">
+                  <div class="tool-card-header" onclick="toggleCard(this)">
+                    <span class="tool-icon">&#9998;</span>
+                    <span class="tool-name">Edit</span>
+                    <span class="tool-file">src/auth/middleware.ts</span>
+                    <span class="tool-chevron expanded">&#9656;</span>
+                  </div>
+                  <div class="tool-card-body expanded">
+                    <div class="tool-card-body-inner">
+                      <div class="diff-line header">@@ -1,6 +1,8 @@</div>
+                      <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
+                      <div class="diff-line remove">-import { verifySession } from './session'</div>
+                      <div class="diff-line add">+import jwt from 'jsonwebtoken'</div>
+                      <div class="diff-line add">+import { JWT_SECRET } from '../config/env'</div>
+                      <div class="diff-line context">&nbsp;</div>
+                      <div class="diff-line context">
+                        export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+                      </div>
+                      <div class="diff-line context">const token = req.headers.authorization?.split(' ')[1]</div>
+                      <div class="diff-line context">
+                        if (!token) return res.status(401).json({ error: 'No token' })
+                      </div>
+                      <div class="diff-line remove">- const session = verifySession(token)</div>
+                      <div class="diff-line remove">
+                        - if (!session) return res.status(401).json({ error: 'Invalid' })
+                      </div>
+                      <div class="diff-line remove">- req.user = session.user</div>
+                      <div class="diff-line add">+ try {</div>
+                      <div class="diff-line add">+ const decoded = jwt.verify(token, JWT_SECRET)</div>
+                      <div class="diff-line add">+ req.user = decoded as JwtPayload</div>
+                      <div class="diff-line add">+ } catch (err) {</div>
+                      <div class="diff-line add">
+                        + return res.status(401).json({ error: 'Invalid or expired token' })
+                      </div>
+                      <div class="diff-line add">+ }</div>
+                      <div class="diff-line context">next()</div>
+                      <div class="diff-line context">}</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Final assistant message -->
+              <div class="msg-assistant">
+                <p>I've updated the auth middleware to use JWT validation. The key changes are:</p>
+                <ul>
+                  <li>
+                    Replaced <code>verifySession</code> with <code>jwt.verify()</code> from <code>jsonwebtoken</code>
+                  </li>
+                  <li>Added proper try/catch for expired and malformed tokens</li>
+                  <li>Decoded payload is attached to <code>req.user</code></li>
+                </ul>
+              </div>
+            </div>
+
+            <!-- Input box -->
+            <div class="input-area">
+              <div class="input-box">
+                <div class="input-plus">+</div>
+                <div class="input-text">Send message to GitHub Copilot...</div>
+                <div class="input-send">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z" />
+                  </svg>
+                </div>
+              </div>
+              <div class="input-model-info">Claude Opus 4.6 (1M context)(Internal only)</div>
             </div>
           </div>
 
-          <!-- Final assistant message -->
-          <div class="msg-assistant">
-            <p>I've updated the auth middleware to use JWT validation. The key changes are:</p>
-            <ul>
-              <li>Replaced <code>verifySession</code> with <code>jwt.verify()</code> from <code>jsonwebtoken</code></li>
-              <li>Added proper try/catch for expired and malformed tokens</li>
-              <li>Decoded payload is attached to <code>req.user</code></li>
-            </ul>
-          </div>
-        </div>
-
-        <!-- Input box -->
-        <div class="input-area">
-          <div class="input-box">
-            <div class="input-plus">+</div>
-            <div class="input-text">Send message to GitHub Copilot...</div>
-            <div class="input-send">
-              <svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z"/></svg>
+          <!-- Right Sidebar -->
+          <div class="right-sidebar">
+            <div class="right-header">Workspace</div>
+            <div class="right-search">Search files...</div>
+            <div class="file-tree">
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth
+              </div>
+              <div class="ft-file" style="padding-left: 36px">
+                <span class="ft-file-icon">&#128196;</span> middleware.ts
+              </div>
+              <div class="ft-file" style="padding-left: 36px">
+                <span class="ft-file-icon">&#128196;</span> session.ts
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker
+              </div>
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests
+              </div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
             </div>
           </div>
-          <div class="input-model-info">Claude Opus 4.6 (1M context)(Internal only)</div>
         </div>
       </div>
 
-      <!-- Right Sidebar -->
-      <div class="right-sidebar">
-        <div class="right-header">Workspace</div>
-        <div class="right-search">Search files...</div>
-        <div class="file-tree">
-          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> middleware.ts</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> session.ts</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker</div>
-          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
-        </div>
+      <div class="comparison">
+        <h3>Tab 1: Rich UI Mode (Before Toggle)</h3>
+        <p>
+          Standard AionUI chat with structured tool call cards. The mode toggle sits in the header center &mdash;
+          <strong>"Rich UI"</strong> is active (blue pill). This is the full ACP experience with expandable cards,
+          colored borders, and the standard input box at bottom.
+        </p>
+        <ul>
+          <li>Tool cards have colored left borders: blue for Read, orange for Edit</li>
+          <li>Cards are expandable/collapsible (click chevron to toggle)</li>
+          <li>Diff view inline with green additions and red deletions</li>
+          <li>The mode toggle is the same component across all tabs &mdash; same size, same position</li>
+        </ul>
       </div>
-
     </div>
-  </div>
 
-  <div class="comparison">
-    <h3>Tab 1: Rich UI Mode (Before Toggle)</h3>
-    <p>Standard AionUI chat with structured tool call cards. The mode toggle sits in the header center &mdash; <strong>"Rich UI"</strong> is active (blue pill). This is the full ACP experience with expandable cards, colored borders, and the standard input box at bottom.</p>
-    <ul>
-      <li>Tool cards have colored left borders: blue for Read, orange for Edit</li>
-      <li>Cards are expandable/collapsible (click chevron to toggle)</li>
-      <li>Diff view inline with green additions and red deletions</li>
-      <li>The mode toggle is the same component across all tabs &mdash; same size, same position</li>
-    </ul>
-  </div>
-</div>
-
-<!-- =================================================================
+    <!-- =================================================================
      TAB 2: TERMINAL MODE (AFTER TOGGLE) - CLEAN FULL SWAP
      ================================================================= -->
-<div class="option-panel" id="panel2">
-  <div class="mockup-frame">
-    <div class="mockup-inner">
-
-      <!-- Left Sidebar (identical) -->
-      <div class="sidebar">
-        <div class="sidebar-traffic">
-          <div class="traffic-dots">
-            <div class="traffic-dot close"></div>
-            <div class="traffic-dot minimize"></div>
-            <div class="traffic-dot maximize"></div>
-          </div>
-          <div class="hamburger-icon">&#9776;</div>
-        </div>
-
-        <div class="sidebar-logo">
-          <div class="sidebar-logo-icon">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
-          </div>
-          <span class="sidebar-logo-text">AionUi</span>
-        </div>
-
-        <div class="new-chat-row">
-          <button class="new-chat-btn">
-            <span class="plus">+</span> New Chat
-          </button>
-          <div class="batch-icon">&#9776;</div>
-        </div>
-
-        <div class="conv-list">
-          <div class="time-label">Today</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
-          <div class="conv-row active">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+    <div class="option-panel" id="panel2">
+      <div class="mockup-frame">
+        <div class="mockup-inner">
+          <!-- Left Sidebar (identical) -->
+          <div class="sidebar">
+            <div class="sidebar-traffic">
+              <div class="traffic-dots">
+                <div class="traffic-dot close"></div>
+                <div class="traffic-dot minimize"></div>
+                <div class="traffic-dot maximize"></div>
+              </div>
+              <div class="hamburger-icon">&#9776;</div>
             </div>
-            <span class="conv-name">hi2</span>
-          </div>
-          <div class="conv-row">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+
+            <div class="sidebar-logo">
+              <div class="sidebar-logo-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" /></svg>
+              </div>
+              <span class="sidebar-logo-text">AionUi</span>
             </div>
-            <span class="conv-name">hi</span>
-          </div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
-          <div class="conv-row">
-            <div class="conv-icon emoji">&#127802;</div>
-            <span class="conv-name">/resume</span>
+
+            <div class="new-chat-row">
+              <button class="new-chat-btn"><span class="plus">+</span> New Chat</button>
+              <div class="batch-icon">&#9776;</div>
+            </div>
+
+            <div class="conv-list">
+              <div class="time-label">Today</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
+              <div class="conv-row active">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi2</span>
+              </div>
+              <div class="conv-row">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi</span>
+              </div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
+              <div class="conv-row">
+                <div class="conv-icon emoji">&#127802;</div>
+                <span class="conv-name">/resume</span>
+              </div>
+
+              <div class="time-label">Yesterday</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
+              <div class="conv-row">
+                <div class="conv-icon copilot">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">catch up the project c...</span>
+              </div>
+            </div>
+
+            <div class="sidebar-footer">
+              <div class="settings-row"><span class="gear">&#9881;</span> Settings</div>
+            </div>
           </div>
 
-          <div class="time-label">Yesterday</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
-          <div class="conv-row">
-            <div class="conv-icon copilot">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
+          <!-- Main Content - FULL TERMINAL -->
+          <div class="main-content">
+            <div class="tab-bar">
+              <div class="tab-item active">hi2 <span class="tab-close">&times;</span></div>
+              <div class="tab-add">+</div>
             </div>
-            <span class="conv-name">catch up the project c...</span>
-          </div>
-        </div>
 
-        <div class="sidebar-footer">
-          <div class="settings-row">
-            <span class="gear">&#9881;</span> Settings
+            <div class="header-bar">
+              <div class="header-left">
+                <span class="model-name">Claude Opus 4.6 (1M context)</span>
+                <span class="internal-tag">(Internal only)</span>
+              </div>
+              <div class="header-center">
+                <!-- MODE TOGGLE - Terminal active -->
+                <div class="mode-toggle">
+                  <button class="mode-toggle-btn rich-ui">
+                    <span class="toggle-icon">&#128172;</span>
+                    Rich UI
+                  </button>
+                  <button class="mode-toggle-btn terminal active">
+                    <span class="toggle-icon">&gt;_</span>
+                    Terminal
+                  </button>
+                </div>
+              </div>
+              <div class="header-right">
+                <div class="agent-icon">
+                  <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                GitHub Copilot
+              </div>
+            </div>
+
+            <!-- FULL TERMINAL - fills entire content area, NO input box -->
+            <div class="terminal-pane">
+              <span class="t-dim">$ copilot --resume f7757bc4</span>
+              <span class="t-dim">Resuming session f7757bc4...</span>
+
+              <span class="t-dim"
+                >&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span
+              >
+              <span class="t-dim">&#9474;</span> <span class="t-cyan t-bold">GitHub Copilot</span>
+              <span class="t-dim">&#9474;</span> <span class="t-dim">&#9474;</span>
+              <span class="t-dim">Session resumed &middot; JWT auth refactor</span> <span class="t-dim">&#9474;</span>
+              <span class="t-dim"
+                >&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span
+              >
+
+              <span class="t-bold t-cyan">&#9673;</span> The auth middleware has been refactored to use JWT. The session
+              is fully preserved from the Rich UI conversation.
+
+              <span class="t-bold t-white">&gt; How can I help you continue?</span>
+
+              <span class="t-green t-bold">&#10095;</span>
+              <span class="t-white">now add rate limiting to the endpoints</span>
+
+              <span class="t-dim"> &#9656;</span> <span class="t-yellow t-bold">Read</span>
+              <span class="t-cyan">src/routes/api.ts</span>
+              <span class="t-dim"> Lines 1-82 (82 lines)</span>
+
+              <span class="t-dim"> &#9656;</span> <span class="t-yellow t-bold">Edit</span>
+              <span class="t-cyan">src/routes/api.ts</span>
+              <span class="t-dim"> Added rate limiting middleware to 3 endpoints</span>
+
+              <span class="t-bold t-cyan">&#9673;</span> I've added rate limiting middleware using
+              <span class="t-yellow">express-rate-limit</span>. Each API endpoint now has a
+              <span class="t-white">100 req/15min</span> window with proper error responses when the limit is exceeded.
+
+              <span class="t-bold t-magenta">?</span> <span class="t-bold t-white">Anything else?</span>
+
+              <span class="t-green t-bold">&#10095;</span> <span class="cursor-block"></span>
+            </div>
+
+            <!-- NO input box - terminal IS the input -->
+          </div>
+
+          <!-- Right Sidebar (identical) -->
+          <div class="right-sidebar">
+            <div class="right-header">Workspace</div>
+            <div class="right-search">Search files...</div>
+            <div class="file-tree">
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth
+              </div>
+              <div class="ft-file" style="padding-left: 36px">
+                <span class="ft-file-icon">&#128196;</span> middleware.ts
+              </div>
+              <div class="ft-file" style="padding-left: 36px">
+                <span class="ft-file-icon">&#128196;</span> session.ts
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker
+              </div>
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests
+              </div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Main Content - FULL TERMINAL -->
-      <div class="main-content">
-        <div class="tab-bar">
-          <div class="tab-item active">hi2 <span class="tab-close">&times;</span></div>
-          <div class="tab-add">+</div>
-        </div>
-
-        <div class="header-bar">
-          <div class="header-left">
-            <span class="model-name">Claude Opus 4.6 (1M context)</span>
-            <span class="internal-tag">(Internal only)</span>
-          </div>
-          <div class="header-center">
-            <!-- MODE TOGGLE - Terminal active -->
-            <div class="mode-toggle">
-              <button class="mode-toggle-btn rich-ui">
-                <span class="toggle-icon">&#128172;</span>
-                Rich UI
-              </button>
-              <button class="mode-toggle-btn terminal active">
-                <span class="toggle-icon">&gt;_</span>
-                Terminal
-              </button>
-            </div>
-          </div>
-          <div class="header-right">
-            <div class="agent-icon">
-              <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            GitHub Copilot
-          </div>
-        </div>
-
-        <!-- FULL TERMINAL - fills entire content area, NO input box -->
-        <div class="terminal-pane"><span class="t-dim">$ copilot --resume f7757bc4</span>
-<span class="t-dim">Resuming session f7757bc4...</span>
-
-<span class="t-dim">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
-<span class="t-dim">&#9474;</span> <span class="t-cyan t-bold">GitHub Copilot</span>                              <span class="t-dim">&#9474;</span>
-<span class="t-dim">&#9474;</span> <span class="t-dim">Session resumed &middot; JWT auth refactor</span>         <span class="t-dim">&#9474;</span>
-<span class="t-dim">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
-
-<span class="t-bold t-cyan">&#9673;</span> The auth middleware has been refactored to use JWT. The session
-  is fully preserved from the Rich UI conversation.
-
-<span class="t-bold t-white">&gt; How can I help you continue?</span>
-
-<span class="t-green t-bold">&#10095;</span> <span class="t-white">now add rate limiting to the endpoints</span>
-
-<span class="t-dim">  &#9656;</span> <span class="t-yellow t-bold">Read</span> <span class="t-cyan">src/routes/api.ts</span>
-<span class="t-dim">    Lines 1-82 (82 lines)</span>
-
-<span class="t-dim">  &#9656;</span> <span class="t-yellow t-bold">Edit</span> <span class="t-cyan">src/routes/api.ts</span>
-<span class="t-dim">    Added rate limiting middleware to 3 endpoints</span>
-
-<span class="t-bold t-cyan">&#9673;</span> I've added rate limiting middleware using <span class="t-yellow">express-rate-limit</span>.
-  Each API endpoint now has a <span class="t-white">100 req/15min</span> window with proper
-  error responses when the limit is exceeded.
-
-<span class="t-bold t-magenta">?</span> <span class="t-bold t-white">Anything else?</span>
-
-<span class="t-green t-bold">&#10095;</span> <span class="cursor-block"></span></div>
-
-        <!-- NO input box - terminal IS the input -->
+      <div class="comparison">
+        <h3>Tab 2: Terminal Mode (After Toggle) <span class="key-change">Clean Full Swap</span></h3>
+        <p>
+          The <strong>entire content area</strong> is replaced by a terminal &mdash; no fading, no dividers, no split
+          view. The dark terminal fills 100% of the space between the header bar and the bottom edge. The toggle in the
+          header shows "Terminal" active (green pill). There is no input box at bottom; the terminal IS the input. The
+          sidebars remain unchanged.
+        </p>
+        <ul>
+          <li>The terminal fills the entire content area with dark background (#1a1a2e)</li>
+          <li>No split view, no faded history above &mdash; it's a <strong>clean full swap</strong></li>
+          <li>The CLI resumes the same session with <code>--resume f7757bc4</code></li>
+          <li>Terminal shows realistic CLI output with colored text (green, cyan, yellow, magenta)</li>
+          <li>The user interacted in terminal mode: asked to add rate limiting, agent performed Read + Edit</li>
+        </ul>
       </div>
-
-      <!-- Right Sidebar (identical) -->
-      <div class="right-sidebar">
-        <div class="right-header">Workspace</div>
-        <div class="right-search">Search files...</div>
-        <div class="file-tree">
-          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> middleware.ts</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> session.ts</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker</div>
-          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
-        </div>
-      </div>
-
     </div>
-  </div>
 
-  <div class="comparison">
-    <h3>Tab 2: Terminal Mode (After Toggle) <span class="key-change">Clean Full Swap</span></h3>
-    <p>The <strong>entire content area</strong> is replaced by a terminal &mdash; no fading, no dividers, no split view. The dark terminal fills 100% of the space between the header bar and the bottom edge. The toggle in the header shows "Terminal" active (green pill). There is no input box at bottom; the terminal IS the input. The sidebars remain unchanged.</p>
-    <ul>
-      <li>The terminal fills the entire content area with dark background (#1a1a2e)</li>
-      <li>No split view, no faded history above &mdash; it's a <strong>clean full swap</strong></li>
-      <li>The CLI resumes the same session with <code>--resume f7757bc4</code></li>
-      <li>Terminal shows realistic CLI output with colored text (green, cyan, yellow, magenta)</li>
-      <li>The user interacted in terminal mode: asked to add rate limiting, agent performed Read + Edit</li>
-    </ul>
-  </div>
-</div>
-
-<!-- =================================================================
+    <!-- =================================================================
      TAB 3: TERMINAL -> RICH UI (JSONL HISTORY RENDERED)
      ================================================================= -->
-<div class="option-panel" id="panel3">
-  <div class="mockup-frame">
-    <div class="mockup-inner">
-
-      <!-- Left Sidebar (identical) -->
-      <div class="sidebar">
-        <div class="sidebar-traffic">
-          <div class="traffic-dots">
-            <div class="traffic-dot close"></div>
-            <div class="traffic-dot minimize"></div>
-            <div class="traffic-dot maximize"></div>
-          </div>
-          <div class="hamburger-icon">&#9776;</div>
-        </div>
-
-        <div class="sidebar-logo">
-          <div class="sidebar-logo-icon">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
-          </div>
-          <span class="sidebar-logo-text">AionUi</span>
-        </div>
-
-        <div class="new-chat-row">
-          <button class="new-chat-btn">
-            <span class="plus">+</span> New Chat
-          </button>
-          <div class="batch-icon">&#9776;</div>
-        </div>
-
-        <div class="conv-list">
-          <div class="time-label">Today</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
-          <div class="conv-row active">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">hi2</span>
-          </div>
-          <div class="conv-row">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">hi</span>
-          </div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
-          <div class="conv-row">
-            <div class="conv-icon emoji">&#127802;</div>
-            <span class="conv-name">/resume</span>
-          </div>
-
-          <div class="time-label">Yesterday</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
-          <div class="conv-row">
-            <div class="conv-icon copilot">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">catch up the project c...</span>
-          </div>
-        </div>
-
-        <div class="sidebar-footer">
-          <div class="settings-row">
-            <span class="gear">&#9881;</span> Settings
-          </div>
-        </div>
-      </div>
-
-      <!-- Main Content - BACK TO RICH UI with JSONL history -->
-      <div class="main-content">
-        <div class="tab-bar">
-          <div class="tab-item active">hi2 <span class="tab-close">&times;</span></div>
-          <div class="tab-add">+</div>
-        </div>
-
-        <div class="header-bar">
-          <div class="header-left">
-            <span class="model-name">Claude Opus 4.6 (1M context)</span>
-            <span class="internal-tag">(Internal only)</span>
-          </div>
-          <div class="header-center">
-            <!-- MODE TOGGLE - Rich UI active again -->
-            <div class="mode-toggle">
-              <button class="mode-toggle-btn rich-ui active">
-                <span class="toggle-icon">&#128172;</span>
-                Rich UI
-              </button>
-              <button class="mode-toggle-btn terminal">
-                <span class="toggle-icon">&gt;_</span>
-                Terminal
-              </button>
-            </div>
-          </div>
-          <div class="header-right">
-            <div class="agent-icon">
-              <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            GitHub Copilot
-          </div>
-        </div>
-
-        <div class="chat-area">
-          <!-- History banner -->
-          <div class="history-banner">
-            <span class="hb-icon">&#8635;</span>
-            History restored from CLI session
-            <span class="hb-dismiss">&times;</span>
-          </div>
-
-          <!-- ORIGINAL messages from Rich UI (pre-terminal) -->
-          <div class="msg-user">refactor the auth middleware to use JWT validation</div>
-
-          <div class="msg-system">
-            <span class="sys-dot"></span>
-            GitHub Copilot &bull; Active session
-          </div>
-
-          <!-- Tool card: Read (collapsed) -->
-          <div style="align-self:flex-start; max-width:75%;">
-            <div class="tool-card read">
-              <div class="tool-card-header" onclick="toggleCard(this)">
-                <span class="tool-icon">&#128196;</span>
-                <span class="tool-name">Read</span>
-                <span class="tool-file">src/auth/middleware.ts</span>
-                <span class="tool-chevron">&#9656;</span>
+    <div class="option-panel" id="panel3">
+      <div class="mockup-frame">
+        <div class="mockup-inner">
+          <!-- Left Sidebar (identical) -->
+          <div class="sidebar">
+            <div class="sidebar-traffic">
+              <div class="traffic-dots">
+                <div class="traffic-dot close"></div>
+                <div class="traffic-dot minimize"></div>
+                <div class="traffic-dot maximize"></div>
               </div>
-              <div class="tool-card-body">
-                <div class="tool-card-body-inner">
-                  <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
-                  <div class="diff-line context">import { verifySession } from './session'</div>
-                  <div class="diff-line context">&nbsp;</div>
-                  <div class="diff-line context">export function authMiddleware(req: Request, res: Response, next: NextFunction) {</div>
-                  <div class="diff-line context">  const token = req.headers.authorization?.split(' ')[1]</div>
-                  <div class="diff-line context">  if (!token) return res.status(401).json({ error: 'No token' })</div>
-                  <div class="diff-line context">  // ... legacy session-based validation</div>
-                  <div class="diff-line context">}</div>
+              <div class="hamburger-icon">&#9776;</div>
+            </div>
+
+            <div class="sidebar-logo">
+              <div class="sidebar-logo-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" /></svg>
+              </div>
+              <span class="sidebar-logo-text">AionUi</span>
+            </div>
+
+            <div class="new-chat-row">
+              <button class="new-chat-btn"><span class="plus">+</span> New Chat</button>
+              <div class="batch-icon">&#9776;</div>
+            </div>
+
+            <div class="conv-list">
+              <div class="time-label">Today</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
+              <div class="conv-row active">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi2</span>
+              </div>
+              <div class="conv-row">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi</span>
+              </div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
+              <div class="conv-row">
+                <div class="conv-icon emoji">&#127802;</div>
+                <span class="conv-name">/resume</span>
+              </div>
+
+              <div class="time-label">Yesterday</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
+              <div class="conv-row">
+                <div class="conv-icon copilot">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">catch up the project c...</span>
+              </div>
+            </div>
+
+            <div class="sidebar-footer">
+              <div class="settings-row"><span class="gear">&#9881;</span> Settings</div>
+            </div>
+          </div>
+
+          <!-- Main Content - BACK TO RICH UI with JSONL history -->
+          <div class="main-content">
+            <div class="tab-bar">
+              <div class="tab-item active">hi2 <span class="tab-close">&times;</span></div>
+              <div class="tab-add">+</div>
+            </div>
+
+            <div class="header-bar">
+              <div class="header-left">
+                <span class="model-name">Claude Opus 4.6 (1M context)</span>
+                <span class="internal-tag">(Internal only)</span>
+              </div>
+              <div class="header-center">
+                <!-- MODE TOGGLE - Rich UI active again -->
+                <div class="mode-toggle">
+                  <button class="mode-toggle-btn rich-ui active">
+                    <span class="toggle-icon">&#128172;</span>
+                    Rich UI
+                  </button>
+                  <button class="mode-toggle-btn terminal">
+                    <span class="toggle-icon">&gt;_</span>
+                    Terminal
+                  </button>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Tool card: Edit (collapsed) -->
-          <div style="align-self:flex-start; max-width:75%;">
-            <div class="tool-card edit">
-              <div class="tool-card-header" onclick="toggleCard(this)">
-                <span class="tool-icon">&#9998;</span>
-                <span class="tool-name">Edit</span>
-                <span class="tool-file">src/auth/middleware.ts</span>
-                <span class="tool-chevron">&#9656;</span>
-              </div>
-              <div class="tool-card-body">
-                <div class="tool-card-body-inner">
-                  <div class="diff-line header">@@ -1,6 +1,8 @@</div>
-                  <div class="diff-line context"> import { Request, Response, NextFunction } from 'express'</div>
-                  <div class="diff-line remove">-import { verifySession } from './session'</div>
-                  <div class="diff-line add">+import jwt from 'jsonwebtoken'</div>
-                  <div class="diff-line add">+import { JWT_SECRET } from '../config/env'</div>
+              <div class="header-right">
+                <div class="agent-icon">
+                  <svg viewBox="0 0 16 16" width="9" height="9" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
                 </div>
+                GitHub Copilot
               </div>
             </div>
-          </div>
 
-          <!-- Assistant text -->
-          <div class="msg-assistant">
-            <p>I've updated the auth middleware to use JWT validation. The key changes are:</p>
-            <ul>
-              <li>Replaced <code>verifySession</code> with <code>jwt.verify()</code></li>
-              <li>Added try/catch for expired and malformed tokens</li>
-              <li>Decoded payload attached to <code>req.user</code></li>
-            </ul>
-          </div>
-
-          <!-- Session divider - subtle context marker -->
-          <div class="session-divider">
-            <span class="session-divider-text">&mdash; Session continued via terminal &mdash;</span>
-          </div>
-
-          <!-- NEW messages from terminal session, rendered as RICH UI cards -->
-          <div class="msg-user">now add rate limiting to the endpoints</div>
-
-          <!-- Tool card: Read (from terminal session, rendered as rich card) -->
-          <div style="align-self:flex-start; max-width:75%;">
-            <div class="tool-card read">
-              <div class="tool-card-header" onclick="toggleCard(this)">
-                <span class="tool-icon">&#128196;</span>
-                <span class="tool-name">Read</span>
-                <span class="tool-file">src/routes/api.ts</span>
-                <span class="tool-chevron">&#9656;</span>
+            <div class="chat-area">
+              <!-- History banner -->
+              <div class="history-banner">
+                <span class="hb-icon">&#8635;</span>
+                History restored from CLI session
+                <span class="hb-dismiss">&times;</span>
               </div>
-              <div class="tool-card-body">
-                <div class="tool-card-body-inner">
-                  <div class="diff-line context">import { Router } from 'express'</div>
-                  <div class="diff-line context">import { authMiddleware } from '../auth/middleware'</div>
-                  <div class="diff-line context">&nbsp;</div>
-                  <div class="diff-line context">const router = Router()</div>
-                  <div class="diff-line context">router.get('/api/users', authMiddleware, getUsers)</div>
-                  <div class="diff-line context">router.post('/api/data', authMiddleware, postData)</div>
-                  <div class="diff-line context">router.delete('/api/cache', authMiddleware, clearCache)</div>
-                </div>
+
+              <!-- ORIGINAL messages from Rich UI (pre-terminal) -->
+              <div class="msg-user">refactor the auth middleware to use JWT validation</div>
+
+              <div class="msg-system">
+                <span class="sys-dot"></span>
+                GitHub Copilot &bull; Active session
               </div>
-            </div>
-          </div>
 
-          <!-- Tool card: Edit (from terminal session, expanded) -->
-          <div style="align-self:flex-start; max-width:75%;">
-            <div class="tool-card edit">
-              <div class="tool-card-header" onclick="toggleCard(this)">
-                <span class="tool-icon">&#9998;</span>
-                <span class="tool-name">Edit</span>
-                <span class="tool-file">src/routes/api.ts</span>
-                <span class="tool-chevron expanded">&#9656;</span>
-              </div>
-              <div class="tool-card-body expanded">
-                <div class="tool-card-body-inner">
-                  <div class="diff-line header">@@ -1,7 +1,15 @@</div>
-                  <div class="diff-line context"> import { Router } from 'express'</div>
-                  <div class="diff-line context"> import { authMiddleware } from '../auth/middleware'</div>
-                  <div class="diff-line add">+import rateLimit from 'express-rate-limit'</div>
-                  <div class="diff-line context">&nbsp;</div>
-                  <div class="diff-line add">+const apiLimiter = rateLimit({</div>
-                  <div class="diff-line add">+  windowMs: 15 * 60 * 1000,</div>
-                  <div class="diff-line add">+  max: 100,</div>
-                  <div class="diff-line add">+  message: { error: 'Rate limit exceeded' }</div>
-                  <div class="diff-line add">+})</div>
-                  <div class="diff-line add">+</div>
-                  <div class="diff-line context"> const router = Router()</div>
-                  <div class="diff-line remove">-router.get('/api/users', authMiddleware, getUsers)</div>
-                  <div class="diff-line remove">-router.post('/api/data', authMiddleware, postData)</div>
-                  <div class="diff-line remove">-router.delete('/api/cache', authMiddleware, clearCache)</div>
-                  <div class="diff-line add">+router.get('/api/users', apiLimiter, authMiddleware, getUsers)</div>
-                  <div class="diff-line add">+router.post('/api/data', apiLimiter, authMiddleware, postData)</div>
-                  <div class="diff-line add">+router.delete('/api/cache', apiLimiter, authMiddleware, clearCache)</div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Assistant message from terminal session -->
-          <div class="msg-assistant">
-            <p>I've added rate limiting middleware using <code>express-rate-limit</code>. Each API endpoint now has a 100 requests per 15 minute window with a clear error response when the limit is exceeded.</p>
-          </div>
-        </div>
-
-        <!-- Input box (back in Rich UI mode) -->
-        <div class="input-area">
-          <div class="input-box">
-            <div class="input-plus">+</div>
-            <div class="input-text">Send message to GitHub Copilot...</div>
-            <div class="input-send">
-              <svg viewBox="0 0 24 24"><path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z"/></svg>
-            </div>
-          </div>
-          <div class="input-model-info">Claude Opus 4.6 (1M context)(Internal only)</div>
-        </div>
-      </div>
-
-      <!-- Right Sidebar (identical) -->
-      <div class="right-sidebar">
-        <div class="right-header">Workspace</div>
-        <div class="right-search">Search files...</div>
-        <div class="file-tree">
-          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> middleware.ts</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> session.ts</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> routes</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> api.ts</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
-          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <div class="comparison">
-    <h3>Tab 3: Terminal &rarr; Rich UI (JSONL History Rendered) <span class="key-change">Key Insight</span></h3>
-    <p>When toggling <strong>back</strong> to Rich UI, the entire conversation &mdash; including messages from the terminal session &mdash; is rendered as structured Rich UI cards. The CLI's JSONL log is parsed and converted into the same tool call cards, user bubbles, and assistant text blocks. The cards from the terminal session look <strong>identical</strong> to the original ACP cards.</p>
-    <ul>
-      <li>A subtle "Session continued via terminal" divider provides context without being intrusive</li>
-      <li>The "History restored from CLI session" banner is dismissible (click &times;)</li>
-      <li>Terminal-session tool calls (Read <code>src/routes/api.ts</code>, Edit <code>src/routes/api.ts</code>) appear as the <strong>exact same card components</strong> as original ACP ones</li>
-      <li>Diffs are fully expandable/collapsible &mdash; not plain text dumps from the terminal</li>
-      <li>The input box returns at the bottom since we're back in Rich UI mode</li>
-      <li>This demonstrates that JSONL is a lossless format &mdash; no information is lost in the mode switch round-trip</li>
-    </ul>
-  </div>
-</div>
-
-<!-- Panel 4 removed — Settings now in Step 2 mockup (AgentCLI settings page) -->
-
-<!-- Hidden panel to keep JS clean -->
-<div class="option-panel" id="panel4" style="display:none !important">
-  <div class="mockup-frame" style="display:none">
-    <div class="mockup-inner">
-
-      <!-- Left Sidebar -->
-      <div class="sidebar">
-        <div class="sidebar-traffic">
-          <div class="traffic-dots">
-            <div class="traffic-dot close"></div>
-            <div class="traffic-dot minimize"></div>
-            <div class="traffic-dot maximize"></div>
-          </div>
-          <div class="hamburger-icon">&#9776;</div>
-        </div>
-
-        <div class="sidebar-logo">
-          <div class="sidebar-logo-icon">
-            <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6"/></svg>
-          </div>
-          <span class="sidebar-logo-text">AionUi</span>
-        </div>
-
-        <div class="new-chat-row">
-          <button class="new-chat-btn">
-            <span class="plus">+</span> New Chat
-          </button>
-          <div class="batch-icon">&#9776;</div>
-        </div>
-
-        <div class="conv-list">
-          <div class="time-label">Today</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
-          <div class="conv-row">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">hi2</span>
-          </div>
-          <div class="conv-row">
-            <div class="conv-icon copilot-blue">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">hi</span>
-          </div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
-          <div class="conv-row">
-            <div class="conv-icon emoji">&#127802;</div>
-            <span class="conv-name">/resume</span>
-          </div>
-
-          <div class="time-label">Yesterday</div>
-          <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
-          <div class="conv-row">
-            <div class="conv-icon copilot">
-              <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5"/></svg>
-            </div>
-            <span class="conv-name">catch up the project c...</span>
-          </div>
-        </div>
-
-        <div class="sidebar-footer">
-          <div class="settings-row" style="background:var(--bg-hover); color:var(--text-secondary);">
-            <span class="gear">&#9881;</span> Settings
-          </div>
-        </div>
-      </div>
-
-      <!-- Main Content - Settings Page -->
-      <div class="main-content">
-        <div class="tab-bar">
-          <div class="tab-item active">&#9881; Settings <span class="tab-close">&times;</span></div>
-          <div class="tab-add">+</div>
-        </div>
-
-        <div class="settings-page">
-          <div class="settings-title">Settings</div>
-          <div class="settings-subtitle">Customize your AionUI experience</div>
-
-          <!-- General Section -->
-          <div class="settings-section">
-            <div class="settings-section-title">General</div>
-
-            <!-- Theme -->
-            <div class="settings-item">
-              <div class="settings-item-left">
-                <div class="settings-item-label">Theme</div>
-                <div class="settings-item-desc">Choose the appearance of the application</div>
-              </div>
-              <div class="settings-item-right">
-                <div class="segmented-control">
-                  <div class="segmented-option selected">
-                    <span class="seg-icon">&#9788;</span> Light
+              <!-- Tool card: Read (collapsed) -->
+              <div style="align-self: flex-start; max-width: 75%">
+                <div class="tool-card read">
+                  <div class="tool-card-header" onclick="toggleCard(this)">
+                    <span class="tool-icon">&#128196;</span>
+                    <span class="tool-name">Read</span>
+                    <span class="tool-file">src/auth/middleware.ts</span>
+                    <span class="tool-chevron">&#9656;</span>
                   </div>
-                  <div class="segmented-option">
-                    <span class="seg-icon">&#9790;</span> Dark
-                  </div>
-                  <div class="segmented-option">
-                    <span class="seg-icon">&#9881;</span> System
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- Default conversation mode (KEY SETTING) -->
-            <div class="settings-item" style="background: var(--accent-lighter); margin: 0 -16px; padding: 14px 16px; border-radius: var(--radius-md); border-bottom: none;">
-              <div class="settings-item-left">
-                <div class="settings-item-label">Default conversation mode</div>
-                <div class="settings-item-desc">Choose how new conversations start. You can switch anytime via the toggle in the chat header.</div>
-                <div class="settings-mode-options">
-                  <div class="settings-mode-card selected">
-                    <div class="smc-check">&#10003;</div>
-                    <div class="smc-header">
-                      <span class="smc-icon">&#128172;</span> Rich UI (ACP)
+                  <div class="tool-card-body">
+                    <div class="tool-card-body-inner">
+                      <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
+                      <div class="diff-line context">import { verifySession } from './session'</div>
+                      <div class="diff-line context">&nbsp;</div>
+                      <div class="diff-line context">
+                        export function authMiddleware(req: Request, res: Response, next: NextFunction) {
+                      </div>
+                      <div class="diff-line context">const token = req.headers.authorization?.split(' ')[1]</div>
+                      <div class="diff-line context">
+                        if (!token) return res.status(401).json({ error: 'No token' })
+                      </div>
+                      <div class="diff-line context">// ... legacy session-based validation</div>
+                      <div class="diff-line context">}</div>
                     </div>
-                    <div class="smc-desc">Structured tool cards, permission dialogs, expandable steps</div>
                   </div>
-                  <div class="settings-mode-card">
-                    <div class="smc-check">&#10003;</div>
-                    <div class="smc-header">
-                      <span class="smc-icon-term">&gt;_</span> Terminal
+                </div>
+              </div>
+
+              <!-- Tool card: Edit (collapsed) -->
+              <div style="align-self: flex-start; max-width: 75%">
+                <div class="tool-card edit">
+                  <div class="tool-card-header" onclick="toggleCard(this)">
+                    <span class="tool-icon">&#9998;</span>
+                    <span class="tool-name">Edit</span>
+                    <span class="tool-file">src/auth/middleware.ts</span>
+                    <span class="tool-chevron">&#9656;</span>
+                  </div>
+                  <div class="tool-card-body">
+                    <div class="tool-card-body-inner">
+                      <div class="diff-line header">@@ -1,6 +1,8 @@</div>
+                      <div class="diff-line context">import { Request, Response, NextFunction } from 'express'</div>
+                      <div class="diff-line remove">-import { verifySession } from './session'</div>
+                      <div class="diff-line add">+import jwt from 'jsonwebtoken'</div>
+                      <div class="diff-line add">+import { JWT_SECRET } from '../config/env'</div>
                     </div>
-                    <div class="smc-desc">Raw terminal, full interactive CLI experience</div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Assistant text -->
+              <div class="msg-assistant">
+                <p>I've updated the auth middleware to use JWT validation. The key changes are:</p>
+                <ul>
+                  <li>Replaced <code>verifySession</code> with <code>jwt.verify()</code></li>
+                  <li>Added try/catch for expired and malformed tokens</li>
+                  <li>Decoded payload attached to <code>req.user</code></li>
+                </ul>
+              </div>
+
+              <!-- Session divider - subtle context marker -->
+              <div class="session-divider">
+                <span class="session-divider-text">&mdash; Session continued via terminal &mdash;</span>
+              </div>
+
+              <!-- NEW messages from terminal session, rendered as RICH UI cards -->
+              <div class="msg-user">now add rate limiting to the endpoints</div>
+
+              <!-- Tool card: Read (from terminal session, rendered as rich card) -->
+              <div style="align-self: flex-start; max-width: 75%">
+                <div class="tool-card read">
+                  <div class="tool-card-header" onclick="toggleCard(this)">
+                    <span class="tool-icon">&#128196;</span>
+                    <span class="tool-name">Read</span>
+                    <span class="tool-file">src/routes/api.ts</span>
+                    <span class="tool-chevron">&#9656;</span>
+                  </div>
+                  <div class="tool-card-body">
+                    <div class="tool-card-body-inner">
+                      <div class="diff-line context">import { Router } from 'express'</div>
+                      <div class="diff-line context">import { authMiddleware } from '../auth/middleware'</div>
+                      <div class="diff-line context">&nbsp;</div>
+                      <div class="diff-line context">const router = Router()</div>
+                      <div class="diff-line context">router.get('/api/users', authMiddleware, getUsers)</div>
+                      <div class="diff-line context">router.post('/api/data', authMiddleware, postData)</div>
+                      <div class="diff-line context">router.delete('/api/cache', authMiddleware, clearCache)</div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Tool card: Edit (from terminal session, expanded) -->
+              <div style="align-self: flex-start; max-width: 75%">
+                <div class="tool-card edit">
+                  <div class="tool-card-header" onclick="toggleCard(this)">
+                    <span class="tool-icon">&#9998;</span>
+                    <span class="tool-name">Edit</span>
+                    <span class="tool-file">src/routes/api.ts</span>
+                    <span class="tool-chevron expanded">&#9656;</span>
+                  </div>
+                  <div class="tool-card-body expanded">
+                    <div class="tool-card-body-inner">
+                      <div class="diff-line header">@@ -1,7 +1,15 @@</div>
+                      <div class="diff-line context">import { Router } from 'express'</div>
+                      <div class="diff-line context">import { authMiddleware } from '../auth/middleware'</div>
+                      <div class="diff-line add">+import rateLimit from 'express-rate-limit'</div>
+                      <div class="diff-line context">&nbsp;</div>
+                      <div class="diff-line add">+const apiLimiter = rateLimit({</div>
+                      <div class="diff-line add">+ windowMs: 15 * 60 * 1000,</div>
+                      <div class="diff-line add">+ max: 100,</div>
+                      <div class="diff-line add">+ message: { error: 'Rate limit exceeded' }</div>
+                      <div class="diff-line add">+})</div>
+                      <div class="diff-line add">+</div>
+                      <div class="diff-line context">const router = Router()</div>
+                      <div class="diff-line remove">-router.get('/api/users', authMiddleware, getUsers)</div>
+                      <div class="diff-line remove">-router.post('/api/data', authMiddleware, postData)</div>
+                      <div class="diff-line remove">-router.delete('/api/cache', authMiddleware, clearCache)</div>
+                      <div class="diff-line add">+router.get('/api/users', apiLimiter, authMiddleware, getUsers)</div>
+                      <div class="diff-line add">+router.post('/api/data', apiLimiter, authMiddleware, postData)</div>
+                      <div class="diff-line add">
+                        +router.delete('/api/cache', apiLimiter, authMiddleware, clearCache)
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Assistant message from terminal session -->
+              <div class="msg-assistant">
+                <p>
+                  I've added rate limiting middleware using <code>express-rate-limit</code>. Each API endpoint now has a
+                  100 requests per 15 minute window with a clear error response when the limit is exceeded.
+                </p>
+              </div>
+            </div>
+
+            <!-- Input box (back in Rich UI mode) -->
+            <div class="input-area">
+              <div class="input-box">
+                <div class="input-plus">+</div>
+                <div class="input-text">Send message to GitHub Copilot...</div>
+                <div class="input-send">
+                  <svg viewBox="0 0 24 24">
+                    <path d="M4 12l1.41 1.41L11 7.83V20h2V7.83l5.59 5.58L20 12l-8-8-8 8z" />
+                  </svg>
+                </div>
+              </div>
+              <div class="input-model-info">Claude Opus 4.6 (1M context)(Internal only)</div>
+            </div>
+          </div>
+
+          <!-- Right Sidebar (identical) -->
+          <div class="right-sidebar">
+            <div class="right-header">Workspace</div>
+            <div class="right-search">Search files...</div>
+            <div class="file-tree">
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> auth
+              </div>
+              <div class="ft-file" style="padding-left: 36px">
+                <span class="ft-file-icon">&#128196;</span> middleware.ts
+              </div>
+              <div class="ft-file" style="padding-left: 36px">
+                <span class="ft-file-icon">&#128196;</span> session.ts
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> routes
+              </div>
+              <div class="ft-file" style="padding-left: 36px"><span class="ft-file-icon">&#128196;</span> api.ts</div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> config
+              </div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> renderer
+              </div>
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests
+              </div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="comparison">
+        <h3>Tab 3: Terminal &rarr; Rich UI (JSONL History Rendered) <span class="key-change">Key Insight</span></h3>
+        <p>
+          When toggling <strong>back</strong> to Rich UI, the entire conversation &mdash; including messages from the
+          terminal session &mdash; is rendered as structured Rich UI cards. The CLI's JSONL log is parsed and converted
+          into the same tool call cards, user bubbles, and assistant text blocks. The cards from the terminal session
+          look <strong>identical</strong> to the original ACP cards.
+        </p>
+        <ul>
+          <li>A subtle "Session continued via terminal" divider provides context without being intrusive</li>
+          <li>The "History restored from CLI session" banner is dismissible (click &times;)</li>
+          <li>
+            Terminal-session tool calls (Read <code>src/routes/api.ts</code>, Edit <code>src/routes/api.ts</code>)
+            appear as the <strong>exact same card components</strong> as original ACP ones
+          </li>
+          <li>Diffs are fully expandable/collapsible &mdash; not plain text dumps from the terminal</li>
+          <li>The input box returns at the bottom since we're back in Rich UI mode</li>
+          <li>
+            This demonstrates that JSONL is a lossless format &mdash; no information is lost in the mode switch
+            round-trip
+          </li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- Panel 4 removed — Settings now in Step 2 mockup (AgentCLI settings page) -->
+
+    <!-- Hidden panel to keep JS clean -->
+    <div class="option-panel" id="panel4" style="display: none !important">
+      <div class="mockup-frame" style="display: none">
+        <div class="mockup-inner">
+          <!-- Left Sidebar -->
+          <div class="sidebar">
+            <div class="sidebar-traffic">
+              <div class="traffic-dots">
+                <div class="traffic-dot close"></div>
+                <div class="traffic-dot minimize"></div>
+                <div class="traffic-dot maximize"></div>
+              </div>
+              <div class="hamburger-icon">&#9776;</div>
+            </div>
+
+            <div class="sidebar-logo">
+              <div class="sidebar-logo-icon">
+                <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="6" /></svg>
+              </div>
+              <span class="sidebar-logo-text">AionUi</span>
+            </div>
+
+            <div class="new-chat-row">
+              <button class="new-chat-btn"><span class="plus">+</span> New Chat</button>
+              <div class="batch-icon">&#9776;</div>
+            </div>
+
+            <div class="conv-list">
+              <div class="time-label">Today</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> claude-toolkit</div>
+              <div class="conv-row">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi2</span>
+              </div>
+              <div class="conv-row">
+                <div class="conv-icon copilot-blue">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">hi</span>
+              </div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> AionUi</div>
+              <div class="conv-row">
+                <div class="conv-icon emoji">&#127802;</div>
+                <span class="conv-name">/resume</span>
+              </div>
+
+              <div class="time-label">Yesterday</div>
+              <div class="workspace-label"><span class="chevron">&#9656;</span> teleX</div>
+              <div class="conv-row">
+                <div class="conv-icon copilot">
+                  <svg viewBox="0 0 16 16" width="10" height="10" fill="#fff"><circle cx="8" cy="8" r="5" /></svg>
+                </div>
+                <span class="conv-name">catch up the project c...</span>
+              </div>
+            </div>
+
+            <div class="sidebar-footer">
+              <div class="settings-row" style="background: var(--bg-hover); color: var(--text-secondary)">
+                <span class="gear">&#9881;</span> Settings
+              </div>
+            </div>
+          </div>
+
+          <!-- Main Content - Settings Page -->
+          <div class="main-content">
+            <div class="tab-bar">
+              <div class="tab-item active">&#9881; Settings <span class="tab-close">&times;</span></div>
+              <div class="tab-add">+</div>
+            </div>
+
+            <div class="settings-page">
+              <div class="settings-title">Settings</div>
+              <div class="settings-subtitle">Customize your AionUI experience</div>
+
+              <!-- General Section -->
+              <div class="settings-section">
+                <div class="settings-section-title">General</div>
+
+                <!-- Theme -->
+                <div class="settings-item">
+                  <div class="settings-item-left">
+                    <div class="settings-item-label">Theme</div>
+                    <div class="settings-item-desc">Choose the appearance of the application</div>
+                  </div>
+                  <div class="settings-item-right">
+                    <div class="segmented-control">
+                      <div class="segmented-option selected"><span class="seg-icon">&#9788;</span> Light</div>
+                      <div class="segmented-option"><span class="seg-icon">&#9790;</span> Dark</div>
+                      <div class="segmented-option"><span class="seg-icon">&#9881;</span> System</div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Default conversation mode (KEY SETTING) -->
+                <div
+                  class="settings-item"
+                  style="
+                    background: var(--accent-lighter);
+                    margin: 0 -16px;
+                    padding: 14px 16px;
+                    border-radius: var(--radius-md);
+                    border-bottom: none;
+                  "
+                >
+                  <div class="settings-item-left">
+                    <div class="settings-item-label">Default conversation mode</div>
+                    <div class="settings-item-desc">
+                      Choose how new conversations start. You can switch anytime via the toggle in the chat header.
+                    </div>
+                    <div class="settings-mode-options">
+                      <div class="settings-mode-card selected">
+                        <div class="smc-check">&#10003;</div>
+                        <div class="smc-header"><span class="smc-icon">&#128172;</span> Rich UI (ACP)</div>
+                        <div class="smc-desc">Structured tool cards, permission dialogs, expandable steps</div>
+                      </div>
+                      <div class="settings-mode-card">
+                        <div class="smc-check">&#10003;</div>
+                        <div class="smc-header"><span class="smc-icon-term">&gt;_</span> Terminal</div>
+                        <div class="smc-desc">Raw terminal, full interactive CLI experience</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Send with Enter -->
+                <div class="settings-item">
+                  <div class="settings-item-left">
+                    <div class="settings-item-label">Send with Enter</div>
+                    <div class="settings-item-desc">Press Enter to send messages, Shift+Enter for new line</div>
+                  </div>
+                  <div class="settings-item-right">
+                    <div class="toggle-switch on"></div>
+                  </div>
+                </div>
+
+                <!-- Show token count -->
+                <div class="settings-item">
+                  <div class="settings-item-left">
+                    <div class="settings-item-label">Show token count</div>
+                    <div class="settings-item-desc">Display token usage in the message input area</div>
+                  </div>
+                  <div class="settings-item-right">
+                    <div class="toggle-switch"></div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Chat Section -->
+              <div class="settings-section">
+                <div class="settings-section-title">Chat</div>
+
+                <!-- Auto-expand tool cards -->
+                <div class="settings-item">
+                  <div class="settings-item-left">
+                    <div class="settings-item-label">Auto-expand tool cards</div>
+                    <div class="settings-item-desc">Automatically expand tool call results in Rich UI mode</div>
+                  </div>
+                  <div class="settings-item-right">
+                    <div class="toggle-switch"></div>
+                  </div>
+                </div>
+
+                <!-- Terminal font size -->
+                <div class="settings-item">
+                  <div class="settings-item-left">
+                    <div class="settings-item-label">Terminal font size</div>
+                    <div class="settings-item-desc">Font size for the terminal mode display</div>
+                  </div>
+                  <div class="settings-item-right">
+                    <div class="segmented-control">
+                      <div class="segmented-option">12</div>
+                      <div class="segmented-option selected">13</div>
+                      <div class="segmented-option">14</div>
+                      <div class="segmented-option">16</div>
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-
-            <!-- Send with Enter -->
-            <div class="settings-item">
-              <div class="settings-item-left">
-                <div class="settings-item-label">Send with Enter</div>
-                <div class="settings-item-desc">Press Enter to send messages, Shift+Enter for new line</div>
-              </div>
-              <div class="settings-item-right">
-                <div class="toggle-switch on"></div>
-              </div>
-            </div>
-
-            <!-- Show token count -->
-            <div class="settings-item">
-              <div class="settings-item-left">
-                <div class="settings-item-label">Show token count</div>
-                <div class="settings-item-desc">Display token usage in the message input area</div>
-              </div>
-              <div class="settings-item-right">
-                <div class="toggle-switch"></div>
-              </div>
-            </div>
           </div>
 
-          <!-- Chat Section -->
-          <div class="settings-section">
-            <div class="settings-section-title">Chat</div>
-
-            <!-- Auto-expand tool cards -->
-            <div class="settings-item">
-              <div class="settings-item-left">
-                <div class="settings-item-label">Auto-expand tool cards</div>
-                <div class="settings-item-desc">Automatically expand tool call results in Rich UI mode</div>
+          <!-- Right Sidebar -->
+          <div class="right-sidebar">
+            <div class="right-header">Workspace</div>
+            <div class="right-search">Search files...</div>
+            <div class="file-tree">
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src
               </div>
-              <div class="settings-item-right">
-                <div class="toggle-switch"></div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> process
               </div>
-            </div>
-
-            <!-- Terminal font size -->
-            <div class="settings-item">
-              <div class="settings-item-left">
-                <div class="settings-item-label">Terminal font size</div>
-                <div class="settings-item-desc">Font size for the terminal mode display</div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> renderer
               </div>
-              <div class="settings-item-right">
-                <div class="segmented-control">
-                  <div class="segmented-option">12</div>
-                  <div class="segmented-option selected">13</div>
-                  <div class="segmented-option">14</div>
-                  <div class="segmented-option">16</div>
-                </div>
+              <div class="ft-file" style="padding-left: 36px"><span class="ft-file-icon">&#128196;</span> App.tsx</div>
+              <div class="ft-file" style="padding-left: 36px"><span class="ft-file-icon">&#128196;</span> main.tsx</div>
+              <div class="ft-folder" style="padding-left: 18px">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker
               </div>
+              <div class="ft-folder">
+                <span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests
+              </div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
+              <div class="ft-file"><span class="ft-file-icon">&#128196;</span> vite.config.ts</div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Right Sidebar -->
-      <div class="right-sidebar">
-        <div class="right-header">Workspace</div>
-        <div class="right-search">Search files...</div>
-        <div class="file-tree">
-          <div class="ft-folder"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> src</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> process</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9662;</span> <span class="ft-folder-icon">&#128193;</span> renderer</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> App.tsx</div>
-          <div class="ft-file" style="padding-left:36px;"><span class="ft-file-icon">&#128196;</span> main.tsx</div>
-          <div class="ft-folder" style="padding-left:18px;"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> worker</div>
-          <div class="ft-folder"><span class="ft-chevron">&#9656;</span> <span class="ft-folder-icon">&#128193;</span> tests</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> package.json</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> tsconfig.json</div>
-          <div class="ft-file"><span class="ft-file-icon">&#128196;</span> vite.config.ts</div>
-        </div>
+      <div class="comparison">
+        <h3>Tab 4: Settings &mdash; Default Mode Configuration</h3>
+        <p>
+          The Settings page shows the "Default conversation mode" option with two visual cards instead of a simple
+          segmented control. "Rich UI (ACP)" is selected by default with a checkmark and blue highlight. Each card shows
+          a description of what that mode provides. The setting is highlighted with a subtle accent background.
+        </p>
+        <ul>
+          <li>Mode cards use the same icon language as the header toggle for consistency</li>
+          <li>"Rich UI (ACP)" describes: structured tool cards, permission dialogs, expandable steps</li>
+          <li>"Terminal" describes: raw terminal, full interactive CLI experience</li>
+          <li>
+            The setting only affects <strong>new</strong> conversations &mdash; existing ones keep their current mode
+          </li>
+          <li>Additional settings (theme, terminal font size, auto-expand) provide realistic context</li>
+        </ul>
       </div>
-
     </div>
-  </div>
 
-  <div class="comparison">
-    <h3>Tab 4: Settings &mdash; Default Mode Configuration</h3>
-    <p>The Settings page shows the "Default conversation mode" option with two visual cards instead of a simple segmented control. "Rich UI (ACP)" is selected by default with a checkmark and blue highlight. Each card shows a description of what that mode provides. The setting is highlighted with a subtle accent background.</p>
-    <ul>
-      <li>Mode cards use the same icon language as the header toggle for consistency</li>
-      <li>"Rich UI (ACP)" describes: structured tool cards, permission dialogs, expandable steps</li>
-      <li>"Terminal" describes: raw terminal, full interactive CLI experience</li>
-      <li>The setting only affects <strong>new</strong> conversations &mdash; existing ones keep their current mode</li>
-      <li>Additional settings (theme, terminal font size, auto-expand) provide realistic context</li>
-    </ul>
-  </div>
-</div>
+    <script>
+      // Tab switching
+      const tabs = document.querySelectorAll('.option-tab');
+      const panels = document.querySelectorAll('.option-panel');
 
-<script>
-  // Tab switching
-  const tabs = document.querySelectorAll('.option-tab');
-  const panels = document.querySelectorAll('.option-panel');
+      tabs.forEach((tab) => {
+        tab.addEventListener('click', () => {
+          tabs.forEach((t) => t.classList.remove('active'));
+          panels.forEach((p) => p.classList.remove('active'));
+          tab.classList.add('active');
+          document.getElementById(tab.dataset.target).classList.add('active');
+        });
+      });
 
-  tabs.forEach(tab => {
-    tab.addEventListener('click', () => {
-      tabs.forEach(t => t.classList.remove('active'));
-      panels.forEach(p => p.classList.remove('active'));
-      tab.classList.add('active');
-      document.getElementById(tab.dataset.target).classList.add('active');
-    });
-  });
+      // Tool card expand/collapse
+      function toggleCard(header) {
+        const chevron = header.querySelector('.tool-chevron');
+        const body = header.parentElement.querySelector('.tool-card-body');
+        chevron.classList.toggle('expanded');
+        body.classList.toggle('expanded');
+      }
 
-  // Tool card expand/collapse
-  function toggleCard(header) {
-    const chevron = header.querySelector('.tool-chevron');
-    const body = header.parentElement.querySelector('.tool-card-body');
-    chevron.classList.toggle('expanded');
-    body.classList.toggle('expanded');
-  }
-
-  // Dismiss history banner
-  document.querySelectorAll('.hb-dismiss').forEach(btn => {
-    btn.addEventListener('click', () => {
-      btn.closest('.history-banner').style.display = 'none';
-    });
-  });
-</script>
-</body>
+      // Dismiss history banner
+      document.querySelectorAll('.hb-dismiss').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          btn.closest('.history-banner').style.display = 'none';
+        });
+      });
+    </script>
+  </body>
 </html>

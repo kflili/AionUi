@@ -9,33 +9,33 @@
 
 Every CLI and desktop app stores conversation history as **JSONL or JSON files** on disk. AionUI is the only one using SQLite for conversation content.
 
-| App/Mode | Storage Format | History Location |
-|----------|---------------|-----------------|
-| Claude Code CLI | JSONL | `~/.claude/projects/{path-hash}/{session-id}.jsonl` |
-| Claude Desktop — Code mode | JSONL | `~/Library/Application Support/Claude/claude-code-sessions/{account}/{org}/` |
-| Claude Desktop — Cowork mode | JSONL | `~/Library/Application Support/Claude/local-agent-mode-sessions/{account}/{org}/{vm}/{session}/audit.jsonl` |
-| Claude Desktop — Chat mode | Server-side | Stored on claude.ai, not locally |
-| Copilot CLI | JSONL | `~/.copilot/session-state/{session-id}/events.jsonl` |
-| Codex CLI | JSONL | `~/.codex/sessions/YYYY/MM/DD/rollout-{date}-{session-id}.jsonl` |
-| Gemini CLI | JSON | `~/.gemini/tmp/{project-hash}/chats/session-{timestamp}-{id}.json` |
-| Google Antigravity (VS Code) | Protobuf (.pb) | `~/.gemini/antigravity/conversations/{id}.pb` (NOT Gemini CLI) |
-| **AionUI** | **SQLite only** | `~/Library/Application Support/AionUi/aionui/aionui.db` |
+| App/Mode                     | Storage Format  | History Location                                                                                            |
+| ---------------------------- | --------------- | ----------------------------------------------------------------------------------------------------------- |
+| Claude Code CLI              | JSONL           | `~/.claude/projects/{path-hash}/{session-id}.jsonl`                                                         |
+| Claude Desktop — Code mode   | JSONL           | `~/Library/Application Support/Claude/claude-code-sessions/{account}/{org}/`                                |
+| Claude Desktop — Cowork mode | JSONL           | `~/Library/Application Support/Claude/local-agent-mode-sessions/{account}/{org}/{vm}/{session}/audit.jsonl` |
+| Claude Desktop — Chat mode   | Server-side     | Stored on claude.ai, not locally                                                                            |
+| Copilot CLI                  | JSONL           | `~/.copilot/session-state/{session-id}/events.jsonl`                                                        |
+| Codex CLI                    | JSONL           | `~/.codex/sessions/YYYY/MM/DD/rollout-{date}-{session-id}.jsonl`                                            |
+| Gemini CLI                   | JSON            | `~/.gemini/tmp/{project-hash}/chats/session-{timestamp}-{id}.json`                                          |
+| Google Antigravity (VS Code) | Protobuf (.pb)  | `~/.gemini/antigravity/conversations/{id}.pb` (NOT Gemini CLI)                                              |
+| **AionUI**                   | **SQLite only** | `~/Library/Application Support/AionUi/aionui/aionui.db`                                                     |
 
 ---
 
 ## JSON vs JSONL
 
-| | JSON | JSONL (JSON Lines) |
-|---|---|---|
-| Structure | One big JSON object/array per file | One JSON object **per line**, newline-delimited |
-| Write pattern | Must rewrite entire file on every update | Append one line to end of file |
-| Read pattern | Parse entire file to access any part | Can stream line-by-line, or read specific lines |
-| Crash safety | Crash during rewrite = corrupted file | Crash mid-append = lose only last incomplete line |
-| Memory | Must hold full document in memory to write | Only need current event in memory |
-| File size scaling | Rewrites get slower as file grows (O(n) per write) | Appends stay constant time (O(1) per write) |
-| Human readability | Nicely formatted with indentation | One dense JSON object per line |
-| Tool compatibility | `jq`, any JSON parser | `grep`, `head`, `tail`, `wc -l`, `jq` per line |
-| Example | `{"messages": [{"role": "user", ...}, ...]}` | `{"role": "user", ...}\n{"role": "assistant", ...}\n` |
+|                    | JSON                                               | JSONL (JSON Lines)                                    |
+| ------------------ | -------------------------------------------------- | ----------------------------------------------------- |
+| Structure          | One big JSON object/array per file                 | One JSON object **per line**, newline-delimited       |
+| Write pattern      | Must rewrite entire file on every update           | Append one line to end of file                        |
+| Read pattern       | Parse entire file to access any part               | Can stream line-by-line, or read specific lines       |
+| Crash safety       | Crash during rewrite = corrupted file              | Crash mid-append = lose only last incomplete line     |
+| Memory             | Must hold full document in memory to write         | Only need current event in memory                     |
+| File size scaling  | Rewrites get slower as file grows (O(n) per write) | Appends stay constant time (O(1) per write)           |
+| Human readability  | Nicely formatted with indentation                  | One dense JSON object per line                        |
+| Tool compatibility | `jq`, any JSON parser                              | `grep`, `head`, `tail`, `wc -l`, `jq` per line        |
+| Example            | `{"messages": [{"role": "user", ...}, ...]}`       | `{"role": "user", ...}\n{"role": "assistant", ...}\n` |
 
 **JSONL is the clear winner for streaming agent conversations** because each event (user message, tool call, response chunk) can be appended as it happens with zero overhead. JSON requires loading + modifying + rewriting the whole file for every new event.
 
@@ -46,23 +46,29 @@ Every CLI and desktop app stores conversation history as **JSONL or JSON files**
 Research from multiple sources including Gemini CLI issue #15292 benchmarks:
 
 ### Performance (Gemini CLI benchmarks)
+
 - **Standard payloads:** JSON rewrite ~1.07ms vs JSONL append ~0.04ms (**25x faster**)
 - **Large payloads (~50KB):** JSON rewrite ~17.88ms vs JSONL append ~0.17ms (**100x faster**)
 - **400MB session file:** JSON rewrite ~6.8 seconds vs JSONL append ~0.75ms (**9,000x faster**)
 
 ### Crash Safety
+
 Each JSONL line is independently valid. If the process crashes mid-write, all previous lines remain intact. With JSON, a crash during full-file rewrite can corrupt the entire conversation.
 
 ### Memory Efficiency
+
 JSON rewrite requires holding the entire serialized conversation in memory. Gemini CLI observed "Mark-Compact GC thrashing and OOM crashes with >4GB heap usage." JSONL never loads the full file to write.
 
 ### Event-Sourcing Architecture
+
 Each JSONL line is an immutable event. Session state is reconstructed by replaying events. This enables session resumption, conversation branching (via parent IDs), sub-agent hierarchies, and session forking.
 
 ### Zero Dependencies
+
 No database runtime, no schema migrations. Read with `cat`, search with `grep`, process with `jq`. Maximum portability.
 
 ### Key Insight
+
 > "JSONL is the write-path optimization; SQLite is the read-path optimization. For a coding agent, the write path (streaming events) is the hot path."
 
 Several CLIs (Copilot, Codex) use SQLite as a **complementary index** alongside JSONL files — JSONL for the conversation content, SQLite for fast listing/searching across sessions.
@@ -156,14 +162,14 @@ Several CLIs (Copilot, Codex) use SQLite as a **complementary index** alongside 
 
 All paths above are macOS. For cross-platform implementations:
 
-| CLI | macOS | Linux | Windows |
-|-----|-------|-------|---------|
-| Claude Code | `~/.claude/` | `~/.claude/` | `%USERPROFILE%\.claude\` |
-| Copilot | `~/.copilot/` | `~/.copilot/` | `%USERPROFILE%\.copilot\` |
-| Codex | `~/.codex/` | `~/.codex/` | `%USERPROFILE%\.codex\` |
-| Gemini | `~/.gemini/` | `~/.gemini/` | `%USERPROFILE%\.gemini\` |
-| AionUI | `~/Library/Application Support/AionUi/` | `~/.config/AionUi/` | `%APPDATA%\AionUi\` |
-| Claude Desktop | `~/Library/Application Support/Claude/` | `~/.config/Claude/` | `%APPDATA%\Claude\` |
+| CLI            | macOS                                   | Linux               | Windows                   |
+| -------------- | --------------------------------------- | ------------------- | ------------------------- |
+| Claude Code    | `~/.claude/`                            | `~/.claude/`        | `%USERPROFILE%\.claude\`  |
+| Copilot        | `~/.copilot/`                           | `~/.copilot/`       | `%USERPROFILE%\.copilot\` |
+| Codex          | `~/.codex/`                             | `~/.codex/`         | `%USERPROFILE%\.codex\`   |
+| Gemini         | `~/.gemini/`                            | `~/.gemini/`        | `%USERPROFILE%\.gemini\`  |
+| AionUI         | `~/Library/Application Support/AionUi/` | `~/.config/AionUi/` | `%APPDATA%\AionUi\`       |
+| Claude Desktop | `~/Library/Application Support/Claude/` | `~/.config/Claude/` | `%APPDATA%\Claude\`       |
 
 Use `os.homedir()` for `~` expansion. For Electron app data paths, use `electron.app.getPath('appData')`.
 
@@ -250,16 +256,16 @@ Main Process                              Renderer
 
 ### Comparison
 
-| | Claude Desktop | AionUI (ACP) | Terminal wrapper |
-|---|---|---|---|
-| How CLI is spawned | PTY | child_process (piped stdio) | PTY |
-| What CLI outputs | Terminal text (ANSI) | Structured JSON-RPC | Terminal text (ANSI) |
-| Who parses output | Main process (custom) | Nobody — already structured | Nobody — render raw |
-| Renderer | claude.ai webview (server) | Local React components | xterm.js |
-| Structured tool cards | Yes | Yes | No |
-| Works with other CLIs | No (proprietary) | Yes (open protocol) | Yes (any CLI) |
-| Expandable details | Yes | Yes | No |
-| Permission dialogs | Custom UI | Native UI dialogs | Type Y/N in terminal |
+|                       | Claude Desktop             | AionUI (ACP)                | Terminal wrapper     |
+| --------------------- | -------------------------- | --------------------------- | -------------------- |
+| How CLI is spawned    | PTY                        | child_process (piped stdio) | PTY                  |
+| What CLI outputs      | Terminal text (ANSI)       | Structured JSON-RPC         | Terminal text (ANSI) |
+| Who parses output     | Main process (custom)      | Nobody — already structured | Nobody — render raw  |
+| Renderer              | claude.ai webview (server) | Local React components      | xterm.js             |
+| Structured tool cards | Yes                        | Yes                         | No                   |
+| Works with other CLIs | No (proprietary)           | Yes (open protocol)         | Yes (any CLI)        |
+| Expandable details    | Yes                        | Yes                         | No                   |
+| Permission dialogs    | Custom UI                  | Native UI dialogs           | Type Y/N in terminal |
 
 ### Why ACP is the cleanest architecture
 

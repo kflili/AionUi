@@ -8,6 +8,7 @@
 ## Current Architecture: No Root Agent Needed
 
 The current CLI session already serves as the "root agent":
+
 - Has filesystem access across all projects
 - Can spawn subagents for parallel research
 - Can read/write files in any project folder
@@ -49,6 +50,7 @@ You ↔ Main CLI ("root agent")
 ### Cost-saving escape hatch (optional)
 
 If the bridge role is burning too many tokens, attach to the tmux session directly:
+
 - In terminal: `tmux attach -t session-name` (native experience)
 - In AionUI: terminal wrapper mode (requires terminal wrapper plan)
 - Full interactive experience, same as starting a fresh CLI
@@ -57,13 +59,13 @@ If the bridge role is burning too many tokens, attach to the tmux session direct
 
 ## Why This Replaces the teleX Root Agent Design
 
-| teleX design | Current approach |
-|---|---|
-| Dedicated root agent process | Current CLI session IS the root agent |
-| Agent SDK for spawning workers | `tmux` + CLI (no SDK needed) |
-| Custom message bus between agents | `tmux send-keys` / `tmux capture-pane` |
-| Worker lifecycle management | tmux session management (native) |
-| Central conversation logging | Each CLI writes its own history; scanner consolidates |
+| teleX design                      | Current approach                                      |
+| --------------------------------- | ----------------------------------------------------- |
+| Dedicated root agent process      | Current CLI session IS the root agent                 |
+| Agent SDK for spawning workers    | `tmux` + CLI (no SDK needed)                          |
+| Custom message bus between agents | `tmux send-keys` / `tmux capture-pane`                |
+| Worker lifecycle management       | tmux session management (native)                      |
+| Central conversation logging      | Each CLI writes its own history; scanner consolidates |
 
 Same capabilities, zero custom infrastructure.
 
@@ -78,6 +80,7 @@ A skill that automates the tmux delegation pattern:
 ```
 
 Would:
+
 1. Create a named tmux session
 2. Launch the specified CLI in the target project directory
 3. Send the initial task message
@@ -100,6 +103,7 @@ Not needed now — the manual tmux commands work fine. Build this when the patte
 ## Mobile / Random Chat Pattern
 
 For non-project discussions (random ideas, topic exploration):
+
 - Use a default workspace folder (e.g., `~/Projects/temp_ideas/`)
 - Start different sessions for different topics
 - AionUI's history sidebar makes them findable
