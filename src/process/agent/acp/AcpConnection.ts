@@ -423,6 +423,9 @@ export class AcpConnection {
    * Similar to Codex's handleProcessExit implementation
    */
   private handleProcessExit(code: number | null, signal: NodeJS.Signals | null): void {
+    console.warn(
+      `[ACP-lifecycle] process_exit: code=${code}, signal=${signal}, pending_requests=${this.pendingRequests.size}`
+    );
     // 1. Reject all pending requests with clear error message
     for (const [_id, request] of this.pendingRequests) {
       if (request.timeoutId) {
@@ -471,6 +474,9 @@ export class AcpConnection {
               method === 'session/prompt'
                 ? `LLM request timed out after ${timeoutDuration / 1000} seconds`
                 : `Request ${method} timed out after ${timeoutDuration / 1000} seconds`;
+            console.warn(
+              `[ACP-lifecycle] prompt_timeout: request_id=${id}, method=${method}, elapsed=${Date.now() - startTime}ms`
+            );
             reject(new Error(timeoutMsg));
           }
         }, timeoutDuration);
@@ -608,6 +614,7 @@ export class AcpConnection {
           if (message.result && typeof message.result === 'object') {
             const promptResult = message.result as Record<string, unknown>;
             if (promptResult.stopReason === 'end_turn') {
+              console.log(`[ACP-lifecycle] prompt_response: end_turn (request_id: ${message.id})`);
               this.onEndTurn();
             }
             // Extract PromptResponse.usage (per-turn token data from codex-acp / PR #167)
@@ -622,6 +629,19 @@ export class AcpConnection {
         } else if ('error' in message) {
           const errorMsg = message.error?.message || 'Unknown ACP error';
           reject(new Error(errorMsg));
+        }
+      } else if ('id' in message && 'result' in message) {
+        // Orphaned response — request was already resolved (e.g., by timeout).
+        // Still fire onEndTurn if this is an end_turn so backend state resets.
+        console.warn(
+          `[ACP-lifecycle] orphaned_response: request_id=${(message as { id?: unknown }).id} not in pendingRequests`
+        );
+        if (message.result && typeof message.result === 'object') {
+          const result = message.result as Record<string, unknown>;
+          if (result.stopReason === 'end_turn') {
+            console.log(`[ACP-lifecycle] orphaned end_turn: firing onEndTurn for recovery`);
+            this.onEndTurn();
+          }
         }
       } else {
         // Unknown message format, ignore

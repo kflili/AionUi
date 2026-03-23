@@ -124,6 +124,57 @@ async function resolveSessionPath(sessionId: string, backend: string): Promise<s
 }
 
 /**
+ * Check if a CLI session is idle (waiting for user input) by reading the last
+ * few lines of the JSONL file. Returns true if the last assistant message has
+ * `stop_reason: 'end_turn'`, indicating the turn completed.
+ *
+ * @param sessionId - The ACP session ID
+ * @param backend - The CLI backend type (claude, copilot, codex)
+ * @param staleThresholdMs - Only consider idle if last modified > this many ms ago (default 10s)
+ */
+export async function isSessionIdle(sessionId: string, backend: string, staleThresholdMs = 10_000): Promise<boolean> {
+  try {
+    const filePath = await resolveSessionPath(sessionId, backend);
+    if (!filePath) return false;
+
+    const stat = await fs.stat(filePath);
+    // Guard against race: if file was modified very recently, the turn may still be in progress
+    if (Date.now() - stat.mtimeMs < staleThresholdMs) return false;
+
+    // Read last 8KB — enough for the final few JSONL entries
+    const handle = await fs.open(filePath, 'r');
+    try {
+      const fileSize = stat.size;
+      const readSize = Math.min(8192, fileSize);
+      const buffer = Buffer.alloc(readSize);
+      const { bytesRead } = await handle.read(buffer, 0, readSize, Math.max(0, fileSize - readSize));
+      const tail = buffer.subarray(0, bytesRead).toString('utf-8');
+      const lines = tail.split('\n').filter(Boolean);
+
+      // Scan from the end for the last assistant or user message
+      for (let i = lines.length - 1; i >= 0; i--) {
+        try {
+          const entry = JSON.parse(lines[i]);
+          if (entry.type === 'assistant' && entry.message?.stop_reason === 'end_turn') {
+            return true;
+          }
+          if (entry.type === 'user') {
+            return false; // Last entry is a user message — session should be processing
+          }
+        } catch {
+          continue; // Malformed line (possibly truncated at read boundary)
+        }
+      }
+    } finally {
+      await handle.close();
+    }
+  } catch {
+    // File not found, permission error, etc. — can't determine, assume not idle
+  }
+  return false;
+}
+
+/**
  * Initialize IPC handlers for CLI history utilities.
  */
 export function initCliHistoryBridge(): void {

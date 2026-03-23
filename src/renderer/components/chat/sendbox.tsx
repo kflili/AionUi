@@ -45,6 +45,7 @@ const SendBox: React.FC<{
   defaultMultiLine?: boolean;
   lockMultiLine?: boolean;
   sendButtonPrefix?: React.ReactNode;
+  loadingHint?: string;
   slashCommands?: SlashCommandItem[];
   onSlashBuiltinCommand?: (name: string) => void;
 }> = ({
@@ -63,6 +64,7 @@ const SendBox: React.FC<{
   defaultMultiLine = false,
   lockMultiLine = false,
   sendButtonPrefix,
+  loadingHint,
   slashCommands = [],
   onSlashBuiltinCommand,
 }) => {
@@ -472,13 +474,16 @@ const SendBox: React.FC<{
             <div className='flex items-center gap-2'>
               {sendButtonPrefix}
               {isLoading || loading ? (
-                <Button
-                  shape='circle'
-                  type='secondary'
-                  className='bg-animate'
-                  icon={<div className='mx-auto size-12px bg-6'></div>}
-                  onClick={stopHandler}
-                ></Button>
+                <>
+                  {loadingHint && <span className='text-12px text-3 mr-4px'>{loadingHint}</span>}
+                  <Button
+                    shape='circle'
+                    type='secondary'
+                    className='bg-animate'
+                    icon={<div className='mx-auto size-12px bg-6'></div>}
+                    onClick={stopHandler}
+                  ></Button>
+                </>
               ) : (
                 sendButton
               )}
@@ -491,13 +496,16 @@ const SendBox: React.FC<{
             <div className='flex items-center gap-2'>
               {sendButtonPrefix}
               {isLoading || loading ? (
-                <Button
-                  shape='circle'
-                  type='secondary'
-                  className='bg-animate'
-                  icon={<div className='mx-auto size-12px bg-6'></div>}
-                  onClick={stopHandler}
-                ></Button>
+                <>
+                  {loadingHint && <span className='text-12px text-3 mr-4px'>{loadingHint}</span>}
+                  <Button
+                    shape='circle'
+                    type='secondary'
+                    className='bg-animate'
+                    icon={<div className='mx-auto size-12px bg-6'></div>}
+                    onClick={stopHandler}
+                  ></Button>
+                </>
               ) : (
                 sendButton
               )}

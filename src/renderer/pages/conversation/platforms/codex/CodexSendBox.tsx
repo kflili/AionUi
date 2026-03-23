@@ -411,12 +411,19 @@ const CodexSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id }
     };
   }, [conversation_id, addOrUpdateMessage]);
 
-  // 停止会话处理函数 Stop conversation handler
+  // Stop conversation handler — try graceful stop first, fall back to force-kill
   const handleStop = async (): Promise<void> => {
-    // Use finally to ensure UI state is reset even if backend stop fails
+    let timerId: ReturnType<typeof setTimeout> | undefined;
     try {
-      await ipcBridge.conversation.stop.invoke({ conversation_id });
+      const stopPromise = ipcBridge.conversation.stop.invoke({ conversation_id });
+      const timeout = new Promise<never>((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('stop timeout')), 3000);
+      });
+      await Promise.race([stopPromise, timeout]);
+    } catch {
+      await ipcBridge.conversation.reset.invoke({ id: conversation_id }).catch(() => {});
     } finally {
+      clearTimeout(timerId);
       setRunning(false);
       setAiProcessing(false);
       setThought({ subject: '', description: '' });

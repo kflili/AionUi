@@ -11,6 +11,7 @@ import type { TokenUsageData } from '@/common/config/storage';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import type { ThoughtData } from '@/renderer/components/chat/ThoughtDisplay';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type UseAcpMessageReturn = {
   thought: ThoughtData;
@@ -22,9 +23,11 @@ type UseAcpMessageReturn = {
   resetState: () => void;
   tokenUsage: TokenUsageData | null;
   contextLimit: number;
+  inactivityHint: string | undefined;
 };
 
 export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
+  const { t } = useTranslation();
   const addOrUpdateMessage = useAddOrUpdateMessage();
   const [running, setRunning] = useState(false);
   const [thought, setThought] = useState<ThoughtData>({
@@ -45,6 +48,10 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
   // Track whether current turn has content output
   // Only reset aiProcessing when finish arrives after content (not after tool calls)
   const hasContentInTurnRef = useRef(false);
+
+  // Inactivity detection: track last stream event timestamp
+  const lastStreamEventAtRef = useRef<number>(0);
+  const [inactivityHint, setInactivityHint] = useState<string | undefined>(undefined);
 
   // Track request trace state for displaying complete request lifecycle
   const requestTraceRef = useRef<{
@@ -107,6 +114,10 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
       if (conversation_id !== message.conversation_id) {
         return;
       }
+      // Update inactivity tracker on every stream event
+      lastStreamEventAtRef.current = Date.now();
+      // Unconditionally clear — avoids stale closure (inactivityHint not in deps)
+      setInactivityHint(undefined);
 
       const transformedMessage = transformMessage(message);
       switch (message.type) {
@@ -114,12 +125,14 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           throttledSetThought(message.data as ThoughtData);
           break;
         case 'start':
+          console.log(`[ACP-lifecycle] ui_state: running=true, trigger=start`, conversation_id);
           setRunning(true);
           runningRef.current = true;
           // Don't reset aiProcessing here - let content arrival handle it
           break;
         case 'finish':
           {
+            console.log(`[ACP-lifecycle] ui_state: running=false, aiProcessing=false, trigger=finish`, conversation_id);
             // Immediate state reset (notification is handled by centralized hook)
             setRunning(false);
             runningRef.current = false;
@@ -163,6 +176,10 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
             }
             // Reset all loading states on error or disconnect so UI doesn't stay stuck
             if (['error', 'disconnected'].includes(agentData.status)) {
+              console.log(
+                `[ACP-lifecycle] ui_state: running=false, aiProcessing=false, trigger=agent_status:${agentData.status}`,
+                conversation_id
+              );
               setRunning(false);
               runningRef.current = false;
               setAiProcessing(false);
@@ -210,6 +227,7 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           break;
         case 'error':
           // Stop all loading states when error occurs
+          console.log(`[ACP-lifecycle] ui_state: running=false, aiProcessing=false, trigger=error`, conversation_id);
           setRunning(false);
           runningRef.current = false;
           setAiProcessing(false);
@@ -285,6 +303,27 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
     hasContentInTurnRef.current = false;
   }, []);
 
+  // Inactivity detection: check every 30s if running with no recent stream events
+  useEffect(() => {
+    if (!running && !aiProcessing) {
+      setInactivityHint(undefined);
+      return;
+    }
+    const INACTIVITY_THRESHOLD_MS = 120_000; // 2 minutes
+    const interval = setInterval(() => {
+      if ((runningRef.current || aiProcessingRef.current) && lastStreamEventAtRef.current > 0) {
+        const elapsed = Date.now() - lastStreamEventAtRef.current;
+        if (elapsed >= INACTIVITY_THRESHOLD_MS) {
+          const minutes = Math.floor(elapsed / 60_000);
+          setInactivityHint(t('acp.sendbox.inactivityHint', { minutes, defaultValue: 'No response for {{minutes}}m' }));
+        } else {
+          setInactivityHint(undefined);
+        }
+      }
+    }, 30_000);
+    return () => clearInterval(interval);
+  }, [running, aiProcessing, t]);
+
   return {
     thought,
     setThought,
@@ -295,5 +334,6 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
     resetState,
     tokenUsage,
     contextLimit,
+    inactivityHint,
   };
 };
