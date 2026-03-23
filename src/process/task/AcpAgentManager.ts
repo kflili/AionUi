@@ -1047,6 +1047,8 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
    */
   kill() {
     this.flushBufferedStreamTextMessages();
+    // Ensure cron busy guard is cleared so future cron jobs aren't blocked
+    cronBusyGuard.setProcessing(this.conversation_id, false);
 
     let killed = false;
     const GRACE_PERIOD_MS = 500; // Allow child process time to exit cleanly

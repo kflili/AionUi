@@ -18,7 +18,7 @@ import type OpenClawAgentManager from '../task/OpenClawAgentManager';
 import { prepareFirstMessage } from '../task/agentUtils';
 import { refreshTrayMenu } from '@process/utils/tray';
 import { copyFilesToDirectory, readDirectoryRecursive } from '@process/utils';
-import { mainLog, mainWarn } from '@process/utils/mainLogger';
+import { mainWarn } from '@process/utils/mainLogger';
 import { computeOpenClawIdentityHash } from '@process/utils/openclawUtils';
 import { migrateConversationToDatabase } from './migrationUtils';
 
