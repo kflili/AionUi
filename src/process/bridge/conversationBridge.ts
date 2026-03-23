@@ -19,6 +19,7 @@ import { prepareFirstMessage } from '../task/agentUtils';
 import { refreshTrayMenu } from '@process/utils/tray';
 import { copyFilesToDirectory, readDirectoryRecursive } from '@process/utils';
 import { mainWarn } from '@process/utils/mainLogger';
+import { isSessionIdle } from '@process/bridge/cliHistoryBridge';
 import { computeOpenClawIdentityHash } from '@process/utils/openclawUtils';
 import { migrateConversationToDatabase } from './migrationUtils';
 
@@ -279,9 +280,23 @@ export function initConversationBridge(
         if (task?.status === 'running') {
           const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
           if (agent && 'isConnected' in agent && !agent.isConnected) {
-            mainWarn('[ACP-lifecycle]', `liveness_check: task=running but agent disconnected, force-recovering`, { conv: id });
+            mainWarn('[ACP-lifecycle]', `liveness_check: task=running but agent disconnected, force-recovering`, {
+              conv: id,
+            });
             workerTaskManager.kill(id);
             return { ...conversation, status: 'finished' as const };
+          }
+          // Process is alive but might be idle — check JSONL as ground truth
+          const extra = conversation.extra as { acpSessionId?: string; backend?: string } | undefined;
+          if (extra?.acpSessionId) {
+            const idle = await isSessionIdle(extra.acpSessionId, extra.backend ?? 'claude');
+            if (idle) {
+              mainWarn('[ACP-lifecycle]', `liveness_check: task=running but JSONL shows idle, force-recovering`, {
+                conv: id,
+              });
+              workerTaskManager.kill(id);
+              return { ...conversation, status: 'finished' as const };
+            }
           }
         }
         return { ...conversation, status: task?.status || 'finished' };
@@ -299,9 +314,21 @@ export function initConversationBridge(
           const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
           if (agent && 'isConnected' in agent && !agent.isConnected) {
             workerTaskManager.kill(id);
-            // Lazy migrate this conversation to database in background
             void migrateConversationToDatabase(fileConversation);
             return { ...fileConversation, status: 'finished' as const };
+          }
+          // Process is alive but might be idle — check JSONL as ground truth
+          const extra = fileConversation.extra as { acpSessionId?: string; backend?: string } | undefined;
+          if (extra?.acpSessionId) {
+            const idle = await isSessionIdle(extra.acpSessionId, extra.backend ?? 'claude');
+            if (idle) {
+              mainWarn('[ACP-lifecycle]', `liveness_check: task=running but JSONL shows idle, force-recovering`, {
+                conv: id,
+              });
+              workerTaskManager.kill(id);
+              void migrateConversationToDatabase(fileConversation);
+              return { ...fileConversation, status: 'finished' as const };
+            }
           }
         }
 
@@ -431,7 +458,10 @@ export function initConversationBridge(
       // Propagate agent failure (e.g., ACP timeout returns { success: false } without throwing)
       if (result && typeof result === 'object' && 'success' in result && !(result as { success: boolean }).success) {
         const r = result as { msg?: string; message?: string };
-        mainWarn('[ACP-lifecycle]', `sendMessage: agent returned failure`, { conv: conversation_id, msg: r.msg || r.message });
+        mainWarn('[ACP-lifecycle]', `sendMessage: agent returned failure`, {
+          conv: conversation_id,
+          msg: r.msg || r.message,
+        });
         return { success: false, msg: r.msg || r.message || 'Agent failed' };
       }
       return { success: true };

@@ -77,8 +77,17 @@ const AcpSendBox: React.FC<{
   sessionMode?: string;
   agentName?: string;
 }> = ({ conversation_id, backend, sessionMode, agentName }) => {
-  const { thought, running, acpStatus, aiProcessing, setAiProcessing, resetState, tokenUsage, contextLimit } =
-    useAcpMessage(conversation_id);
+  const {
+    thought,
+    running,
+    acpStatus,
+    aiProcessing,
+    setAiProcessing,
+    resetState,
+    tokenUsage,
+    contextLimit,
+    inactivityHint,
+  } = useAcpMessage(conversation_id);
   const { t } = useTranslation();
   const { checkAndUpdateTitle } = useAutoTitle();
   const slashCommands = useSlashCommands(conversation_id, { agentStatus: acpStatus });
@@ -241,6 +250,7 @@ const AcpSendBox: React.FC<{
           defaultValue: `Send message to {{backend}}...`,
         })}
         onStop={handleStop}
+        loadingHint={inactivityHint}
         className='z-10'
         onFilesAdded={handleFilesAdded}
         supportedExts={allSupportedExts}
