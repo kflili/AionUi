@@ -521,13 +521,17 @@ const OpenClawSendBox: React.FC<{ conversation_id: string }> = ({ conversation_i
 
   // Stop conversation handler — try graceful stop first, fall back to force-kill
   const handleStop = async (): Promise<void> => {
+    let timerId: ReturnType<typeof setTimeout> | undefined;
     try {
       const stopPromise = ipcBridge.conversation.stop.invoke({ conversation_id });
-      const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('stop timeout')), 3000));
+      const timeout = new Promise<never>((_, reject) => {
+        timerId = setTimeout(() => reject(new Error('stop timeout')), 3000);
+      });
       await Promise.race([stopPromise, timeout]);
     } catch {
       await ipcBridge.conversation.reset.invoke({ id: conversation_id }).catch(() => {});
     } finally {
+      clearTimeout(timerId);
       setAiProcessing(false);
       aiProcessingRef.current = false;
       setThought({ subject: '', description: '' });

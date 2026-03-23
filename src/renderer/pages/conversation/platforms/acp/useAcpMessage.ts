@@ -11,6 +11,7 @@ import type { TokenUsageData } from '@/common/config/storage';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import type { ThoughtData } from '@/renderer/components/chat/ThoughtDisplay';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 
 type UseAcpMessageReturn = {
   thought: ThoughtData;
@@ -26,6 +27,7 @@ type UseAcpMessageReturn = {
 };
 
 export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
+  const { t } = useTranslation();
   const addOrUpdateMessage = useAddOrUpdateMessage();
   const [running, setRunning] = useState(false);
   const [thought, setThought] = useState<ThoughtData>({
@@ -114,9 +116,8 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
       }
       // Update inactivity tracker on every stream event
       lastStreamEventAtRef.current = Date.now();
-      if (inactivityHint) {
-        setInactivityHint(undefined);
-      }
+      // Unconditionally clear — avoids stale closure (inactivityHint not in deps)
+      setInactivityHint(undefined);
 
       const transformedMessage = transformMessage(message);
       switch (message.type) {
@@ -314,7 +315,9 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
         const elapsed = Date.now() - lastStreamEventAtRef.current;
         if (elapsed >= INACTIVITY_THRESHOLD_MS) {
           const minutes = Math.floor(elapsed / 60_000);
-          setInactivityHint(`No response for ${minutes}m`);
+          setInactivityHint(t('acp.sendbox.inactivityHint', { minutes, defaultValue: 'No response for {{minutes}}m' }));
+        } else {
+          setInactivityHint(undefined);
         }
       }
     }, 30_000);

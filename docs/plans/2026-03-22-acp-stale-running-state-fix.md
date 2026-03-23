@@ -1,8 +1,8 @@
 # ACP Stale Running State Fix
 
 **Date:** 2026-03-22 (revised 2026-03-23 after GPT review)
-**Status:** Draft — revised
-**Branch:** TBD (new branch off `main`)
+**Status:** Implemented
+**Branch:** `fix/acp-stale-running-state`
 
 ---
 
@@ -354,10 +354,10 @@ Each fix is independent and can be shipped separately. Phase 1 is the critical p
 
 ## Done Means
 
-- [ ] No conversation can get permanently stuck in "processing" state
-- [ ] `{ success: false }` from agent properly cleans up status and cronBusyGuard
-- [ ] `conversationBridge.sendMessage()` propagates agent failures
-- [ ] Stop button always works via `conversation.reset` fallback
-- [ ] ACP state transitions are logged to file for post-mortem diagnosis
-- [ ] User gets visual feedback when a session may be stuck
-- [ ] All existing tests pass (`bun run test`)
+- [x] No conversation can get permanently stuck in "processing" state
+- [x] `{ success: false }` from agent properly cleans up status and cronBusyGuard
+- [x] `conversationBridge.sendMessage()` propagates agent failures
+- [x] Stop button always works via `conversation.reset` fallback
+- [x] ACP state transitions logged via `mainLog`/`mainWarn`/`console.warn` (routed to electron-log file)
+- [x] User gets visual feedback when a session may be stuck
+- [x] All existing tests pass (`bun run test`)

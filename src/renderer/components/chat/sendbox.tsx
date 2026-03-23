@@ -475,7 +475,7 @@ const SendBox: React.FC<{
               {sendButtonPrefix}
               {isLoading || loading ? (
                 <>
-                  {loadingHint && <span className='text-12px color-text-3 mr-4px'>{loadingHint}</span>}
+                  {loadingHint && <span className='text-12px text-3 mr-4px'>{loadingHint}</span>}
                   <Button
                     shape='circle'
                     type='secondary'
@@ -497,7 +497,7 @@ const SendBox: React.FC<{
               {sendButtonPrefix}
               {isLoading || loading ? (
                 <>
-                  {loadingHint && <span className='text-12px color-text-3 mr-4px'>{loadingHint}</span>}
+                  {loadingHint && <span className='text-12px text-3 mr-4px'>{loadingHint}</span>}
                   <Button
                     shape='circle'
                     type='secondary'

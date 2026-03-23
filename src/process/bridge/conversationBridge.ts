@@ -31,6 +31,33 @@ const refreshTrayMenuSafely = async (): Promise<void> => {
   }
 };
 
+/**
+ * Check if a 'running' task is actually stale (dead agent or idle JSONL).
+ * Returns true if the task was force-recovered to 'finished'.
+ */
+async function recoverStaleRunningTask(
+  task: IAgentManager,
+  extra: { acpSessionId?: string; backend?: string } | undefined,
+  id: string,
+  workerTaskManager: IWorkerTaskManager
+): Promise<boolean> {
+  const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
+  if (agent && 'isConnected' in agent && !agent.isConnected) {
+    mainWarn('[ACP-lifecycle]', 'liveness_check: task=running but agent disconnected, force-recovering', { conv: id });
+    workerTaskManager.kill(id);
+    return true;
+  }
+  if (extra?.acpSessionId) {
+    const idle = await isSessionIdle(extra.acpSessionId, extra.backend ?? 'claude');
+    if (idle) {
+      mainWarn('[ACP-lifecycle]', 'liveness_check: task=running but JSONL shows idle, force-recovering', { conv: id });
+      workerTaskManager.kill(id);
+      return true;
+    }
+  }
+  return false;
+}
+
 export function initConversationBridge(
   conversationService: IConversationService,
   workerTaskManager: IWorkerTaskManager
@@ -274,29 +301,11 @@ export function initConversationBridge(
       // Try to get conversation from service (database)
       const conversation = await conversationService.getConversation(id);
       if (conversation) {
-        // Found in database, update status and return
         const task = workerTaskManager.getTask(id);
-        // Self-healing: if task reports 'running' but agent process is dead, force-recover
         if (task?.status === 'running') {
-          const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
-          if (agent && 'isConnected' in agent && !agent.isConnected) {
-            mainWarn('[ACP-lifecycle]', `liveness_check: task=running but agent disconnected, force-recovering`, {
-              conv: id,
-            });
-            workerTaskManager.kill(id);
-            return { ...conversation, status: 'finished' as const };
-          }
-          // Process is alive but might be idle — check JSONL as ground truth
           const extra = conversation.extra as { acpSessionId?: string; backend?: string } | undefined;
-          if (extra?.acpSessionId) {
-            const idle = await isSessionIdle(extra.acpSessionId, extra.backend ?? 'claude');
-            if (idle) {
-              mainWarn('[ACP-lifecycle]', `liveness_check: task=running but JSONL shows idle, force-recovering`, {
-                conv: id,
-              });
-              workerTaskManager.kill(id);
-              return { ...conversation, status: 'finished' as const };
-            }
+          if (await recoverStaleRunningTask(task, extra, id, workerTaskManager)) {
+            return { ...conversation, status: 'finished' as const };
           }
         }
         return { ...conversation, status: task?.status || 'finished' };
@@ -306,29 +315,12 @@ export function initConversationBridge(
       const history = await ProcessChat.get('chat.history');
       const fileConversation = (history || []).find((item) => item.id === id);
       if (fileConversation) {
-        // Update status from running task without mutating the file storage object
         const task = workerTaskManager.getTask(id);
-
-        // Self-healing: if task reports 'running' but agent process is dead, force-recover
         if (task?.status === 'running') {
-          const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
-          if (agent && 'isConnected' in agent && !agent.isConnected) {
-            workerTaskManager.kill(id);
+          const extra = fileConversation.extra as { acpSessionId?: string; backend?: string } | undefined;
+          if (await recoverStaleRunningTask(task, extra, id, workerTaskManager)) {
             void migrateConversationToDatabase(fileConversation);
             return { ...fileConversation, status: 'finished' as const };
-          }
-          // Process is alive but might be idle — check JSONL as ground truth
-          const extra = fileConversation.extra as { acpSessionId?: string; backend?: string } | undefined;
-          if (extra?.acpSessionId) {
-            const idle = await isSessionIdle(extra.acpSessionId, extra.backend ?? 'claude');
-            if (idle) {
-              mainWarn('[ACP-lifecycle]', `liveness_check: task=running but JSONL shows idle, force-recovering`, {
-                conv: id,
-              });
-              workerTaskManager.kill(id);
-              void migrateConversationToDatabase(fileConversation);
-              return { ...fileConversation, status: 'finished' as const };
-            }
           }
         }
 
@@ -447,8 +439,8 @@ export function initConversationBridge(
       // Pass unified data — each agent reads the fields it needs from the unknown payload.
       // `content` aliases `input` for ACP/Codex/NanoBot/OpenClaw agents.
       // `agentContent` carries the skill-injected text for OpenClaw (equals `input` when no skills).
-      // IAgentManager.sendMessage returns Promise<void>, but concrete managers (ACP, Codex, etc.)
-      // may return { success: false } on failure without throwing. Cast to capture at runtime.
+      // IAgentManager.sendMessage returns Promise<void>, but AcpAgentManager
+      // returns { success: false } on failure without throwing. Cast to capture at runtime.
       const result: unknown = await task.sendMessage({
         ...other,
         content: other.input,

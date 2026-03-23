@@ -619,21 +619,10 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           console.log(
             `[ACP-PERF] manager: agent.sendMessage completed ${Date.now() - agentSendStart}ms (total manager.sendMessage: ${Date.now() - managerSendStart}ms)`
           );
-        // 首条消息发送后标记，无论是否有 presetContext
         if (this.isFirstMessage) {
           this.isFirstMessage = false;
         }
-        // Clean up on agent failure (e.g., timeout returns { success: false } without throwing)
-        if (!result.success) {
-          mainLog('[ACP-lifecycle]', `agent returned { success: false }`, {
-            conv: this.conversation_id,
-            error: (result as { error?: unknown }).error,
-          });
-          this.flushBufferedStreamTextMessages();
-          cronBusyGuard.setProcessing(this.conversation_id, false);
-          this.status = 'finished';
-        }
-        return result;
+        return this.handleAgentResult(result);
       }
       const agentSendStart = Date.now();
       const result = await this.agent.sendMessage(data);
@@ -641,17 +630,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         console.log(
           `[ACP-PERF] manager: agent.sendMessage completed ${Date.now() - agentSendStart}ms (total manager.sendMessage: ${Date.now() - managerSendStart}ms)`
         );
-      // Clean up on agent failure (e.g., timeout returns { success: false } without throwing)
-      if (!result.success) {
-        mainLog('[ACP-lifecycle]', `agent returned { success: false }`, {
-          conv: this.conversation_id,
-          error: (result as { error?: unknown }).error,
-        });
-        this.flushBufferedStreamTextMessages();
-        cronBusyGuard.setProcessing(this.conversation_id, false);
-        this.status = 'finished';
-      }
-      return result;
+      return this.handleAgentResult(result);
     } catch (e) {
       this.flushBufferedStreamTextMessages();
       cronBusyGuard.setProcessing(this.conversation_id, false);
@@ -797,6 +776,22 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
     }
     // Agent not connected yet - yoloMode will be applied on next start()
     return true;
+  }
+
+  /**
+   * Clean up on agent failure — shared between the two sendMessage return paths.
+   */
+  private handleAgentResult(result: { success: boolean; error?: unknown }) {
+    if (!result.success) {
+      mainLog('[ACP-lifecycle]', 'agent returned { success: false }', {
+        conv: this.conversation_id,
+        error: result.error,
+      });
+      this.flushBufferedStreamTextMessages();
+      cronBusyGuard.setProcessing(this.conversation_id, false);
+      this.status = 'finished';
+    }
+    return result;
   }
 
   /**
