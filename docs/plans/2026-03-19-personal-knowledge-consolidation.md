@@ -41,13 +41,13 @@ No new write paths. No central conversation store. The CLIs don't need to change
 
 ### Input: CLI history locations (from storage reference doc)
 
-| Source | Path | Format |
-|--------|------|--------|
-| Claude Code CLI | `~/.claude/projects/{hash}/*.jsonl` | JSONL |
-| Copilot CLI | `~/.copilot/session-state/{id}/events.jsonl` | JSONL |
-| AionUI | `~/Library/Application Support/AionUi/aionui/aionui.db` | SQLite |
-| Claude Desktop Code | `~/Library/Application Support/Claude/claude-code-sessions/` | JSONL |
-| Claude Desktop Cowork | `~/Library/Application Support/Claude/local-agent-mode-sessions/` | JSONL |
+| Source                | Path                                                              | Format |
+| --------------------- | ----------------------------------------------------------------- | ------ |
+| Claude Code CLI       | `~/.claude/projects/{hash}/*.jsonl`                               | JSONL  |
+| Copilot CLI           | `~/.copilot/session-state/{id}/events.jsonl`                      | JSONL  |
+| AionUI                | `~/Library/Application Support/AionUi/aionui/aionui.db`           | SQLite |
+| Claude Desktop Code   | `~/Library/Application Support/Claude/claude-code-sessions/`      | JSONL  |
+| Claude Desktop Cowork | `~/Library/Application Support/Claude/local-agent-mode-sessions/` | JSONL  |
 
 ### Processing: Five-step consolidation pipeline
 
@@ -183,6 +183,7 @@ Map-reduce — split session into ~30KB chunks by message boundaries, extract fr
 **Key design decision (from teleX):** Re-read all session extractions from scratch, not just merge them. This lets the synthesizer see the full arc of the day.
 
 Daily prompt focuses on:
+
 - **Patterns** — three sessions touched auth code → maybe auth needs a refactor
 - **Contradictions** — decided X in morning, reversed in afternoon
 - **Connections** — idea from random chat relates to a project task
@@ -261,7 +262,7 @@ Add an embeddings column to the same Phase 2 SQLite database. Not a separate sys
 // ~50MB model, runs 100% locally on Mac, no API calls, no cost
 import { pipeline } from '@xenova/transformers';
 const embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
-const result = await embedder("your text here", { pooling: 'mean', normalize: true });
+const result = await embedder('your text here', { pooling: 'mean', normalize: true });
 const vector = Array.from(result.data); // 384 floats
 ```
 
@@ -304,8 +305,8 @@ bun add @secretlint/core @secretlint/secretlint-rule-preset-recommend
 ```
 
 ```typescript
-import { lintSource } from '@secretlint/core'
-import presetRecommend from '@secretlint/secretlint-rule-preset-recommend'
+import { lintSource } from '@secretlint/core';
+import presetRecommend from '@secretlint/secretlint-rule-preset-recommend';
 
 async function redactSecrets(text: string): Promise<string> {
   const result = await lintSource({
@@ -314,8 +315,8 @@ async function redactSecrets(text: string): Promise<string> {
     config: {
       rules: [{ id: '@secretlint/secretlint-rule-preset-recommend', rule: presetRecommend }],
     },
-  })
-  return result.sourceContent // text with secrets masked
+  });
+  return result.sourceContent; // text with secrets masked
 }
 ```
 
@@ -344,6 +345,7 @@ Users can add custom patterns via a config file (e.g., `consolidation.yaml` → 
 ### Option A: Standalone script (simplest)
 
 A script (Python/Node/Bash) that:
+
 1. Scans CLI history directories
 2. Calls an LLM API to summarize
 3. Writes markdown files to the knowledge directory
@@ -353,6 +355,7 @@ Could be triggered by cron, manually, or as a Claude Code skill (`/consolidate`)
 ### Option B: AionUI integration
 
 Add a "Consolidate" button or scheduled task in AionUI that:
+
 1. Uses its existing CLI history scanning (from the history integration plan)
 2. Runs summarization via any connected ACP agent
 3. Writes to the knowledge directory
@@ -362,6 +365,7 @@ Benefits: visual UI for browsing the knowledge library alongside chat history.
 ### Option C: Claude Code skill
 
 A `/consolidate` skill in claude-toolkit that:
+
 1. Scans all history locations
 2. Uses subagents for parallel summarization
 3. Writes to the knowledge directory
@@ -376,26 +380,26 @@ Benefits: runs from any terminal, no GUI needed.
 
 ### vs teleX Phase 3 Memory Design
 
-| teleX design | This plan |
-|---|---|
-| Root agent owns all conversations | No root agent — scan existing CLI history |
-| Write to central `conversations/YYYY/MM/` | No central store — CLIs write to their defaults |
-| Session-end trigger via SDK hooks | Batch scan (daily cron or manual) |
-| Tight coupling to teleX bot | Works with any CLI, any project |
-| Obsidian-compatible vault | Plain markdown with wiki links (Obsidian-compatible) |
+| teleX design                              | This plan                                            |
+| ----------------------------------------- | ---------------------------------------------------- |
+| Root agent owns all conversations         | No root agent — scan existing CLI history            |
+| Write to central `conversations/YYYY/MM/` | No central store — CLIs write to their defaults      |
+| Session-end trigger via SDK hooks         | Batch scan (daily cron or manual)                    |
+| Tight coupling to teleX bot               | Works with any CLI, any project                      |
+| Obsidian-compatible vault                 | Plain markdown with wiki links (Obsidian-compatible) |
 
 The consolidation logic (extract → daily → weekly → library) and the extraction template (Decisions/Open Loops/Changes/Learnings) are preserved from the teleX design. Only the input path changed.
 
 ### vs willynikes2/knowledge-base-server
 
-| Their system | This plan |
-|---|---|
-| 16 MCP tools for access | File read + grep (SQLite + embeddings later) |
-| Obsidian as source of truth | CLI history as source of truth |
-| Seven-layer pipeline | Five-step pipeline (simpler, same outcome) |
-| Auto-updates instruction files | CLAUDE.md just points to library |
-| Embeddings + SQLite FTS5 from day one | Phased: files → SQLite FTS5 → embeddings |
-| MCP-based access (context overhead) | Direct file access (zero overhead) |
+| Their system                          | This plan                                    |
+| ------------------------------------- | -------------------------------------------- |
+| 16 MCP tools for access               | File read + grep (SQLite + embeddings later) |
+| Obsidian as source of truth           | CLI history as source of truth               |
+| Seven-layer pipeline                  | Five-step pipeline (simpler, same outcome)   |
+| Auto-updates instruction files        | CLAUDE.md just points to library             |
+| Embeddings + SQLite FTS5 from day one | Phased: files → SQLite FTS5 → embeddings     |
+| MCP-based access (context overhead)   | Direct file access (zero overhead)           |
 
 **Borrowed from their system:** content hashing for dedup, three-tier hot/warm/cold concept, self-learning loop idea. **Skipped:** MCP access layer, heavy infrastructure upfront.
 
@@ -411,20 +415,21 @@ The consolidation logic (extract → daily → weekly → library) and the extra
 
 ## Effort Estimate
 
-| What | Effort |
-|------|--------|
-| Option C skill: basic daily summary | ~1-2 days |
-| Library extraction | ~1 more day |
-| Weekly summaries | Trivial addition |
-| Phase 2: SQLite FTS5 index | ~1 day |
-| Phase 3: Local embeddings | ~0.5 day (additive to Phase 2) |
-| Option B: AionUI integration | ~2-3 days on top of history integration plan |
+| What                                | Effort                                       |
+| ----------------------------------- | -------------------------------------------- |
+| Option C skill: basic daily summary | ~1-2 days                                    |
+| Library extraction                  | ~1 more day                                  |
+| Weekly summaries                    | Trivial addition                             |
+| Phase 2: SQLite FTS5 index          | ~1 day                                       |
+| Phase 3: Local embeddings           | ~0.5 day (additive to Phase 2)               |
+| Option B: AionUI integration        | ~2-3 days on top of history integration plan |
 
 ---
 
 ## Done Means
 
 ### MVP (`/consolidate` skill)
+
 - [ ] Skill scans all CLI history locations and discovers sessions
 - [ ] Incremental processing: only processes new/changed content since last run
 - [ ] Produces structured extraction per session (Decisions/Open Loops/Changes/Learnings/Entities)
@@ -434,10 +439,12 @@ The consolidation logic (extract → daily → weekly → library) and the extra
 - [ ] Idempotent: running twice on same day produces same output (no duplicates)
 
 ### Full Pipeline
+
 - [ ] Library entries created/updated in `~/knowledge/library/`
 - [ ] Weekly synthesis in `~/knowledge/journal/YYYY/YYYY-WNN.md`
 - [ ] Large session handling via map-reduce (>50KB sessions)
 
 ### Search Phases (later)
+
 - [ ] Phase 2: SQLite FTS5 index covers all knowledge + session metadata
 - [ ] Phase 3: Local embeddings for semantic search

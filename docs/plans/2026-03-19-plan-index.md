@@ -10,24 +10,28 @@
 Each step = one plan file. Sub-features live inside their plan file.
 
 ### Step 0.5: Copy Chat Reference
+
 **Plan:** Inside [`2026-03-19-cli-history-integration.md`](./2026-03-19-cli-history-integration.md) (Feature 1)
 **Where:** AionUI project
 
 Add "Copy Chat Reference" to conversation `...` menu. Low-risk, high-leverage, independent of other steps. Copies a file path or session ID that any CLI agent can use to read the conversation via existing tools. Can be built standalone before or alongside Step 1.
 
 ### Step 1: Terminal Wrapper Mode
+
 **Plan:** [`2026-03-19-terminal-wrapper-mode.md`](./2026-03-19-terminal-wrapper-mode.md)
 **Where:** AionUI project
 
 Build terminal wrapper infrastructure: embed xterm.js in the renderer, spawn CLIs via node-pty, create `TerminalSessionManager` for PTY lifecycle. Exposed as a mode toggle (`💬 Rich UI | >_ Terminal`) in the chat header — not a separate conversation type, but an alternative rendering mode on existing conversations. Both directions work via CLI `--resume`. Includes JSONL → TMessage converter for rendering terminal history as rich UI. New "AgentCLI" settings tab for default mode.
 
 ### Step 2: CLI History Integration
+
 **Plan:** [`2026-03-19-cli-history-integration.md`](./2026-03-19-cli-history-integration.md)
 **Where:** AionUI project
 
 Import CLI sessions (Claude Code, Copilot, Codex) into AionUI's SQLite as first-class conversations. No separate data model — imported sessions appear in the normal sidebar timeline with full functionality (rename, pin, delete, export, resume). JSONL + SQLite hybrid approach, same as Copilot and Codex already use. Background message conversion newest-first.
 
 ### Step 3: Knowledge Consolidation
+
 **Plan:** [`2026-03-19-personal-knowledge-consolidation.md`](./2026-03-19-personal-knowledge-consolidation.md)
 **Where:** claude-toolkit (as a `/consolidate` skill), NOT in AionUI
 
@@ -45,27 +49,28 @@ Steps 1, 2, and 3 all need to discover and read CLI session history. Shared prov
 
 ```typescript
 type SessionSourceProvider = {
-  id: string;                                        // 'claude_code' | 'copilot' | 'codex'
-  discoverSessions(): Promise<SessionMetadata[]>;    // list sessions from native index
-  readTranscript(sessionId: string): Promise<string[]>;  // read JSONL lines
+  id: string; // 'claude_code' | 'copilot' | 'codex'
+  discoverSessions(): Promise<SessionMetadata[]>; // list sessions from native index
+  readTranscript(sessionId: string): Promise<string[]>; // read JSONL lines
   canResume(sessionId: string): boolean;
-  buildReference(sessionId: string): string;         // for Copy Chat Reference
+  buildReference(sessionId: string): string; // for Copy Chat Reference
 };
 ```
 
 ### JSONL → TMessage Converter
 
 Converts CLI JSONL (Anthropic API format) to AionUI's `TMessage[]` for rich UI rendering. ~400-600 lines per CLI format (includes error handling, streaming state reconstruction, tool_result merging). Used by:
+
 - **Step 1**: render terminal history when toggling Terminal → Rich UI
 - **Step 2**: background-convert imported sessions into `messages` table
 - **Step 3**: parse JSONL for knowledge extraction pipeline
 
 ### SQLite usage across steps
 
-| Step | SQLite usage | What |
-|------|-------------|------|
-| Step 2 | AionUI's existing `aionui.db` | Import CLI session metadata + converted messages as first-class conversations |
-| Step 3 (later) | Separate `~/knowledge/knowledge.db` | FTS5 search index over knowledge library + embeddings |
+| Step           | SQLite usage                        | What                                                                          |
+| -------------- | ----------------------------------- | ----------------------------------------------------------------------------- |
+| Step 2         | AionUI's existing `aionui.db`       | Import CLI session metadata + converted messages as first-class conversations |
+| Step 3 (later) | Separate `~/knowledge/knowledge.db` | FTS5 search index over knowledge library + embeddings                         |
 
 These are different databases for different purposes. Step 2's SQLite is AionUI's conversation store. Step 3's SQLite is a search index for extracted knowledge.
 
@@ -74,11 +79,13 @@ These are different databases for different purposes. Step 2's SQLite is AionUI'
 ## Reference Documents (no implementation)
 
 ### CLI History Storage Reference
+
 **Doc:** [`2026-03-19-cli-history-storage-reference.md`](./2026-03-19-cli-history-storage-reference.md)
 
 Research findings on how every CLI and desktop app stores conversation history. Covers Claude Code CLI, Claude Desktop (Chat/Code/Cowork modes), Copilot CLI, Codex CLI, Gemini CLI, Google Antigravity, and AionUI. Includes JSON vs JSONL comparison, why CLIs use JSONL, three approaches to Desktop UI ↔ CLI communication (Claude Desktop proprietary IPC, AionUI ACP, terminal wrapper), and comparison table. Includes cross-platform path notes.
 
 ### Agent Architecture Notes
+
 **Doc:** [`2026-03-19-agent-architecture-notes.md`](./2026-03-19-agent-architecture-notes.md)
 
 Design notes on the "root agent" pattern. Current CLI session already serves as root agent — no special infrastructure needed. Tmux delegation pattern for parallel heavy tasks. Future `/delegate` skill concept. Mobile/random chat workflow using a default workspace folder.
@@ -88,6 +95,7 @@ Design notes on the "root agent" pattern. Current CLI session already serves as 
 ## Already Done
 
 ### ACP Permission Race Condition Fix
+
 **Branch:** `fix/acp-concurrent-permission-race-condition`
 **Commit:** `372ba6a1`
 
@@ -99,17 +107,17 @@ Fixed a race condition where parallel tool calls from Copilot CLI caused the fir
 
 ### What goes in AionUI vs elsewhere
 
-| Feature | Where | Plan file |
-|---------|-------|-----------|
-| Copy Chat Reference | AionUI | Step 0.5 |
-| Mode toggle (Rich UI / Terminal) | AionUI | Step 1 |
-| AgentCLI settings tab | AionUI | Step 1 |
-| JSONL → TMessage converter | Shared (AionUI + claude-toolkit) | Steps 1, 2 & 3 |
-| CLI History Import (into SQLite) | AionUI | Step 2 |
-| Session Source Provider | Shared (AionUI + claude-toolkit) | Steps 2 & 3 |
-| Knowledge consolidation pipeline | claude-toolkit (skill) | Step 3 |
-| Knowledge FTS5 index + embeddings | Inside Step 3 (later phase) | Step 3 |
-| `/delegate` tmux | claude-toolkit (skill) | Future (in architecture notes) |
+| Feature                           | Where                            | Plan file                      |
+| --------------------------------- | -------------------------------- | ------------------------------ |
+| Copy Chat Reference               | AionUI                           | Step 0.5                       |
+| Mode toggle (Rich UI / Terminal)  | AionUI                           | Step 1                         |
+| AgentCLI settings tab             | AionUI                           | Step 1                         |
+| JSONL → TMessage converter        | Shared (AionUI + claude-toolkit) | Steps 1, 2 & 3                 |
+| CLI History Import (into SQLite)  | AionUI                           | Step 2                         |
+| Session Source Provider           | Shared (AionUI + claude-toolkit) | Steps 2 & 3                    |
+| Knowledge consolidation pipeline  | claude-toolkit (skill)           | Step 3                         |
+| Knowledge FTS5 index + embeddings | Inside Step 3 (later phase)      | Step 3                         |
+| `/delegate` tmux                  | claude-toolkit (skill)           | Future (in architecture notes) |
 
 ### Strategic principles
 

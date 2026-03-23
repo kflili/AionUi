@@ -66,7 +66,9 @@ class BaseAgentManager<Data, ConfirmationOption extends any = any>
 
     // Deduplicate by callId (toolCallId) in addition to id, to handle
     // duplicate permission requests for the same tool call from ACP backends
-    const originIndex = this.confirmations.findIndex((p) => p.id === data.id || (data.callId && p.callId === data.callId));
+    const originIndex = this.confirmations.findIndex(
+      (p) => p.id === data.id || (data.callId && p.callId === data.callId)
+    );
     if (originIndex !== -1) {
       this.confirmations = this.confirmations.map((item, i) => (i === originIndex ? { ...item, ...data } : item));
       this.emitter.emitConfirmationUpdate(this.conversation_id, data);

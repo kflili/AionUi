@@ -137,7 +137,11 @@ export class AcpAgent {
   private adapter: AcpAdapter;
   private pendingPermissions = new Map<
     string,
-    { resolve: (response: { optionId: string }) => void; reject: (error: Error) => void; promise: Promise<{ optionId: string }> }
+    {
+      resolve: (response: { optionId: string }) => void;
+      reject: (error: Error) => void;
+      promise: Promise<{ optionId: string }>;
+    }
   >();
   private statusMessageId: string | null = null;
   private readonly onStreamEvent: (data: IResponseMessage) => void;

@@ -34,6 +34,7 @@ No separate "create terminal conversation" flow. Instead:
 ### How the toggle works
 
 **Rich UI → Terminal:**
+
 1. Kill ACP connection (`AcpConnection.disconnect()`)
 2. Spawn same CLI binary via `node-pty` with resume flag (see per-CLI details below)
 3. CLI resumes from its own JSONL history — full conversation context preserved
@@ -41,6 +42,7 @@ No separate "create terminal conversation" flow. Instead:
 5. AionUI's SQLite messages remain untouched for when user toggles back
 
 **Terminal → Rich UI:**
+
 1. Kill PTY process
 2. Reconnect via ACP: `AcpConnection.connect()` → `session/new` with `resumeSessionId`
 3. CLI resumes from its JSONL — same session, different transport
@@ -55,33 +57,33 @@ Each CLI has different flags for terminal-mode resume and ACP-mode resume:
 
 #### Claude Code CLI
 
-| Direction | Command |
-|-----------|---------|
-| Rich UI → Terminal | `claude --resume {sessionId}` (or `-r {sessionId}`) |
+| Direction          | Command                                                                        |
+| ------------------ | ------------------------------------------------------------------------------ |
+| Rich UI → Terminal | `claude --resume {sessionId}` (or `-r {sessionId}`)                            |
 | Terminal → Rich UI | ACP `session/new` with `resumeSessionId` via `_meta.claudeCode.options.resume` |
-| ACP flags | `claude --experimental-acp` (spawned by AionUI's `connectClaude()`) |
+| ACP flags          | `claude --experimental-acp` (spawned by AionUI's `connectClaude()`)            |
 
 - Session history: `~/.claude/projects/{path-hash}/{sessionId}.jsonl`
 - Also supports `--continue` (resume most recent), `--fork-session` (new ID, keep context)
 
 #### GitHub Copilot CLI
 
-| Direction | Command |
-|-----------|---------|
-| Rich UI → Terminal | `copilot --resume={sessionId}` |
-| Terminal → Rich UI | ACP `session/new` with `resumeSessionId` |
-| ACP flags | `copilot --acp --stdio` (spawned by AionUI's `spawnGenericBackend()`) |
+| Direction          | Command                                                               |
+| ------------------ | --------------------------------------------------------------------- |
+| Rich UI → Terminal | `copilot --resume={sessionId}`                                        |
+| Terminal → Rich UI | ACP `session/new` with `resumeSessionId`                              |
+| ACP flags          | `copilot --acp --stdio` (spawned by AionUI's `spawnGenericBackend()`) |
 
 - Session history: `~/.copilot/session-state/{sessionId}/events.jsonl`
 - Also supports `--continue` (resume most recent), `--allow-all-tools --resume` (resume with auto-approval)
 
 #### Codex CLI
 
-| Direction | Command |
-|-----------|---------|
-| Rich UI → Terminal | `codex resume --session-id {sessionId}` (subcommand, not flag) |
+| Direction          | Command                                                                    |
+| ------------------ | -------------------------------------------------------------------------- |
+| Rich UI → Terminal | `codex resume --session-id {sessionId}` (subcommand, not flag)             |
 | Terminal → Rich UI | ACP `session/load` with `sessionId` (different method from Claude/Copilot) |
-| ACP flags | Spawned via `codex-acp` bridge package |
+| ACP flags          | Spawned via `codex-acp` bridge package                                     |
 
 - Session history: `~/.codex/sessions/YYYY/MM/DD/rollout-{date}-{sessionId}.jsonl`
 - Also supports `codex resume --last` (resume most recent)
@@ -95,13 +97,13 @@ When switching Terminal → Rich UI, the content area needs to show conversation
 
 ### Format mapping
 
-| CLI JSONL (Anthropic API format) | AionUI TMessage |
-|----------------------------------|-----------------|
-| `{type: "user", message: {content: "..."}}` | `{type: "text", position: "right", content: {content: "..."}}` |
-| `{type: "assistant", content: [{type: "text", text: "..."}]}` | `{type: "text", position: "left", content: {content: "..."}}` |
-| `{type: "tool_use", name: "Bash", input: {command: "..."}}` | `{type: "acp_tool_call", content: {update: {title: "Bash", rawInput: {...}, status: "completed"}}}` |
-| `{type: "tool_result", content: "output"}` | Merged into the tool call's content array |
-| `{type: "thinking", thinking: "..."}` | Collapsible thinking section or skip |
+| CLI JSONL (Anthropic API format)                              | AionUI TMessage                                                                                     |
+| ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| `{type: "user", message: {content: "..."}}`                   | `{type: "text", position: "right", content: {content: "..."}}`                                      |
+| `{type: "assistant", content: [{type: "text", text: "..."}]}` | `{type: "text", position: "left", content: {content: "..."}}`                                       |
+| `{type: "tool_use", name: "Bash", input: {command: "..."}}`   | `{type: "acp_tool_call", content: {update: {title: "Bash", rawInput: {...}, status: "completed"}}}` |
+| `{type: "tool_result", content: "output"}`                    | Merged into the tool call's content array                                                           |
+| `{type: "thinking", thinking: "..."}`                         | Collapsible thinking section or skip                                                                |
 
 ### Implementation
 
@@ -119,13 +121,13 @@ function jsonlToTMessages(lines: string[]): TMessage[] {
 
 Conversion cost depends on session size:
 
-| Session size | Messages | Total time |
-|-------------|----------|------------|
-| 50KB (~30 msgs) | 30 | ~15ms |
-| 500KB (~150 msgs) | 150 | ~65ms |
-| 2MB (~500 msgs) | 500 | ~200ms |
-| 5MB (~1000 msgs) | 1000 | ~500ms |
-| 10MB+ (marathon) | 2000+ | ~1.2s |
+| Session size      | Messages | Total time |
+| ----------------- | -------- | ---------- |
+| 50KB (~30 msgs)   | 30       | ~15ms      |
+| 500KB (~150 msgs) | 150      | ~65ms      |
+| 2MB (~500 msgs)   | 500      | ~200ms     |
+| 5MB (~1000 msgs)  | 1000     | ~500ms     |
+| 10MB+ (marathon)  | 2000+    | ~1.2s      |
 
 Most sessions are under 2MB → under 200ms → on-demand is fine. But marathon sessions can exceed 1s.
 
@@ -140,6 +142,7 @@ This also means AionUI's SQLite stays in sync with the terminal session's progre
 ### Reuse across plans
 
 This converter is shared infrastructure — needed by:
+
 - **Terminal toggle** (this plan): render history when switching Terminal → Rich UI
 - **Step 2 CLI History Integration**: convert imported CLI sessions to TMessages
 - **Step 3 Knowledge Consolidation**: parse JSONL for extraction pipeline
@@ -164,11 +167,13 @@ Each CLI needs its own converter (Claude Code, Copilot, Codex have slightly diff
 ### No new conversation type needed
 
 The existing ACP conversation type already stores everything needed:
+
 - `conversation.extra.backend` — which CLI (claude, copilot, codex, etc.)
 - `conversation.extra.acpSessionId` — session ID for resume
 - `conversation.extra.cliPath` — CLI binary path
 
 Add one new field:
+
 - `conversation.extra.currentMode` — `'acp'` | `'terminal'` (which mode is currently active)
 
 ### TerminalSessionManager
@@ -186,11 +191,11 @@ Why separate from `BaseAgentManager`: PTY needs resize events, raw I/O, shell ex
 
 ## Dependencies
 
-| Package | Status | Notes |
-|---------|--------|-------|
-| `node-pty` | Already in tree (optional dep of `@office-ai/aioncli-core`) | Promote to direct dependency |
-| `@xterm/xterm` | **Not installed** | Terminal renderer for the browser |
-| `@xterm/addon-fit` | **Not installed** | Auto-resize terminal to container |
+| Package            | Status                                                      | Notes                             |
+| ------------------ | ----------------------------------------------------------- | --------------------------------- |
+| `node-pty`         | Already in tree (optional dep of `@office-ai/aioncli-core`) | Promote to direct dependency      |
+| `@xterm/xterm`     | **Not installed**                                           | Terminal renderer for the browser |
+| `@xterm/addon-fit` | **Not installed**                                           | Auto-resize terminal to container |
 
 ---
 
@@ -199,6 +204,7 @@ Why separate from `BaseAgentManager`: PTY needs resize events, raw I/O, shell ex
 ### Rich UI mode (default)
 
 Normal AionUI chat view — structured messages, tool call cards, input box, workspace sidebar. The header shows:
+
 ```
 Claude Opus 4.6 (1M context)    [💬 Rich UI | >_ Terminal]    GitHub Copilot
 ```
@@ -206,6 +212,7 @@ Claude Opus 4.6 (1M context)    [💬 Rich UI | >_ Terminal]    GitHub Copilot
 ### Terminal mode
 
 xterm.js fills the content area. No input box — terminal IS the input. Same header but toggle flipped:
+
 ```
 Claude Opus 4.6 (1M context)    [💬 Rich UI | >_ Terminal]    GitHub Copilot
 ```
@@ -272,6 +279,7 @@ Terminal sessions need a transcript model for the sidebar to show meaningful his
 Add an **AgentCLI** tab to Settings (alongside Model, Agent, Tools, etc.). Route: `/settings/agent-cli`.
 
 **Storage:** `ConfigStorage` key `'agentCli.config'` in `IConfigStorageRefer`:
+
 ```typescript
 'agentCli.config': {
   defaultMode?: 'acp' | 'terminal';  // Default transport for new conversations (default: 'acp')
@@ -281,12 +289,14 @@ Add an **AgentCLI** tab to Settings (alongside Model, Agent, Tools, etc.). Route
 ```
 
 **Settings page contents:**
+
 - **Default conversation mode** — segmented control: `💬 Rich UI (ACP)` | `>_ Terminal`. Applies to all new conversations regardless of agent.
 - **Shell** — text input with auto-detected default shown as placeholder (e.g., `/bin/zsh`). Override for users who want a different shell.
 - **Font size** — number input or slider for terminal font size.
 - Note: "You can switch modes anytime using the toggle in the chat header."
 
 **Wire-in:**
+
 - `src/renderer/pages/settings/AgentCliSettings.tsx` — new page component
 - `src/renderer/components/settings/SettingsModal/contents/AgentCliModalContent.tsx` — form content
 - `src/renderer/pages/settings/components/SettingsSider.tsx` — add "AgentCLI" nav item (after "Agent" or "Tools")
