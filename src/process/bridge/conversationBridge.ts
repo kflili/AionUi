@@ -18,6 +18,7 @@ import type OpenClawAgentManager from '../task/OpenClawAgentManager';
 import { prepareFirstMessage } from '../task/agentUtils';
 import { refreshTrayMenu } from '@process/utils/tray';
 import { copyFilesToDirectory, readDirectoryRecursive } from '@process/utils';
+import { mainLog, mainWarn } from '@process/utils/mainLogger';
 import { computeOpenClawIdentityHash } from '@process/utils/openclawUtils';
 import { migrateConversationToDatabase } from './migrationUtils';
 
@@ -274,6 +275,15 @@ export function initConversationBridge(
       if (conversation) {
         // Found in database, update status and return
         const task = workerTaskManager.getTask(id);
+        // Self-healing: if task reports 'running' but agent process is dead, force-recover
+        if (task?.status === 'running') {
+          const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
+          if (agent && 'isConnected' in agent && !agent.isConnected) {
+            mainWarn('[ACP-lifecycle]', `liveness_check: task=running but agent disconnected, force-recovering`, { conv: id });
+            workerTaskManager.kill(id);
+            return { ...conversation, status: 'finished' as const };
+          }
+        }
         return { ...conversation, status: task?.status || 'finished' };
       }
 
@@ -283,6 +293,17 @@ export function initConversationBridge(
       if (fileConversation) {
         // Update status from running task without mutating the file storage object
         const task = workerTaskManager.getTask(id);
+
+        // Self-healing: if task reports 'running' but agent process is dead, force-recover
+        if (task?.status === 'running') {
+          const agent = (task as unknown as { agent?: { isConnected?: boolean } }).agent;
+          if (agent && 'isConnected' in agent && !agent.isConnected) {
+            workerTaskManager.kill(id);
+            // Lazy migrate this conversation to database in background
+            void migrateConversationToDatabase(fileConversation);
+            return { ...fileConversation, status: 'finished' as const };
+          }
+        }
 
         // Lazy migrate this conversation to database in background
         void migrateConversationToDatabase(fileConversation);
@@ -399,12 +420,20 @@ export function initConversationBridge(
       // Pass unified data — each agent reads the fields it needs from the unknown payload.
       // `content` aliases `input` for ACP/Codex/NanoBot/OpenClaw agents.
       // `agentContent` carries the skill-injected text for OpenClaw (equals `input` when no skills).
-      await task.sendMessage({
+      // IAgentManager.sendMessage returns Promise<void>, but concrete managers (ACP, Codex, etc.)
+      // may return { success: false } on failure without throwing. Cast to capture at runtime.
+      const result: unknown = await task.sendMessage({
         ...other,
         content: other.input,
         files: workspaceFiles,
         agentContent,
       });
+      // Propagate agent failure (e.g., ACP timeout returns { success: false } without throwing)
+      if (result && typeof result === 'object' && 'success' in result && !(result as { success: boolean }).success) {
+        const r = result as { msg?: string; message?: string };
+        mainWarn('[ACP-lifecycle]', `sendMessage: agent returned failure`, { conv: conversation_id, msg: r.msg || r.message });
+        return { success: false, msg: r.msg || r.message || 'Agent failed' };
+      }
       return { success: true };
     } catch (err: unknown) {
       return { success: false, msg: err instanceof Error ? err.message : String(err) };

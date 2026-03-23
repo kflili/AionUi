@@ -213,11 +213,15 @@ const AcpSendBox: React.FC<{
     }
   });
 
-  // Stop conversation handler
+  // Stop conversation handler — try graceful stop first, fall back to force-kill
   const handleStop = async (): Promise<void> => {
-    // Use finally to ensure UI state is reset even if backend stop fails
     try {
-      await ipcBridge.conversation.stop.invoke({ conversation_id });
+      const stopPromise = ipcBridge.conversation.stop.invoke({ conversation_id });
+      const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('stop timeout')), 3000));
+      await Promise.race([stopPromise, timeout]);
+    } catch {
+      // Graceful stop failed or timed out — force kill via conversation.reset
+      await ipcBridge.conversation.reset.invoke({ id: conversation_id }).catch(() => {});
     } finally {
       resetState();
     }

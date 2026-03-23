@@ -315,9 +315,14 @@ const NanobotSendBox: React.FC<{ conversation_id: string }> = ({ conversation_id
     processInitialMessage().catch(console.error);
   }, [conversation_id, addOrUpdateMessage]);
 
+  // Stop conversation handler — try graceful stop first, fall back to force-kill
   const handleStop = async (): Promise<void> => {
     try {
-      await ipcBridge.conversation.stop.invoke({ conversation_id });
+      const stopPromise = ipcBridge.conversation.stop.invoke({ conversation_id });
+      const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error('stop timeout')), 3000));
+      await Promise.race([stopPromise, timeout]);
+    } catch {
+      await ipcBridge.conversation.reset.invoke({ id: conversation_id }).catch(() => {});
     } finally {
       setAiProcessing(false);
       setThought({ subject: '', description: '' });

@@ -311,6 +311,9 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           // ACP uses: content, agent_status, acp_tool_call, plan
           const contentTypes = ['content', 'agent_status', 'acp_tool_call', 'plan'];
           if (contentTypes.includes(message.type)) {
+            if (this.status !== 'finished') {
+              mainLog('[ACP-lifecycle]', `status: finished (reason: content_arrived, type: ${message.type})`, { conv: this.conversation_id });
+            }
             this.status = 'finished';
           }
 
@@ -437,6 +440,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           if (v.type === 'finish') {
             cronBusyGuard.setProcessing(this.conversation_id, false);
             this.status = 'finished';
+            mainLog('[ACP-lifecycle]', `signal: finish`, { conv: this.conversation_id });
           }
 
           // Process cron commands when turn ends (finish signal)
@@ -555,6 +559,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
     cronBusyGuard.setProcessing(this.conversation_id, true);
     // Set status to running when message is being processed
     this.status = 'running';
+    mainLog('[ACP-lifecycle]', `status: running`, { conv: this.conversation_id });
     try {
       // Emit/persist user message immediately so UI can refresh without waiting
       // for ACP connection/auth/session initialization.
@@ -616,9 +621,13 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         if (this.isFirstMessage) {
           this.isFirstMessage = false;
         }
-        // Note: cronBusyGuard.setProcessing(false) is not called here
-        // because the response streaming is still in progress.
-        // It will be cleared when the conversation ends or on error.
+        // Clean up on agent failure (e.g., timeout returns { success: false } without throwing)
+        if (!result.success) {
+          mainLog('[ACP-lifecycle]', `agent returned { success: false }`, { conv: this.conversation_id, error: (result as { error?: unknown }).error });
+          this.flushBufferedStreamTextMessages();
+          cronBusyGuard.setProcessing(this.conversation_id, false);
+          this.status = 'finished';
+        }
         return result;
       }
       const agentSendStart = Date.now();
@@ -627,6 +636,13 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         console.log(
           `[ACP-PERF] manager: agent.sendMessage completed ${Date.now() - agentSendStart}ms (total manager.sendMessage: ${Date.now() - managerSendStart}ms)`
         );
+      // Clean up on agent failure (e.g., timeout returns { success: false } without throwing)
+      if (!result.success) {
+        mainLog('[ACP-lifecycle]', `agent returned { success: false }`, { conv: this.conversation_id, error: (result as { error?: unknown }).error });
+        this.flushBufferedStreamTextMessages();
+        cronBusyGuard.setProcessing(this.conversation_id, false);
+        this.status = 'finished';
+      }
       return result;
     } catch (e) {
       this.flushBufferedStreamTextMessages();

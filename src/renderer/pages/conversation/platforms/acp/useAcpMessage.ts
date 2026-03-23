@@ -114,12 +114,14 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           throttledSetThought(message.data as ThoughtData);
           break;
         case 'start':
+          console.log(`[ACP-lifecycle] ui_state: running=true, trigger=start`, conversation_id);
           setRunning(true);
           runningRef.current = true;
           // Don't reset aiProcessing here - let content arrival handle it
           break;
         case 'finish':
           {
+            console.log(`[ACP-lifecycle] ui_state: running=false, aiProcessing=false, trigger=finish`, conversation_id);
             // Immediate state reset (notification is handled by centralized hook)
             setRunning(false);
             runningRef.current = false;
@@ -163,6 +165,7 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
             }
             // Reset all loading states on error or disconnect so UI doesn't stay stuck
             if (['error', 'disconnected'].includes(agentData.status)) {
+              console.log(`[ACP-lifecycle] ui_state: running=false, aiProcessing=false, trigger=agent_status:${agentData.status}`, conversation_id);
               setRunning(false);
               runningRef.current = false;
               setAiProcessing(false);
@@ -210,6 +213,7 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           break;
         case 'error':
           // Stop all loading states when error occurs
+          console.log(`[ACP-lifecycle] ui_state: running=false, aiProcessing=false, trigger=error`, conversation_id);
           setRunning(false);
           runningRef.current = false;
           setAiProcessing(false);
