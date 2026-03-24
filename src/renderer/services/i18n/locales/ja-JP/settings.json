@@ -659,5 +659,16 @@
     "agent": "エージェント",
     "agentDesc": "DingTalk の会話に使用"
   },
-  "extensionAssistantReadonly": "拡張アシスタントは読み取り専用です。複製して編集することができます。"
+  "extensionAssistantReadonly": "拡張アシスタントは読み取り専用です。複製して編集することができます。",
+  "terminalWrapper": {
+    "title": "ターミナル",
+    "richUI": "リッチUI",
+    "terminal": "ターミナル",
+    "defaultMode": "デフォルトモード",
+    "defaultModeDesc": "新しい会話のデフォルトトランスポートを選択",
+    "shell": "シェル",
+    "shellDesc": "デフォルトシェルを上書き（空欄で自動検出）",
+    "fontSize": "フォントサイズ",
+    "note": "チャットヘッダーのトグルでいつでもモードを切り替えられます。"
+  }
 }

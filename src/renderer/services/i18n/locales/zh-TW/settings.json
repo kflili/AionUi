@@ -659,5 +659,16 @@
     "agent": "對話Agent",
     "agentDesc": "用於與Channel進行對話"
   },
-  "extensionAssistantReadonly": "擴展助手為唯讀，你可以複製它並編輯副本。"
+  "extensionAssistantReadonly": "擴展助手為唯讀，你可以複製它並編輯副本。",
+  "terminalWrapper": {
+    "title": "終端",
+    "richUI": "富文本",
+    "terminal": "終端",
+    "defaultMode": "預設模式",
+    "defaultModeDesc": "選擇新對話的預設傳輸方式",
+    "shell": "Shell",
+    "shellDesc": "覆蓋預設 Shell（留空則自動偵測）",
+    "fontSize": "字體大小",
+    "note": "你可以隨時透過聊天標頭的切換按鈕更改模式。"
+  }
 }

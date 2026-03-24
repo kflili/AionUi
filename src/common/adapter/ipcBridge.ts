@@ -1039,6 +1039,32 @@ export const channel = {
   userAuthorized: bridge.buildEmitter<IChannelUser>('channel.user-authorized'),
 };
 
+// PTY terminal session API / PTY 终端会话接口
+export const pty = {
+  /** Spawn a PTY process for a conversation */
+  spawn: bridge.buildProvider<
+    IBridgeResponse<{ pid: number }>,
+    {
+      conversationId: string;
+      command: string;
+      args: string[];
+      cwd?: string;
+      cols?: number;
+      rows?: number;
+    }
+  >('pty.spawn'),
+  /** Write data to PTY stdin */
+  write: bridge.buildProvider<IBridgeResponse, { conversationId: string; data: string }>('pty.write'),
+  /** Resize PTY */
+  resize: bridge.buildProvider<IBridgeResponse, { conversationId: string; cols: number; rows: number }>('pty.resize'),
+  /** Kill PTY process */
+  kill: bridge.buildProvider<IBridgeResponse, { conversationId: string }>('pty.kill'),
+  /** PTY stdout/stderr data output (streamed to renderer) */
+  output: bridge.buildEmitter<{ conversationId: string; data: string }>('pty.output'),
+  /** PTY process exited */
+  exit: bridge.buildEmitter<{ conversationId: string; exitCode: number; signal?: number }>('pty.exit'),
+};
+
 // CLI history utilities
 export const cliHistory = {
   /** Resolve a CLI session ID to its JSONL file path on disk. Scans backend-specific directories. */

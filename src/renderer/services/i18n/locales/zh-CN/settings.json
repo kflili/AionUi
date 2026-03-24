@@ -658,5 +658,16 @@
     "agentDesc": "用于与Channel进行对话"
   },
   "addAssistant": "添加助手",
-  "extensionAssistantReadonly": "扩展助手为只读，你可以复制它并编辑副本。"
+  "extensionAssistantReadonly": "扩展助手为只读，你可以复制它并编辑副本。",
+  "terminalWrapper": {
+    "title": "终端",
+    "richUI": "富文本",
+    "terminal": "终端",
+    "defaultMode": "默认模式",
+    "defaultModeDesc": "选择新会话的默认传输方式",
+    "shell": "Shell",
+    "shellDesc": "覆盖默认 Shell（留空则自动检测）",
+    "fontSize": "字体大小",
+    "note": "你可以随时通过聊天头部的切换按钮更改模式。"
+  }
 }

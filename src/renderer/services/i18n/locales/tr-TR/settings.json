@@ -657,5 +657,16 @@
     "agent": "Ajan",
     "agentDesc": "DingTalk sohbetleri icin kullanilir"
   },
-  "extensionAssistantReadonly": "Uzantı asistanları salt okunurdur. Kopyalayıp düzenleyebilirsiniz."
+  "extensionAssistantReadonly": "Uzantı asistanları salt okunurdur. Kopyalayıp düzenleyebilirsiniz.",
+  "terminalWrapper": {
+    "title": "Terminal",
+    "richUI": "Zengin UI",
+    "terminal": "Terminal",
+    "defaultMode": "Varsayılan Mod",
+    "defaultModeDesc": "Yeni sohbetler için varsayılan aktarım yöntemini seçin",
+    "shell": "Kabuk",
+    "shellDesc": "Varsayılan kabuğu geçersiz kıl (boş bırakırsanız otomatik algılanır)",
+    "fontSize": "Yazı Tipi Boyutu",
+    "note": "Sohbet başlığındaki düğmeyi kullanarak istediğiniz zaman mod değiştirebilirsiniz."
+  }
 }

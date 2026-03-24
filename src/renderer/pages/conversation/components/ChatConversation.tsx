@@ -13,7 +13,7 @@ import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistan
 import { iconColors } from '@/renderer/styles/colors';
 import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
 import { History } from '@icon-park/react';
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -25,12 +25,13 @@ import CodexChat from '../platforms/codex/CodexChat';
 import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
 import GeminiChat from '../platforms/gemini/GeminiChat';
+import TerminalChat from '../platforms/terminal/TerminalChat';
+import ModeToggle from '../platforms/terminal/ModeToggle';
 import AcpModelSelector from '@/renderer/components/agent/AcpModelSelector';
 import GeminiModelSelector from '../platforms/gemini/GeminiModelSelector';
 import { useGeminiModelSelection } from '../platforms/gemini/useGeminiModelSelection';
 import { usePreviewContext } from '../Preview';
 import StarOfficeMonitorCard from '../platforms/openclaw/StarOfficeMonitorCard.tsx';
-// import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
 const _AssociatedConversation: React.FC<{ conversation_id: string }> = ({ conversation_id }) => {
   const { data } = useSWR(['getAssociateConversation', conversation_id], () =>
@@ -173,6 +174,8 @@ const GeminiConversationPanel: React.FC<{ conversation: GeminiConversation; slid
   );
 };
 
+type ConversationMode = 'acp' | 'terminal';
+
 const ChatConversation: React.FC<{
   conversation?: TChatConversation;
 }> = ({ conversation }) => {
@@ -182,8 +185,30 @@ const ChatConversation: React.FC<{
 
   const isGeminiConversation = conversation?.type === 'gemini';
 
+  // Terminal mode state — only for ACP conversations
+  const acpExtra = conversation?.type === 'acp' ? conversation.extra : undefined;
+  const [currentMode, setCurrentMode] = useState<ConversationMode>(
+    (acpExtra?.currentMode as ConversationMode) || 'acp'
+  );
+  const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
+
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
+
+    // Terminal mode rendering for ACP conversations
+    if (conversation.type === 'acp' && isTerminalMode) {
+      return (
+        <TerminalChat
+          key={`terminal-${conversation.id}`}
+          conversationId={conversation.id}
+          workspace={conversation.extra?.workspace}
+          backend={conversation.extra?.backend || 'claude'}
+          acpSessionId={conversation.extra?.acpSessionId}
+          cliPath={conversation.extra?.cliPath}
+        />
+      );
+    }
+
     switch (conversation.type) {
       case 'acp':
         return (
@@ -223,7 +248,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isGeminiConversation]);
+  }, [conversation, isGeminiConversation, isTerminalMode]);
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)
@@ -292,6 +317,11 @@ const ChatConversation: React.FC<{
 
   const headerExtraNode = (
     <div className='flex items-center gap-8px'>
+      {conversation?.type === 'acp' && (
+        <div className='shrink-0'>
+          <ModeToggle conversationId={conversation.id} currentMode={currentMode} onModeChange={setCurrentMode} />
+        </div>
+      )}
       {conversation?.type === 'openclaw-gateway' && (
         <div className='shrink-0'>
           <StarOfficeMonitorCard

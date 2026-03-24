@@ -13,6 +13,7 @@ import {
   Puzzle,
   Robot,
   System,
+  Terminal,
   Toolkit,
 } from '@icon-park/react';
 import classNames from 'classnames';
@@ -29,6 +30,7 @@ const BUILTIN_TAB_IDS = [
   'agent',
   'skills-hub',
   'tools',
+  'agent-cli',
   'display',
   'webui',
   'system',
@@ -129,6 +131,12 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
         path: 'skills-hub',
       },
       tools: { id: 'tools', label: t('settings.tools'), icon: <Toolkit />, path: 'tools' },
+      'agent-cli': {
+        id: 'agent-cli',
+        label: t('settings.terminalWrapper.title', { defaultValue: 'Terminal' }),
+        icon: <Terminal />,
+        path: 'agent-cli',
+      },
       display: { id: 'display', label: t('settings.display'), icon: <Computer />, path: 'display' },
       webui: {
         id: 'webui',

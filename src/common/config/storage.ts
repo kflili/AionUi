@@ -128,6 +128,15 @@ export interface IConfigStorageRefer {
   };
   // Skills Market: whether the aionui-skills builtin skill is enabled
   'skillsMarket.enabled'?: boolean;
+  // Terminal wrapper mode settings / 终端包装模式设置
+  'agentCli.config'?: {
+    /** Default transport for new conversations / 新会话默认传输方式 */
+    defaultMode?: 'acp' | 'terminal';
+    /** Override default shell (auto-detected if empty) / 覆盖默认 shell */
+    shell?: string;
+    /** Terminal font size / 终端字体大小 */
+    fontSize?: number;
+  };
 }
 
 export interface IEnvStorageRefer {
@@ -223,6 +232,8 @@ export type TChatConversation =
           currentModelId?: string;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
+          /** Current transport mode: 'acp' (rich UI) or 'terminal' (xterm.js PTY) */
+          currentMode?: 'acp' | 'terminal';
         }
       >,
       'model'
