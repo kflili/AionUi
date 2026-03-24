@@ -2,7 +2,7 @@
 
 **Date:** 2026-03-19 (updated 2026-03-20)
 **Status:** Draft — pipeline design complete, no implementation yet
-**Related:** `2026-03-19-cli-history-integration.md`, `2026-03-19-cli-history-storage-reference.md`
+**Related:** `2026-03-19-cli-history/plan.md`, `2026-03-19-cli-history/storage-reference.md`
 **Inspiration:** teleX Phase 3 memory design, [willynikes2/knowledge-base-server](https://github.com/willynikes2/knowledge-base-server) (Reddit/r/ClaudeAI)
 **Dependency:** Does NOT depend on Step 2 (CLI History Integration) UI work. Only needs CLI history path knowledge from the storage reference doc. Can start independently.
 **Optimization:** If Step 2 is already done, the consolidation pipeline can optionally read from AionUI's SQLite (messages already parsed as TMessages) instead of re-parsing raw JSONL files. Both paths should work.
