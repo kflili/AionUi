@@ -27,7 +27,12 @@ type AssistantContentBlock =
 
 /** User message content can be a plain string or an array of content blocks. */
 type UserContentBlock =
-  | { type: 'tool_result'; tool_use_id: string; content: string | Array<{ type: string; text?: string }>; is_error: boolean }
+  | {
+      type: 'tool_result';
+      tool_use_id: string;
+      content: string | Array<{ type: string; text?: string }>;
+      is_error: boolean;
+    }
   | { type: 'text'; text: string };
 
 /**
@@ -192,7 +197,6 @@ export function convertClaudeJsonl(lines: string[], conversationId?: string): TM
   const convId = conversationId ?? CONVERTED_CONVERSATION_ID;
   const messages: TMessage[] = [];
 
-
   // Map from tool_use ID → index in `messages` array (for result merging)
   const toolMessageIndex = new Map<string, number>();
 
@@ -257,13 +261,7 @@ function processUserMessage(
     const typedBlock = block as UserContentBlock;
 
     if (typedBlock.type === 'tool_result') {
-      mergeToolResult(
-        typedBlock.tool_use_id,
-        typedBlock.content,
-        typedBlock.is_error,
-        messages,
-        toolMessageIndex
-      );
+      mergeToolResult(typedBlock.tool_use_id, typedBlock.content, typedBlock.is_error, messages, toolMessageIndex);
     } else if (typedBlock.type === 'text') {
       // Text blocks in user arrays are typically interruption notices (skip empty)
       if (typedBlock.text.trim().length > 0) {
@@ -417,7 +415,6 @@ function mergeToolResult(
       },
     },
   };
-
 }
 
 // ---------------------------------------------------------------------------
