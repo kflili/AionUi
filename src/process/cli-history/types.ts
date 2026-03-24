@@ -8,7 +8,7 @@
  * Supported CLI session source identifiers.
  * Each value corresponds to a concrete SessionSourceProvider implementation.
  */
-export type SessionSourceId = 'claude_code' | 'copilot' | 'codex';
+export type SessionSourceId = 'claude_code' | 'copilot';
 
 /**
  * Metadata for a single CLI session discovered by a SessionSourceProvider.
@@ -25,8 +25,8 @@ export type SessionMetadata = {
   createdAt: string;
   /** Session last-modified timestamp (ISO 8601 string) */
   updatedAt: string;
-  /** Total number of messages in the session */
-  messageCount: number;
+  /** Total number of messages in the session (unavailable for some providers) */
+  messageCount?: number;
   /** Absolute path to the JSONL transcript file */
   filePath: string;
   /** Project/workspace path the session was associated with */

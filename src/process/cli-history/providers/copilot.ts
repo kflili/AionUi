@@ -51,7 +51,6 @@ function rowToMetadata(row: CopilotSessionRow): SessionMetadata {
     firstPrompt: row.summary || '',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    messageCount: 0,
     filePath: getSessionEventsPath(row.id),
     workspace: row.cwd || '',
     source: 'copilot',

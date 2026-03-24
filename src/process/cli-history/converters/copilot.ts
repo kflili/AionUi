@@ -37,15 +37,6 @@ type CopilotJsonlEvent = {
 // Internal bookkeeping
 // ---------------------------------------------------------------------------
 
-/** Pending tool call waiting for its execution_complete event. */
-type PendingToolCall = {
-  toolCallId: string;
-  name: string;
-  args: Record<string, unknown>;
-  timestamp: number;
-  messageId: string;
-};
-
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -182,9 +173,6 @@ export function convertCopilotJsonl(lines: string[], conversationId?: string): T
   const convId = conversationId ?? CONVERTED_CONVERSATION_ID;
   const messages: TMessage[] = [];
 
-  // Map from toolCallId → pending tool call info (for result merging)
-  const pendingToolCalls = new Map<string, PendingToolCall>();
-
   // Map from toolCallId → index in `messages` array (for result merging)
   const toolMessageIndex = new Map<string, number>();
 
@@ -203,11 +191,11 @@ export function convertCopilotJsonl(lines: string[], conversationId?: string): T
         break;
 
       case 'assistant.message':
-        processAssistantMessage(parsed, timestamp, convId, messages, pendingToolCalls, toolMessageIndex);
+        processAssistantMessage(parsed, timestamp, convId, messages, toolMessageIndex);
         break;
 
       case 'tool.execution_complete':
-        processToolResult(parsed, messages, pendingToolCalls, toolMessageIndex);
+        processToolResult(parsed, messages, toolMessageIndex);
         break;
 
       default:
@@ -245,7 +233,6 @@ function processAssistantMessage(
   timestamp: number,
   convId: string,
   messages: TMessage[],
-  pendingToolCalls: Map<string, PendingToolCall>,
   toolMessageIndex: Map<string, number>
 ): void {
   const data = event.data;
@@ -278,14 +265,6 @@ function processAssistantMessage(
       const index = messages.length;
       messages.push(toolMessage);
       toolMessageIndex.set(req.toolCallId, index);
-
-      pendingToolCalls.set(req.toolCallId, {
-        toolCallId: req.toolCallId,
-        name: req.name,
-        args,
-        timestamp,
-        messageId,
-      });
     }
   }
 }
@@ -297,7 +276,6 @@ function processAssistantMessage(
 function processToolResult(
   event: CopilotJsonlEvent,
   messages: TMessage[],
-  pendingToolCalls: Map<string, PendingToolCall>,
   toolMessageIndex: Map<string, number>
 ): void {
   const data = event.data;
@@ -338,7 +316,6 @@ function processToolResult(
     },
   };
 
-  pendingToolCalls.delete(toolCallId);
 }
 
 // ---------------------------------------------------------------------------

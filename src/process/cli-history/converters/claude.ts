@@ -27,7 +27,7 @@ type AssistantContentBlock =
 
 /** User message content can be a plain string or an array of content blocks. */
 type UserContentBlock =
-  | { type: 'tool_result'; tool_use_id: string; content: string; is_error: boolean }
+  | { type: 'tool_result'; tool_use_id: string; content: string | Array<{ type: string; text?: string }>; is_error: boolean }
   | { type: 'text'; text: string };
 
 /**
@@ -76,16 +76,6 @@ type ClaudeJsonlLine = {
 // ---------------------------------------------------------------------------
 // Internal bookkeeping
 // ---------------------------------------------------------------------------
-
-/** Pending tool use waiting for its result. */
-type PendingToolUse = {
-  toolUseId: string;
-  name: string;
-  input: Record<string, unknown>;
-  timestamp: number;
-  messageId: string;
-  assistantUuid?: string;
-};
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -202,8 +192,6 @@ export function convertClaudeJsonl(lines: string[], conversationId?: string): TM
   const convId = conversationId ?? CONVERTED_CONVERSATION_ID;
   const messages: TMessage[] = [];
 
-  // Map from tool_use ID → pending tool use info (for result merging)
-  const pendingToolUses = new Map<string, PendingToolUse>();
 
   // Map from tool_use ID → index in `messages` array (for result merging)
   const toolMessageIndex = new Map<string, number>();
@@ -219,13 +207,13 @@ export function convertClaudeJsonl(lines: string[], conversationId?: string): TM
 
     // --- User message ---
     if (parsed.type === 'user' && parsed.message) {
-      processUserMessage(parsed, timestamp, convId, messages, pendingToolUses, toolMessageIndex);
+      processUserMessage(parsed, timestamp, convId, messages, toolMessageIndex);
       continue;
     }
 
     // --- Assistant message ---
     if (parsed.type === 'assistant' && parsed.message) {
-      processAssistantMessage(parsed, timestamp, convId, messages, pendingToolUses, toolMessageIndex);
+      processAssistantMessage(parsed, timestamp, convId, messages, toolMessageIndex);
       continue;
     }
   }
@@ -248,7 +236,6 @@ function processUserMessage(
   timestamp: number,
   convId: string,
   messages: TMessage[],
-  pendingToolUses: Map<string, PendingToolUse>,
   toolMessageIndex: Map<string, number>
 ): void {
   const content = parsed.message?.content;
@@ -274,7 +261,6 @@ function processUserMessage(
         typedBlock.content,
         typedBlock.is_error,
         messages,
-        pendingToolUses,
         toolMessageIndex
       );
     } else if (typedBlock.type === 'text') {
@@ -300,7 +286,6 @@ function processAssistantMessage(
   timestamp: number,
   convId: string,
   messages: TMessage[],
-  pendingToolUses: Map<string, PendingToolUse>,
   toolMessageIndex: Map<string, number>
 ): void {
   const msgContent = parsed.message?.content;
@@ -360,14 +345,6 @@ function processAssistantMessage(
         messages.push(toolMessage);
         toolMessageIndex.set(toolId, index);
 
-        pendingToolUses.set(toolId, {
-          toolUseId: toolId,
-          name: toolName,
-          input: toolInput,
-          timestamp,
-          messageId,
-          assistantUuid: parsed.uuid,
-        });
         break;
       }
 
@@ -391,10 +368,9 @@ function processAssistantMessage(
  */
 function mergeToolResult(
   toolUseId: string,
-  resultContent: string,
+  resultContent: string | Array<{ type: string; text?: string }>,
   isError: boolean,
   messages: TMessage[],
-  pendingToolUses: Map<string, PendingToolUse>,
   toolMessageIndex: Map<string, number>
 ): void {
   const index = toolMessageIndex.get(toolUseId);
@@ -408,12 +384,17 @@ function mergeToolResult(
   const existing = messages[index];
   if (existing.type !== 'acp_tool_call') return;
 
+  // Normalize content: Anthropic API allows string or array of content blocks
+  const normalizedContent = Array.isArray(resultContent)
+    ? resultContent.map((block) => block.text ?? '').join('\n')
+    : resultContent;
+
   // Build the result content item
   const resultItem: ToolCallContentItem = {
     type: 'content',
     content: {
       type: 'text',
-      text: resultContent,
+      text: normalizedContent,
     },
   };
 
@@ -434,8 +415,6 @@ function mergeToolResult(
     },
   };
 
-  // Clean up pending state
-  pendingToolUses.delete(toolUseId);
 }
 
 // ---------------------------------------------------------------------------
