@@ -241,8 +241,9 @@ function processUserMessage(
   const content = parsed.message?.content;
   if (content === undefined || content === null) return;
 
-  // Simple string content → user text message
+  // Simple string content → user text message (skip empty/whitespace)
   if (typeof content === 'string') {
+    if (content.trim().length === 0) return;
     messages.push(createTextMessage(content, 'right', convId, timestamp));
     return;
   }
