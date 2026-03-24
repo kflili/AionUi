@@ -21,7 +21,6 @@ const TerminalComponent: React.FC<{
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
-  const mountedRef = useRef(false);
 
   const handleResize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
@@ -41,103 +40,123 @@ const TerminalComponent: React.FC<{
   }, [conversationId]);
 
   useEffect(() => {
-    if (!containerRef.current || mountedRef.current) return;
-    mountedRef.current = true;
+    if (!containerRef.current) return;
+    let disposed = false;
+    let unsubOutput: (() => void) | undefined;
+    let unsubExit: (() => void) | undefined;
+    let resizeObserver: ResizeObserver | undefined;
+    let terminal: Terminal | undefined;
 
     const initTerminal = async () => {
-      // Load font size from settings
-      const config = await ConfigStorage.get('agentCli.config');
-      const fontSize = config?.fontSize || 14;
-
-      const terminal = new Terminal({
-        fontSize,
-        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-        theme: {
-          background: '#1e1e1e',
-          foreground: '#d4d4d4',
-          cursor: '#d4d4d4',
-          cursorAccent: '#1e1e1e',
-          selectionBackground: 'rgba(255, 255, 255, 0.3)',
-        },
-        cursorBlink: true,
-        scrollback: 10000,
-        allowProposedApi: true,
-      });
-
-      const fitAddon = new FitAddon();
-      terminal.loadAddon(fitAddon);
-
-      terminalRef.current = terminal;
-      fitAddonRef.current = fitAddon;
-
-      terminal.open(containerRef.current!);
-
-      // Try loading WebGL addon for better performance
       try {
-        const webglAddon = new WebglAddon();
-        webglAddon.onContextLoss(() => {
-          webglAddon.dispose();
+        // Load font size from settings
+        const config = await ConfigStorage.get('agentCli.config');
+        if (disposed || !containerRef.current) return;
+
+        const fontSize = config?.fontSize || 14;
+
+        terminal = new Terminal({
+          fontSize,
+          fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+          theme: {
+            background: '#1e1e1e',
+            foreground: '#d4d4d4',
+            cursor: '#d4d4d4',
+            cursorAccent: '#1e1e1e',
+            selectionBackground: 'rgba(255, 255, 255, 0.3)',
+          },
+          cursorBlink: true,
+          scrollback: 10000,
+          allowProposedApi: true,
         });
-        terminal.loadAddon(webglAddon);
-      } catch {
-        // WebGL not available, canvas renderer will be used
+
+        const fitAddon = new FitAddon();
+        terminal.loadAddon(fitAddon);
+
+        terminalRef.current = terminal;
+        fitAddonRef.current = fitAddon;
+
+        terminal.open(containerRef.current);
+
+        // Try loading WebGL addon for better performance
+        try {
+          const webglAddon = new WebglAddon();
+          webglAddon.onContextLoss(() => {
+            webglAddon.dispose();
+          });
+          terminal.loadAddon(webglAddon);
+        } catch {
+          // WebGL not available, canvas renderer will be used
+        }
+
+        fitAddon.fit();
+
+        if (disposed) {
+          terminal.dispose();
+          return;
+        }
+
+        // Listen for PTY output
+        unsubOutput = ipcBridge.pty.output.on((event) => {
+          if (event.conversationId === conversationId && event.data) {
+            terminal!.write(event.data);
+          }
+        });
+
+        // Listen for PTY exit
+        unsubExit = ipcBridge.pty.exit.on((event) => {
+          if (event.conversationId === conversationId) {
+            terminal!.write(`\r\n\x1b[90m[Process exited with code ${event.exitCode}]\x1b[0m\r\n`);
+          }
+        });
+
+        // Forward keyboard input to PTY
+        terminal.onData((data: string) => {
+          ipcBridge.pty.write.invoke({ conversationId, data });
+        });
+
+        // Handle resize
+        resizeObserver = new ResizeObserver(() => {
+          handleResize();
+        });
+        resizeObserver.observe(containerRef.current);
+
+        // Spawn PTY process
+        const result = await ipcBridge.pty.spawn.invoke({
+          conversationId,
+          command,
+          args,
+          cwd,
+          cols: terminal.cols,
+          rows: terminal.rows,
+        });
+
+        if (disposed) return;
+
+        if (!result?.success) {
+          terminal.write(`\r\n\x1b[31mFailed to start terminal: ${result?.msg || 'Unknown error'}\x1b[0m\r\n`);
+          return;
+        }
+
+        terminal.focus();
+      } catch (err) {
+        if (!disposed && terminal) {
+          terminal.write(`\r\n\x1b[31mTerminal error: ${err instanceof Error ? err.message : String(err)}\x1b[0m\r\n`);
+        }
       }
-
-      fitAddon.fit();
-
-      // Listen for PTY output
-      const unsubOutput = ipcBridge.pty.output.on((event) => {
-        if (event.conversationId === conversationId && event.data) {
-          terminal.write(event.data);
-        }
-      });
-
-      // Listen for PTY exit
-      const unsubExit = ipcBridge.pty.exit.on((event) => {
-        if (event.conversationId === conversationId) {
-          terminal.write(`\r\n\x1b[90m[Process exited with code ${event.exitCode}]\x1b[0m\r\n`);
-        }
-      });
-
-      // Forward keyboard input to PTY
-      terminal.onData((data: string) => {
-        ipcBridge.pty.write.invoke({ conversationId, data });
-      });
-
-      // Handle resize
-      const resizeObserver = new ResizeObserver(() => {
-        handleResize();
-      });
-      resizeObserver.observe(containerRef.current!);
-
-      // Spawn PTY process
-      await ipcBridge.pty.spawn.invoke({
-        conversationId,
-        command,
-        args,
-        cwd,
-        cols: terminal.cols,
-        rows: terminal.rows,
-      });
-
-      terminal.focus();
-
-      // Store cleanup references
-      (containerRef.current as HTMLDivElement & { _cleanup?: () => void })._cleanup = () => {
-        unsubOutput();
-        unsubExit();
-        resizeObserver.disconnect();
-        terminal.dispose();
-        ipcBridge.pty.kill.invoke({ conversationId });
-      };
     };
 
     initTerminal();
 
     return () => {
-      const el = containerRef.current as (HTMLDivElement & { _cleanup?: () => void }) | null;
-      el?._cleanup?.();
-      mountedRef.current = false;
+      disposed = true;
+      unsubOutput?.();
+      unsubExit?.();
+      resizeObserver?.disconnect();
+      if (terminal) {
+        terminal.dispose();
+        ipcBridge.pty.kill.invoke({ conversationId });
+      }
       terminalRef.current = null;
       fitAddonRef.current = null;
     };

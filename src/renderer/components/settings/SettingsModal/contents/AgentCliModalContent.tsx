@@ -7,13 +7,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfigStorage } from '@/common/config/storage';
-import { InputNumber, Input, Message } from '@arco-design/web-react';
+import { InputNumber, Radio } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
 
 type AgentCliConfig = {
   defaultMode?: 'acp' | 'terminal';
-  shell?: string;
   fontSize?: number;
 };
 
@@ -66,34 +65,15 @@ const AgentCliModalContent: React.FC = () => {
                 label={t('settings.terminalWrapper.defaultMode')}
                 description={t('settings.terminalWrapper.defaultModeDesc')}
               >
-                <div className='flex items-center gap-2px bg-fill-1 rd-8px p-2px'>
-                  {(['acp', 'terminal'] as const).map((mode) => (
-                    <div
-                      key={mode}
-                      className={`flex items-center px-12px py-4px rd-6px text-13px cursor-pointer transition-all duration-200 select-none ${
-                        config.defaultMode === mode || (!config.defaultMode && mode === 'acp')
-                          ? 'bg-fill-2 text-t-primary font-medium'
-                          : 'text-t-secondary hover:text-t-primary'
-                      }`}
-                      onClick={() => saveConfig({ defaultMode: mode })}
-                    >
-                      {mode === 'acp' ? t('settings.terminalWrapper.richUI') : t('settings.terminalWrapper.terminal')}
-                    </div>
-                  ))}
-                </div>
-              </PreferenceRow>
-
-              {/* Shell Override */}
-              <PreferenceRow
-                label={t('settings.terminalWrapper.shell')}
-                description={t('settings.terminalWrapper.shellDesc')}
-              >
-                <Input
-                  className='max-w-240px'
-                  placeholder={process.platform === 'win32' ? 'powershell.exe' : '/bin/zsh'}
-                  value={config.shell || ''}
-                  onChange={(val) => saveConfig({ shell: val || undefined })}
-                />
+                <Radio.Group
+                  type='button'
+                  size='small'
+                  value={config.defaultMode || 'acp'}
+                  onChange={(val) => saveConfig({ defaultMode: val })}
+                >
+                  <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
+                  <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
+                </Radio.Group>
               </PreferenceRow>
 
               {/* Font Size */}

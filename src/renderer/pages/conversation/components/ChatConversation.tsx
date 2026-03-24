@@ -13,7 +13,7 @@ import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistan
 import { iconColors } from '@/renderer/styles/colors';
 import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
 import { History } from '@icon-park/react';
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -186,11 +186,17 @@ const ChatConversation: React.FC<{
   const isGeminiConversation = conversation?.type === 'gemini';
 
   // Terminal mode state — only for ACP conversations
-  const acpExtra = conversation?.type === 'acp' ? conversation.extra : undefined;
-  const [currentMode, setCurrentMode] = useState<ConversationMode>(
-    (acpExtra?.currentMode as ConversationMode) || 'acp'
-  );
+  const [currentMode, setCurrentMode] = useState<ConversationMode>('acp');
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
+
+  // Sync mode state when conversation changes (e.g., navigating between conversations)
+  useEffect(() => {
+    if (conversation?.type === 'acp') {
+      setCurrentMode((conversation.extra?.currentMode as ConversationMode) || 'acp');
+    } else {
+      setCurrentMode('acp');
+    }
+  }, [conversation?.id, conversation?.type]);
 
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;

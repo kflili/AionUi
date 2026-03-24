@@ -5,8 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import { CommentOne, Terminal as TerminalIcon } from '@icon-park/react';
-import classNames from 'classnames';
+import { Radio } from '@arco-design/web-react';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -33,23 +32,16 @@ const ModeToggle: React.FC<{
     [conversationId, currentMode, onModeChange]
   );
 
-  const buttonClass = (active: boolean) =>
-    classNames(
-      'flex items-center gap-4px px-8px py-2px rd-6px text-12px cursor-pointer transition-all duration-200 select-none',
-      active ? 'bg-fill-2 text-t-primary font-medium' : 'text-t-secondary hover:text-t-primary'
-    );
-
   return (
-    <div className='flex items-center gap-2px bg-fill-1 rd-8px p-2px'>
-      <div className={buttonClass(currentMode === 'acp')} onClick={() => handleToggle('acp')}>
-        <CommentOne theme='outline' size='12' />
-        <span>{t('settings.terminalWrapper.richUI')}</span>
-      </div>
-      <div className={buttonClass(currentMode === 'terminal')} onClick={() => handleToggle('terminal')}>
-        <TerminalIcon theme='outline' size='12' />
-        <span>{t('settings.terminalWrapper.terminal')}</span>
-      </div>
-    </div>
+    <Radio.Group
+      type='button'
+      size='mini'
+      value={currentMode}
+      onChange={(val) => handleToggle(val as ConversationMode)}
+    >
+      <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
+      <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
+    </Radio.Group>
   );
 };
 

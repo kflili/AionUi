@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { TProviderWithModel } from '@/common/config/storage';
+import { ConfigStorage, type TProviderWithModel } from '@/common/config/storage';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
 import { updateWorkspaceTime } from '@/renderer/utils/workspace/workspaceHistory';
@@ -318,6 +318,10 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
 
       try {
+        // Read terminal wrapper default mode setting
+        const agentCliConfig = await ConfigStorage.get('agentCli.config');
+        const defaultTransport = agentCliConfig?.defaultMode ?? 'acp';
+
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'acp',
           name: input,
@@ -335,6 +339,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             presetAssistantId: isPreset ? agentInfo?.customAgentId || acpAgentInfo?.customAgentId : undefined,
             sessionMode: selectedMode,
             currentModelId: selectedAcpModel || undefined,
+            currentMode: defaultTransport,
           },
         });
 

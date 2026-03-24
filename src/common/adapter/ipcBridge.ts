@@ -783,6 +783,8 @@ export interface ICreateConversationParams {
     };
     /** Explicit marker for temporary health-check conversations */
     isHealthCheck?: boolean;
+    /** Initial transport mode for ACP conversations / ACP 会话的初始传输模式 */
+    currentMode?: 'acp' | 'terminal';
   };
 }
 interface IResetConversationParams {
