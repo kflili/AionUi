@@ -26,27 +26,27 @@ const ModeToggle: React.FC<{
 
       // When switching Terminal → Rich UI, convert JSONL to TMessages first
       if (currentMode === 'terminal' && mode === 'acp') {
-        // Fetch fresh conversation to get the latest acpSessionId
         const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId }).catch((): null => null);
         const sessionId = conversation?.type === 'acp' ? conversation.extra?.acpSessionId : undefined;
 
         if (sessionId) {
-          await ipcBridge.cliHistory.convertSessionToMessages
+          const result = await ipcBridge.cliHistory.convertSessionToMessages
             .invoke({ conversationId, sessionId, backend })
-            .catch((err: unknown) => {
-              console.warn('[ModeToggle] JSONL conversion failed:', err);
-            });
+            .catch((): null => null);
+
+          if (result && !result.success) {
+            console.warn('[ModeToggle] JSONL conversion failed:', result.msg);
+          }
         }
       }
 
-      // Persist mode to conversation extra and invalidate SWR cache
-      ipcBridge.conversation.update.invoke({
+      // Persist mode and wait for it to complete before revalidating cache
+      await ipcBridge.conversation.update.invoke({
         id: conversationId,
         updates: { extra: { currentMode: mode } } as never,
         mergeExtra: true,
       });
-      // Revalidate SWR cache so navigating away/back gets fresh data immediately
-      mutate(`conversation/${conversationId}`);
+      await mutate(`conversation/${conversationId}`);
       onModeChange(mode);
     },
     [conversationId, currentMode, backend, onModeChange]

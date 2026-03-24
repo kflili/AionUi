@@ -10,7 +10,7 @@ import * as os from 'node:os';
 
 import { ipcBridge } from '@/common';
 import { getDataPath } from '@process/utils/utils';
-import { addMessage } from '@process/utils/message';
+import { getDatabase } from '@process/services/database/export';
 import { convertClaudeJsonl } from '@process/cli-history/converters/claude';
 import { convertCopilotJsonl } from '@process/cli-history/converters/copilot';
 
@@ -191,6 +191,11 @@ export function initCliHistoryBridge(): void {
 
   ipcBridge.cliHistory.convertSessionToMessages.provider(async ({ conversationId, sessionId, backend }) => {
     try {
+      // Only claude and copilot converters are currently implemented
+      if (backend !== 'claude' && backend !== 'copilot') {
+        return { success: false, msg: `JSONL conversion not supported for backend: ${backend}` };
+      }
+
       // 1. Resolve JSONL file path
       const filePath = await resolveSessionPath(sessionId, backend);
       if (!filePath) {
@@ -205,20 +210,16 @@ export function initCliHistoryBridge(): void {
       }
 
       // 3. Convert to TMessages using the appropriate converter
-      let messages;
-      switch (backend) {
-        case 'copilot':
-          messages = convertCopilotJsonl(lines, conversationId);
-          break;
-        case 'claude':
-        default:
-          messages = convertClaudeJsonl(lines, conversationId);
-          break;
-      }
+      const messages =
+        backend === 'copilot' ? convertCopilotJsonl(lines, conversationId) : convertClaudeJsonl(lines, conversationId);
 
-      // 4. Insert messages into the conversation's message store
+      // 4. Delete existing messages and insert fresh ones (synchronous DB ops)
+      // This prevents duplicates on repeated toggles and ensures messages
+      // are fully written before returning success.
+      const db = getDatabase();
+      db.deleteConversationMessages(conversationId);
       for (const msg of messages) {
-        addMessage(conversationId, msg);
+        db.insertMessage(msg);
       }
 
       return { success: true, data: { count: messages.length } };

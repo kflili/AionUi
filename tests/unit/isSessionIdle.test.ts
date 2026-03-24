@@ -20,8 +20,11 @@ vi.mock('../../src/process/utils/utils', () => ({
   getConfigPath: vi.fn(() => '/tmp'),
 }));
 
-vi.mock('../../src/process/utils/message', () => ({
-  addMessage: vi.fn(),
+vi.mock('../../src/process/services/database/export', () => ({
+  getDatabase: vi.fn(() => ({
+    deleteConversationMessages: vi.fn(),
+    insertMessage: vi.fn(() => ({ success: true })),
+  })),
 }));
 
 vi.mock('../../src/process/cli-history/converters/claude', () => ({
