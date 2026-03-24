@@ -67,6 +67,14 @@ export function getModelContextLimit(modelName: string | undefined | null): numb
 
   const lowerModelName = modelName.toLowerCase();
 
+  // Parse [Nm] / [Nk] suffix (e.g. claude-opus-4-6[1m] → 1_000_000)
+  const suffixMatch = lowerModelName.match(/\[(\d+)(m|k)\]$/);
+  if (suffixMatch) {
+    const value = Number(suffixMatch[1]);
+    const unit = suffixMatch[2];
+    return unit === 'm' ? value * 1_000_000 : value * 1_000;
+  }
+
   // 精确匹配
   if (MODEL_CONTEXT_LIMITS[lowerModelName]) {
     return MODEL_CONTEXT_LIMITS[lowerModelName];

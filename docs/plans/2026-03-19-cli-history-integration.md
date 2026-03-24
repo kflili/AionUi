@@ -1,7 +1,7 @@
 # CLI History Integration
 
-**Date:** 2026-03-19 (updated 2026-03-21)
-**Status:** Draft — research complete, no implementation yet
+**Date:** 2026-03-19 (updated 2026-03-23)
+**Status:** In progress — Step 0.5 complete, shared infra on branch
 
 ---
 
@@ -195,22 +195,25 @@ Once all sessions are in SQLite, search is automatic — AionUI's existing conve
 ## Key Files
 
 ```
-New:
-  src/process/cli-history/                     — Session source providers (shared with Step 3)
-  src/process/cli-history/types.ts             — SessionSourceProvider, SessionMetadata types
+Done (on main):
+  src/process/bridge/cliHistoryBridge.ts        — Session path resolution for all 3 CLIs + isSessionIdle
+  src/renderer/pages/conversation/GroupedHistory/ConversationRow.tsx — Copy Chat Reference action
+  src/renderer/pages/conversation/GroupedHistory/hooks/useConversationActions.ts — Copy reference logic
+
+Done (on feat/cli-history-providers branch, not yet merged):
+  src/process/cli-history/types.ts              — SessionSourceProvider, SessionMetadata types
+  src/process/cli-history/index.ts              — Provider registry exports
+  src/process/cli-history/providers/base.ts     — BaseSessionSourceProvider abstract class
   src/process/cli-history/providers/claude.ts   — Claude Code CLI provider
   src/process/cli-history/providers/copilot.ts  — Copilot CLI provider
-  src/process/cli-history/providers/codex.ts    — Codex CLI provider
-  src/process/cli-history/converters/           — JSONL → TMessage converters (shared with Step 1)
-  src/process/cli-history/importer.ts           — Import + background conversion orchestrator
+  src/process/cli-history/converters/claude.ts  — Claude JSONL → TMessage converter
+  src/process/cli-history/converters/copilot.ts — Copilot JSONL → TMessage converter
 
-Modify:
-  src/common/config/storage.ts     — Add sourceFilePath to ACP extra type
-  src/renderer/pages/conversation/GroupedHistory/ConversationRow.tsx — Add Copy Chat Reference + source badge
-  src/renderer/pages/conversation/GroupedHistory/hooks/useConversationActions.ts — Add copy reference action
-  src/common/adapter/ipcBridge.ts  — Add IPC for CLI history import/sync
-  src/process/bridge/              — Add bridge for CLI history import
-  src/renderer/pages/settings/     — Add CLI history toggles to AgentCLI settings
+Not started:
+  src/process/cli-history/providers/codex.ts    — Codex CLI provider (planned)
+  src/process/cli-history/importer.ts           — Import + background conversion orchestrator
+  src/common/adapter/ipcBridge.ts               — Add IPC for CLI history import/sync
+  src/renderer/pages/settings/                  — Add CLI history toggles to AgentCLI settings
 ```
 
 ---
@@ -226,22 +229,32 @@ Modify:
 
 ## Priority
 
-1. **Copy Chat Reference (Step 0.5)** — Highest. Trivial, immediately useful. ~0.5 day.
-2. **CLI History Import** — High. The core feature. ~3-4 days (includes providers, importer, background conversion, settings UI).
-3. **Resume support** — Medium. Backend-by-backend validation. ~2-3 days.
-4. **Unified search (FTS5)** — Future. Nice to have once content is in SQLite. ~2-3 days.
+1. ~~**Copy Chat Reference (Step 0.5)**~~ — DONE. Merged to main.
+2. **Merge shared infra** — Next. Providers + converters for Claude/Copilot on `feat/cli-history-providers` branch need PR + merge.
+3. **CLI History Import** — High. The core feature. Needs: importer orchestrator, background conversion, settings UI, sidebar integration.
+4. **Resume support** — Medium. Backend-by-backend validation. ~2-3 days.
+5. **Unified search (FTS5)** — Future. Nice to have once content is in SQLite. ~2-3 days.
 
 ---
 
 ## Done Means
 
-### Step 0.5: Copy Chat Reference
+### Step 0.5: Copy Chat Reference (DONE — merged to main)
 
-- [ ] "Copy Chat Reference" action in conversation `...` menu
-- [ ] Copies correct file path for imported sessions (from `extra.sourceFilePath`)
-- [ ] Resolves JSONL path for ACP sessions via `acpSessionId` (Claude Code sessions)
-- [ ] Falls back to `aionui:{id} @ {dbPath}` for non-ACP native sessions
-- [ ] Agent can paste the reference and read the conversation using existing tools
+- [x] "Copy Chat Reference" action in conversation `...` menu
+- [x] Copies correct file path for imported sessions (from `extra.sourceFilePath`)
+- [x] Resolves JSONL path for ACP sessions via `acpSessionId` (Claude Code sessions)
+- [x] Falls back to `aionui:{id} @ {dbPath}` for non-ACP native sessions
+- [x] Agent can paste the reference and read the conversation using existing tools
+
+### Shared Infra (on `feat/cli-history-providers` branch — needs merge)
+
+- [x] Session source provider types and base class (`types.ts`, `providers/base.ts`)
+- [x] Claude Code provider — discovers sessions via `sessions-index.json`
+- [x] Copilot provider — discovers sessions via `session-store.db`
+- [x] Claude JSONL → TMessage converter (with tests)
+- [x] Copilot JSONL → TMessage converter (with tests)
+- [ ] ~Codex provider~ (deferred — not needed now)
 
 ### CLI History Import
 
