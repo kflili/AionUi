@@ -29,7 +29,7 @@ type CopilotJsonlEvent = {
   type: string;
   data: Record<string, unknown>;
   id: string;
-  timestamp: string;
+  timestamp?: string;
   parentId?: string | null;
 };
 

@@ -265,8 +265,10 @@ function processUserMessage(
         toolMessageIndex
       );
     } else if (typedBlock.type === 'text') {
-      // Text blocks in user arrays are typically interruption notices
-      messages.push(createTextMessage(typedBlock.text, 'right', convId, timestamp));
+      // Text blocks in user arrays are typically interruption notices (skip empty)
+      if (typedBlock.text.trim().length > 0) {
+        messages.push(createTextMessage(typedBlock.text, 'right', convId, timestamp));
+      }
     }
   }
 }
