@@ -6,7 +6,6 @@
 
 import { describe, expect, it, vi } from 'vitest';
 import { convertClaudeJsonl } from '@process/cli-history/converters/claude';
-import type { TMessage } from '@/common/chat/chatLib';
 
 // ---------------------------------------------------------------------------
 // Helpers

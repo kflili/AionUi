@@ -263,8 +263,8 @@ function processUserMessage(
     if (typedBlock.type === 'tool_result') {
       mergeToolResult(typedBlock.tool_use_id, typedBlock.content, typedBlock.is_error, messages, toolMessageIndex);
     } else if (typedBlock.type === 'text') {
-      // Text blocks in user arrays are typically interruption notices (skip empty)
-      if (typedBlock.text.trim().length > 0) {
+      // Text blocks in user arrays are typically interruption notices (skip empty/malformed)
+      if (typeof typedBlock.text === 'string' && typedBlock.text.trim().length > 0) {
         messages.push(createTextMessage(typedBlock.text, 'right', convId, timestamp));
       }
     }
