@@ -44,14 +44,17 @@ export class TerminalSessionManager {
     try {
       if (!fs.existsSync(this.pidFilePath)) return;
       const raw = fs.readFileSync(this.pidFilePath, 'utf-8');
-      const pids: number[] = JSON.parse(raw);
-      for (const pid of pids) {
+      const entries: Array<{ pid: number; startedAt: number }> = JSON.parse(raw);
+      for (const entry of entries) {
         try {
           // Check if process is still alive (signal 0 = test only)
-          process.kill(pid, 0);
-          // Process exists — kill it
-          process.kill(pid, 'SIGTERM');
-          console.log(`[TerminalSessionManager] Killed orphaned PTY process: ${pid}`);
+          process.kill(entry.pid, 0);
+          // Only kill if started less than 7 days ago (avoids PID reuse from stale files)
+          const ageMs = Date.now() - entry.startedAt;
+          if (ageMs < 7 * 24 * 60 * 60 * 1000) {
+            process.kill(entry.pid, 'SIGTERM');
+            console.log(`[TerminalSessionManager] Killed orphaned PTY process: ${entry.pid}`);
+          }
         } catch {
           // Process already dead — ignore
         }
@@ -178,8 +181,11 @@ export class TerminalSessionManager {
     try {
       const dir = path.dirname(this.pidFilePath);
       fs.mkdirSync(dir, { recursive: true });
-      const pids = Array.from(this.sessions.values()).map((s) => s.pid);
-      fs.writeFileSync(this.pidFilePath, JSON.stringify(pids));
+      const entries = Array.from(this.sessions.values()).map((s) => ({
+        pid: s.pid,
+        startedAt: Date.now(),
+      }));
+      fs.writeFileSync(this.pidFilePath, JSON.stringify(entries));
     } catch (err) {
       console.error('[TerminalSessionManager] Failed to save PIDs:', err);
     }
