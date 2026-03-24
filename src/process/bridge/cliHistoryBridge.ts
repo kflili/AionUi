@@ -10,6 +10,9 @@ import * as os from 'node:os';
 
 import { ipcBridge } from '@/common';
 import { getDataPath } from '@process/utils/utils';
+import { addMessage } from '@process/utils/message';
+import { convertClaudeJsonl } from '@process/cli-history/converters/claude';
+import { convertCopilotJsonl } from '@process/cli-history/converters/copilot';
 
 /**
  * Resolve a Claude Code session ID to its JSONL file path.
@@ -184,5 +187,43 @@ export function initCliHistoryBridge(): void {
 
   ipcBridge.cliHistory.getDbPath.provider(async () => {
     return path.join(getDataPath(), 'aionui.db');
+  });
+
+  ipcBridge.cliHistory.convertSessionToMessages.provider(async ({ conversationId, sessionId, backend }) => {
+    try {
+      // 1. Resolve JSONL file path
+      const filePath = await resolveSessionPath(sessionId, backend);
+      if (!filePath) {
+        return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };
+      }
+
+      // 2. Read JSONL file
+      const content = await fs.readFile(filePath, 'utf-8');
+      const lines = content.split('\n').filter(Boolean);
+      if (lines.length === 0) {
+        return { success: true, data: { count: 0 } };
+      }
+
+      // 3. Convert to TMessages using the appropriate converter
+      let messages;
+      switch (backend) {
+        case 'copilot':
+          messages = convertCopilotJsonl(lines, conversationId);
+          break;
+        case 'claude':
+        default:
+          messages = convertClaudeJsonl(lines, conversationId);
+          break;
+      }
+
+      // 4. Insert messages into the conversation's message store
+      for (const msg of messages) {
+        addMessage(conversationId, msg);
+      }
+
+      return { success: true, data: { count: messages.length } };
+    } catch (err) {
+      return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    }
   });
 }

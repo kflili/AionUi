@@ -189,14 +189,15 @@ const ChatConversation: React.FC<{
   const [currentMode, setCurrentMode] = useState<ConversationMode>('acp');
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
 
-  // Sync mode state when conversation changes (e.g., navigating between conversations)
+  // Sync mode state when conversation changes or SWR revalidates with fresh extra data
+  const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
   useEffect(() => {
     if (conversation?.type === 'acp') {
-      setCurrentMode((conversation.extra?.currentMode as ConversationMode) || 'acp');
+      setCurrentMode((persistedMode as ConversationMode) || 'acp');
     } else {
       setCurrentMode('acp');
     }
-  }, [conversation?.id, conversation?.type]);
+  }, [conversation?.id, conversation?.type, persistedMode]);
 
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
@@ -325,7 +326,12 @@ const ChatConversation: React.FC<{
     <div className='flex items-center gap-8px'>
       {conversation?.type === 'acp' && (
         <div className='shrink-0'>
-          <ModeToggle conversationId={conversation.id} currentMode={currentMode} onModeChange={setCurrentMode} />
+          <ModeToggle
+            conversationId={conversation.id}
+            currentMode={currentMode}
+            backend={conversation.extra?.backend || 'claude'}
+            onModeChange={setCurrentMode}
+          />
         </div>
       )}
       {conversation?.type === 'openclaw-gateway' && (

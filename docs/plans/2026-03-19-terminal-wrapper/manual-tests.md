@@ -17,9 +17,9 @@ Mark `[x]` when verified, add notes in the `Result` column if anything unexpecte
 
 | #   | Scenario                      | Steps                                                                                     | Expected                                                                                           | Result |
 | --- | ----------------------------- | ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------ |
-| 1.1 | ACP → Terminal                | Open an ACP conversation (Claude/Copilot). Click "Terminal" in the header toggle.         | PTY spawns, xterm.js renders with blinking cursor. Input box disappears — terminal IS the input.   | [ ]    |
-| 1.2 | Terminal → ACP                | While in terminal mode, click "Rich UI" in the header toggle.                             | PTY killed, ACP chat with message list and input box renders. Previous ACP messages still visible. | [ ]    |
-| 1.3 | Mode persisted                | Switch to terminal mode, navigate away (sidebar), navigate back to the same conversation. | Conversation is still in terminal mode.                                                            | [ ]    |
+| 1.1 | ACP → Terminal                | Open an ACP conversation (Claude/Copilot). Click "Terminal" in the header toggle.         | PTY spawns, xterm.js renders with blinking cursor. Input box disappears — terminal IS the input.   | [x]    |
+| 1.2 | Terminal → ACP                | While in terminal mode, click "Rich UI" in the header toggle.                             | PTY killed, ACP chat with message list and input box renders. Previous ACP messages still visible. | [x]    |
+| 1.3 | Mode persisted                | Switch to terminal mode, navigate away (sidebar), navigate back to the same conversation. | Conversation is still in terminal mode.                                                            | [x]    |
 | 1.4 | Mode persisted across restart | Switch to terminal mode, fully quit and relaunch the app, open same conversation.         | Conversation remembers terminal mode (new PTY spawns).                                             | [ ]    |
 | 1.5 | Rapid toggle                  | Click "Rich UI" / "Terminal" back and forth rapidly (~5 times in 2 seconds).              | No duplicate PTY processes, no blank screen, no JS errors in DevTools console.                     | [ ]    |
 | 1.6 | Toggle only on ACP            | Open a Gemini conversation.                                                               | No mode toggle visible in header — toggle only appears for ACP conversations.                      | [ ]    |
@@ -133,6 +133,6 @@ Mark `[x]` when verified, add notes in the `Result` column if anything unexpecte
 | All nice-to-have scenarios (8.x, 9.x, 10.x) pass | [ ]    |
 | **Ready for PR**                                 | [ ]    |
 
-**Tester:** ******\_\_\_******
-**Date:** ******\_\_\_******
+**Tester:** **\*\***\_\_\_**\*\***
+**Date:** **\*\***\_\_\_**\*\***
 **Notes:**

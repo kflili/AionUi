@@ -1075,4 +1075,9 @@ export const cliHistory = {
   ),
   /** Get the AionUI database file path for fallback references */
   getDbPath: bridge.buildProvider<string, void>('cli-history.get-db-path'),
+  /** Convert a CLI session's JSONL to TMessages and insert into the conversation's message store */
+  convertSessionToMessages: bridge.buildProvider<
+    IBridgeResponse<{ count: number }>,
+    { conversationId: string; sessionId: string; backend: string }
+  >('cli-history.convert-session-to-messages'),
 };

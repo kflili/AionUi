@@ -5,9 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import { ConfigStorage } from '@/common/config/storage';
 import type { AcpBackend } from '@/common/types/acpTypes';
-import React, { useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import TerminalComponent from './TerminalComponent';
 
 /** Build the CLI resume command and args for terminal mode. */
@@ -37,16 +36,42 @@ const TerminalChat: React.FC<{
   backend: AcpBackend;
   acpSessionId?: string;
   cliPath?: string;
-}> = ({ conversationId, workspace, backend, acpSessionId, cliPath }) => {
-  const { command, args } = useMemo(() => {
-    // Try to get stored CLI path from config if not provided
-    const resolvedCliPath = cliPath;
-    return getTerminalResumeCommand(backend, acpSessionId, resolvedCliPath);
-  }, [backend, acpSessionId, cliPath]);
+}> = ({ conversationId, workspace, backend, acpSessionId: propSessionId, cliPath }) => {
+  // Fetch the latest conversation from DB to get a fresh acpSessionId,
+  // since the prop may come from stale SWR cache
+  const [resolved, setResolved] = useState<{ command: string; args: string[] } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const resolve = async () => {
+      // Fetch fresh conversation data to get the latest acpSessionId
+      const fresh = await ipcBridge.conversation.get.invoke({ id: conversationId }).catch((): null => null);
+      if (cancelled) return;
+
+      const freshExtra = fresh?.type === 'acp' ? fresh.extra : undefined;
+      const sessionId = freshExtra?.acpSessionId || propSessionId;
+      const resolvedCliPath = freshExtra?.cliPath || cliPath;
+
+      setResolved(getTerminalResumeCommand(backend, sessionId, resolvedCliPath));
+    };
+
+    resolve();
+    return () => {
+      cancelled = true;
+    };
+  }, [conversationId, backend, propSessionId, cliPath]);
+
+  if (!resolved) return null;
 
   return (
     <div className='flex-1 flex flex-col min-h-0 bg-[#1e1e1e]'>
-      <TerminalComponent conversationId={conversationId} command={command} args={args} cwd={workspace} />
+      <TerminalComponent
+        conversationId={conversationId}
+        command={resolved.command}
+        args={resolved.args}
+        cwd={workspace}
+      />
     </div>
   );
 };
