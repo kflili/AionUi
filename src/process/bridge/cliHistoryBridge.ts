@@ -9,6 +9,7 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 import { ipcBridge } from '@/common';
+import { ConfigStorage } from '@/common/config/storage';
 import { getDataPath } from '@process/utils/utils';
 import { getDatabase } from '@process/services/database/export';
 import { convertClaudeJsonl } from '@process/cli-history/converters/claude';
@@ -189,42 +190,56 @@ export function initCliHistoryBridge(): void {
     return path.join(getDataPath(), 'aionui.db');
   });
 
-  ipcBridge.cliHistory.convertSessionToMessages.provider(async ({ conversationId, sessionId, backend }) => {
-    try {
-      // Only claude and copilot converters are currently implemented
-      if (backend !== 'claude' && backend !== 'copilot') {
-        return { success: false, msg: `JSONL conversion not supported for backend: ${backend}` };
+  ipcBridge.cliHistory.convertSessionToMessages.provider(
+    async ({ conversationId, sessionId, backend, terminalSwitchedAt }) => {
+      try {
+        // Only claude and copilot converters are currently implemented
+        if (backend !== 'claude' && backend !== 'copilot') {
+          return { success: false, msg: `JSONL conversion not supported for backend: ${backend}` };
+        }
+
+        // 1. Resolve JSONL file path
+        const filePath = await resolveSessionPath(sessionId, backend);
+        if (!filePath) {
+          return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };
+        }
+
+        // 2. Read JSONL file
+        const content = await fs.readFile(filePath, 'utf-8');
+        const lines = content.split('\n').filter(Boolean);
+        if (lines.length === 0) {
+          return { success: true, data: { count: 0 } };
+        }
+
+        // 3. Read showThinking preference
+        const agentCliConfig = await ConfigStorage.get('agentCli.config');
+        const showThinking = agentCliConfig?.showThinking ?? false;
+        const converterOptions = { showThinking };
+
+        // 4. Convert to TMessages using the appropriate converter
+        const allMessages =
+          backend === 'copilot'
+            ? convertCopilotJsonl(lines, conversationId, converterOptions)
+            : convertClaudeJsonl(lines, conversationId, converterOptions);
+
+        // 5. Only insert messages from the terminal session period.
+        // terminalSwitchedAt marks when the user switched to terminal mode —
+        // only import messages newer than this boundary to avoid duplicating
+        // ACP-rendered messages.
+        const db = getDatabase();
+
+        let inserted = 0;
+        for (const msg of allMessages) {
+          if ((msg.createdAt ?? 0) > terminalSwitchedAt) {
+            db.insertMessage(msg);
+            inserted++;
+          }
+        }
+
+        return { success: true, data: { count: inserted } };
+      } catch (err) {
+        return { success: false, msg: err instanceof Error ? err.message : String(err) };
       }
-
-      // 1. Resolve JSONL file path
-      const filePath = await resolveSessionPath(sessionId, backend);
-      if (!filePath) {
-        return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };
-      }
-
-      // 2. Read JSONL file
-      const content = await fs.readFile(filePath, 'utf-8');
-      const lines = content.split('\n').filter(Boolean);
-      if (lines.length === 0) {
-        return { success: true, data: { count: 0 } };
-      }
-
-      // 3. Convert to TMessages using the appropriate converter
-      const messages =
-        backend === 'copilot' ? convertCopilotJsonl(lines, conversationId) : convertClaudeJsonl(lines, conversationId);
-
-      // 4. Delete existing messages and insert fresh ones (synchronous DB ops)
-      // This prevents duplicates on repeated toggles and ensures messages
-      // are fully written before returning success.
-      const db = getDatabase();
-      db.deleteConversationMessages(conversationId);
-      for (const msg of messages) {
-        db.insertMessage(msg);
-      }
-
-      return { success: true, data: { count: messages.length } };
-    } catch (err) {
-      return { success: false, msg: err instanceof Error ? err.message : String(err) };
     }
-  });
+  );
 }

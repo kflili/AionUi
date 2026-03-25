@@ -667,6 +667,9 @@
     "shell": "Shell",
     "shellDesc": "Override the default shell (auto-detected if empty)",
     "fontSize": "Font Size",
+    "showThinking": "Show Thinking",
+    "showThinkingDesc": "Display AI reasoning steps when converting terminal history to Rich UI",
+    "modeTooltip": "Rich UI shows full message history with modern interface. Terminal provides native CLI experience — history display follows CLI behavior.",
     "note": "You can switch modes anytime using the toggle in the chat header."
   }
 }

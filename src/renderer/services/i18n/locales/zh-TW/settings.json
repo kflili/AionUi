@@ -669,6 +669,9 @@
     "shell": "Shell",
     "shellDesc": "覆蓋預設 Shell（留空則自動偵測）",
     "fontSize": "字體大小",
+    "showThinking": "顯示思維過程",
+    "showThinkingDesc": "將終端歷史轉換為富文本時顯示 AI 推理步驟",
+    "modeTooltip": "富文本顯示完整聊天記錄和現代介面。終端提供原生 CLI 體驗，歷史顯示取決於 CLI 行為。",
     "note": "你可以隨時透過聊天標頭的切換按鈕更改模式。"
   }
 }

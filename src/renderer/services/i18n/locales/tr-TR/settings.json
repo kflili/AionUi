@@ -667,6 +667,9 @@
     "shell": "Kabuk",
     "shellDesc": "Varsayılan kabuğu geçersiz kıl (boş bırakırsanız otomatik algılanır)",
     "fontSize": "Yazı Tipi Boyutu",
+    "showThinking": "Düşünce Sürecini Göster",
+    "showThinkingDesc": "Terminal geçmişini Zengin UI'ye dönüştürürken AI akıl yürütme adımlarını göster",
+    "modeTooltip": "Zengin UI, tam mesaj geçmişi ve modern arayüz sunar. Terminal, yerel CLI deneyimi sağlar — geçmiş görüntüleme CLI davranışına uyar.",
     "note": "Sohbet başlığındaki düğmeyi kullanarak istediğiniz zaman mod değiştirebilirsiniz."
   }
 }

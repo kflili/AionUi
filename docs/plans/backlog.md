@@ -23,3 +23,17 @@ Automatically convert CLI JSONL to TMessages after each CLI response completes w
 - Filesystem watch on the JSONL file (detect write bursts settling)
 
 **Fallback (currently implemented):** On-demand conversion when user toggles Terminal → Rich UI.
+
+---
+
+### CLI `--resume` may skip middle conversation turns
+
+**Source:** Manual testing of terminal wrapper mode
+**Status:** Known limitation — not our bug
+**Priority:** Awareness only
+
+Claude Code CLI's `--resume` reconstructs conversation context in memory and may selectively display messages. In testing, middle-session turns were skipped in the terminal display (confirmed via GitHub issues [#14472](https://github.com/anthropics/claude-code/issues/14472), [#15837](https://github.com/anthropics/claude-code/issues/15837)). The model still "remembers" the full context — only the terminal display is affected.
+
+**Impact:** When switching Rich UI → Terminal → Rich UI → Terminal, the terminal may not show all previous turns from earlier terminal sessions. Rich UI always shows the full history from SQLite.
+
+**Mitigation (implemented):** Mode toggle tooltip explains this behavioral difference to users.

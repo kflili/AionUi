@@ -134,6 +134,8 @@ export interface IConfigStorageRefer {
     defaultMode?: 'acp' | 'terminal';
     /** Terminal font size / 终端字体大小 */
     fontSize?: number;
+    /** Show thinking blocks when converting JSONL to Rich UI / 转换时显示思维过程 */
+    showThinking?: boolean;
   };
 }
 
@@ -232,6 +234,8 @@ export type TChatConversation =
           isHealthCheck?: boolean;
           /** Current transport mode: 'acp' (rich UI) or 'terminal' (xterm.js PTY) */
           currentMode?: 'acp' | 'terminal';
+          /** Timestamp (ms) when user last switched to terminal mode — used as JSONL import boundary */
+          terminalSwitchedAt?: number;
         }
       >,
       'model'

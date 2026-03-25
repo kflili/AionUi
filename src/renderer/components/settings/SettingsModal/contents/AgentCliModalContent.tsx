@@ -7,13 +7,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfigStorage } from '@/common/config/storage';
-import { InputNumber, Radio } from '@arco-design/web-react';
+import { InputNumber, Radio, Switch } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
 
 type AgentCliConfig = {
   defaultMode?: 'acp' | 'terminal';
   fontSize?: number;
+  showThinking?: boolean;
 };
 
 const PreferenceRow: React.FC<{
@@ -74,6 +75,14 @@ const AgentCliModalContent: React.FC = () => {
                   <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
                   <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
                 </Radio.Group>
+              </PreferenceRow>
+
+              {/* Show Thinking */}
+              <PreferenceRow
+                label={t('settings.terminalWrapper.showThinking')}
+                description={t('settings.terminalWrapper.showThinkingDesc')}
+              >
+                <Switch checked={config.showThinking ?? false} onChange={(val) => saveConfig({ showThinking: val })} />
               </PreferenceRow>
 
               {/* Font Size */}
