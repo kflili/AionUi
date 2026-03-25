@@ -25,7 +25,10 @@ const ModeToggle: React.FC<{
       if (mode === currentMode) return;
 
       if (currentMode === 'terminal' && mode === 'acp') {
-        // Switching Terminal → Rich UI: convert JSONL to TMessages
+        // Kill the PTY process (transport switch — not just navigation)
+        await ipcBridge.pty.kill.invoke({ conversationId }).catch((): null => null);
+
+        // Convert JSONL to TMessages
         const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId }).catch((): null => null);
         const extra = conversation?.type === 'acp' ? conversation.extra : undefined;
         const sessionId = extra?.acpSessionId;

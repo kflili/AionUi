@@ -121,7 +121,22 @@ const TerminalComponent: React.FC<{
         });
         resizeObserver.observe(containerRef.current);
 
-        // Spawn PTY process
+        // Try to reattach to an existing session first (user navigated back)
+        const reattachResult = await ipcBridge.pty.reattach.invoke({ conversationId });
+        if (disposed) return;
+
+        if (reattachResult?.success && reattachResult.data?.exists) {
+          // Session exists — replay buffered output
+          if (reattachResult.data.buffer) {
+            terminal.write(reattachResult.data.buffer);
+          }
+          // Resize to current dimensions
+          handleResize();
+          terminal.focus();
+          return;
+        }
+
+        // No existing session — spawn a new PTY
         const result = await ipcBridge.pty.spawn.invoke({
           conversationId,
           command,
@@ -155,7 +170,8 @@ const TerminalComponent: React.FC<{
       resizeObserver?.disconnect();
       if (terminal) {
         terminal.dispose();
-        ipcBridge.pty.kill.invoke({ conversationId });
+        // Detach instead of kill — PTY keeps running in background
+        ipcBridge.pty.detach.invoke({ conversationId });
       }
       terminalRef.current = null;
       fitAddonRef.current = null;

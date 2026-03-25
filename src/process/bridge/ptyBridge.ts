@@ -46,4 +46,16 @@ export function initPtyBridge(): void {
     console.log(`${TAG} kill result: conv=${conversationId}, ok=${ok}`);
     return ok ? { success: true } : { success: false, msg: 'No active terminal session' };
   });
+
+  ipcBridge.pty.detach.provider(async ({ conversationId }) => {
+    console.log(`${TAG} detach: conv=${conversationId}`);
+    const ok = manager.detach(conversationId);
+    return ok ? { success: true } : { success: false, msg: 'No active terminal session' };
+  });
+
+  ipcBridge.pty.reattach.provider(async ({ conversationId }) => {
+    console.log(`${TAG} reattach: conv=${conversationId}`);
+    const result = manager.reattach(conversationId);
+    return { success: true, data: result };
+  });
 }

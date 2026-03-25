@@ -13,6 +13,9 @@ import { getSystemDir } from '@process/utils/initStorage';
 
 const TAG = '[TerminalSessionManager]';
 
+/** Max buffer size in bytes when detached (~100KB) */
+const MAX_BUFFER_BYTES = 100 * 1024;
+
 /** Strip ANSI escape sequences from terminal output for plain-text transcripts. */
 function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
@@ -27,11 +30,9 @@ function stripAnsi(text: string): string {
  */
 function killProcessTree(pid: number): void {
   try {
-    // Kill the process group (negative PID targets the group)
     process.kill(-pid, 'SIGTERM');
     console.log(`${TAG} Killed process group for PID ${pid}`);
   } catch {
-    // Process group kill failed — try individual process
     try {
       process.kill(pid, 'SIGTERM');
       console.log(`${TAG} Killed individual PID ${pid} (group kill failed)`);
@@ -47,12 +48,22 @@ interface TerminalSession {
   pid: number;
   transcriptPath: string;
   transcriptStream: fs.WriteStream;
+  /** Whether the renderer is currently listening (false = navigated away) */
+  attached: boolean;
+  /** Buffered output while renderer is detached */
+  outputBuffer: string[];
+  /** Current buffer size in bytes (for cap enforcement) */
+  outputBufferBytes: number;
 }
 
 /**
  * Manages PTY terminal sessions in the main process.
  * Separate from BaseAgentManager — PTY needs resize events, raw I/O,
  * and shell exit detection which ForkTask does not provide.
+ *
+ * Sessions persist when the user navigates away (detach) and resume
+ * when they navigate back (reattach). The PTY is only killed when
+ * the user explicitly switches to Rich UI mode or deletes the conversation.
  */
 export class TerminalSessionManager {
   private sessions = new Map<string, TerminalSession>();
@@ -71,22 +82,19 @@ export class TerminalSessionManager {
       const entries: Array<{ pid: number; startedAt: number }> = JSON.parse(raw);
       for (const entry of entries) {
         try {
-          // Check if process is still alive (signal 0 = test only)
           process.kill(entry.pid, 0);
-          // Only kill if started less than 7 days ago (avoids PID reuse from stale files)
           const ageMs = Date.now() - entry.startedAt;
           if (ageMs < 7 * 24 * 60 * 60 * 1000) {
             killProcessTree(entry.pid);
             console.log(`${TAG} Killed orphaned PTY process: ${entry.pid}`);
           }
         } catch {
-          // Process already dead — ignore
+          // Process already dead
         }
       }
     } catch (err) {
       console.error(`${TAG} Failed to cleanup orphans:`, err);
     } finally {
-      // Clear PID file
       this.savePids();
     }
   }
@@ -102,7 +110,6 @@ export class TerminalSessionManager {
   }): { pid: number } {
     const { conversationId, command, args, cwd, cols = 80, rows = 24 } = params;
 
-    // Kill existing session for this conversation
     if (this.sessions.has(conversationId)) {
       console.log(`${TAG} Killing existing session before respawn: ${conversationId}`);
       this.kill(conversationId);
@@ -119,7 +126,6 @@ export class TerminalSessionManager {
       env: process.env as Record<string, string>,
     });
 
-    // Set up transcript
     const transcriptDir = this.getTranscriptDir();
     fs.mkdirSync(transcriptDir, { recursive: true });
     const transcriptPath = path.join(transcriptDir, `${conversationId}.txt`);
@@ -131,16 +137,32 @@ export class TerminalSessionManager {
       pid: ptyProcess.pid,
       transcriptPath,
       transcriptStream,
+      attached: true,
+      outputBuffer: [],
+      outputBufferBytes: 0,
     };
 
     this.sessions.set(conversationId, session);
     this.savePids();
     console.log(`${TAG} PTY spawned: conv=${conversationId}, pid=${ptyProcess.pid}`);
 
-    // Stream output to renderer and transcript
+    // Stream output — emit to renderer when attached, buffer when detached
     ptyProcess.onData((data: string) => {
-      ipcBridge.pty.output.emit({ conversationId, data });
-      // Append stripped output to transcript
+      if (session.attached) {
+        ipcBridge.pty.output.emit({ conversationId, data });
+      } else {
+        // Buffer output while detached (cap at MAX_BUFFER_BYTES)
+        if (session.outputBufferBytes < MAX_BUFFER_BYTES) {
+          session.outputBuffer.push(data);
+          session.outputBufferBytes += data.length;
+        }
+        // If over cap, drop oldest entries to make room
+        while (session.outputBufferBytes > MAX_BUFFER_BYTES && session.outputBuffer.length > 1) {
+          const removed = session.outputBuffer.shift()!;
+          session.outputBufferBytes -= removed.length;
+        }
+      }
+      // Always write to transcript
       const clean = stripAnsi(data);
       if (clean) {
         transcriptStream.write(clean);
@@ -156,6 +178,40 @@ export class TerminalSessionManager {
     });
 
     return { pid: ptyProcess.pid };
+  }
+
+  /**
+   * Detach the renderer from a session (user navigated away).
+   * PTY keeps running, output is buffered.
+   */
+  detach(conversationId: string): boolean {
+    const session = this.sessions.get(conversationId);
+    if (!session) {
+      console.log(`${TAG} Detach: no session found for ${conversationId}`);
+      return false;
+    }
+    session.attached = false;
+    console.log(`${TAG} Detached: conv=${conversationId}, pid=${session.pid}`);
+    return true;
+  }
+
+  /**
+   * Reattach the renderer to a session (user navigated back).
+   * Returns buffered output accumulated while detached.
+   */
+  reattach(conversationId: string): { exists: boolean; buffer: string } {
+    const session = this.sessions.get(conversationId);
+    if (!session) {
+      console.log(`${TAG} Reattach: no session found for ${conversationId}`);
+      return { exists: false, buffer: '' };
+    }
+    // Flush buffer
+    const buffer = session.outputBuffer.join('');
+    session.outputBuffer = [];
+    session.outputBufferBytes = 0;
+    session.attached = true;
+    console.log(`${TAG} Reattached: conv=${conversationId}, pid=${session.pid}, buffered=${buffer.length} chars`);
+    return { exists: true, buffer };
   }
 
   /** Write data to PTY stdin. */
@@ -183,12 +239,10 @@ export class TerminalSessionManager {
     }
     console.log(`${TAG} Killing PTY: conv=${conversationId}, pid=${session.pid}`);
     try {
-      // Kill the PTY process via node-pty
       session.process.kill();
     } catch {
       // Process may have already exited
     }
-    // Also kill the process tree to catch child processes (e.g., claude --resume)
     killProcessTree(session.pid);
     this.cleanupSession(conversationId);
     return true;
