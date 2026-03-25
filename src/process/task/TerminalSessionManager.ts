@@ -11,10 +11,34 @@ import * as os from 'node:os';
 import { ipcBridge } from '@/common';
 import { getSystemDir } from '@process/utils/initStorage';
 
+const TAG = '[TerminalSessionManager]';
+
 /** Strip ANSI escape sequences from terminal output for plain-text transcripts. */
 function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
   return text.replace(/\x1b\[[0-9;]*[a-zA-Z]|\x1b\].*?(\x07|\x1b\\)|\x1b[()][AB012]|\x1b[>=<]|\x1b\x37|\x1b\x38/g, '');
+}
+
+/**
+ * Kill a process and its entire process group.
+ * node-pty's kill() only sends SIGTERM to the PTY process, not to child
+ * processes (e.g., `claude --resume`). We need to kill the process group
+ * to prevent orphaned CLI processes.
+ */
+function killProcessTree(pid: number): void {
+  try {
+    // Kill the process group (negative PID targets the group)
+    process.kill(-pid, 'SIGTERM');
+    console.log(`${TAG} Killed process group for PID ${pid}`);
+  } catch {
+    // Process group kill failed — try individual process
+    try {
+      process.kill(pid, 'SIGTERM');
+      console.log(`${TAG} Killed individual PID ${pid} (group kill failed)`);
+    } catch {
+      // Process already dead
+    }
+  }
 }
 
 interface TerminalSession {
@@ -52,15 +76,15 @@ export class TerminalSessionManager {
           // Only kill if started less than 7 days ago (avoids PID reuse from stale files)
           const ageMs = Date.now() - entry.startedAt;
           if (ageMs < 7 * 24 * 60 * 60 * 1000) {
-            process.kill(entry.pid, 'SIGTERM');
-            console.log(`[TerminalSessionManager] Killed orphaned PTY process: ${entry.pid}`);
+            killProcessTree(entry.pid);
+            console.log(`${TAG} Killed orphaned PTY process: ${entry.pid}`);
           }
         } catch {
           // Process already dead — ignore
         }
       }
     } catch (err) {
-      console.error('[TerminalSessionManager] Failed to cleanup orphans:', err);
+      console.error(`${TAG} Failed to cleanup orphans:`, err);
     } finally {
       // Clear PID file
       this.savePids();
@@ -80,10 +104,13 @@ export class TerminalSessionManager {
 
     // Kill existing session for this conversation
     if (this.sessions.has(conversationId)) {
+      console.log(`${TAG} Killing existing session before respawn: ${conversationId}`);
       this.kill(conversationId);
     }
 
     const shell = command || this.getDefaultShell();
+    console.log(`${TAG} Spawning PTY: conv=${conversationId}, cmd=${shell}, args=${JSON.stringify(args)}, cwd=${cwd}`);
+
     const ptyProcess = pty.spawn(shell, args, {
       name: 'xterm-256color',
       cols,
@@ -108,6 +135,7 @@ export class TerminalSessionManager {
 
     this.sessions.set(conversationId, session);
     this.savePids();
+    console.log(`${TAG} PTY spawned: conv=${conversationId}, pid=${ptyProcess.pid}`);
 
     // Stream output to renderer and transcript
     ptyProcess.onData((data: string) => {
@@ -120,6 +148,9 @@ export class TerminalSessionManager {
     });
 
     ptyProcess.onExit(({ exitCode, signal }) => {
+      console.log(
+        `${TAG} PTY exited: conv=${conversationId}, pid=${ptyProcess.pid}, code=${exitCode}, signal=${signal}`
+      );
       ipcBridge.pty.exit.emit({ conversationId, exitCode, signal });
       this.cleanupSession(conversationId);
     });
@@ -146,12 +177,19 @@ export class TerminalSessionManager {
   /** Kill PTY process for a conversation. */
   kill(conversationId: string): boolean {
     const session = this.sessions.get(conversationId);
-    if (!session) return false;
+    if (!session) {
+      console.log(`${TAG} Kill requested but no session found: ${conversationId}`);
+      return false;
+    }
+    console.log(`${TAG} Killing PTY: conv=${conversationId}, pid=${session.pid}`);
     try {
+      // Kill the PTY process via node-pty
       session.process.kill();
     } catch {
       // Process may have already exited
     }
+    // Also kill the process tree to catch child processes (e.g., claude --resume)
+    killProcessTree(session.pid);
     this.cleanupSession(conversationId);
     return true;
   }
@@ -163,6 +201,7 @@ export class TerminalSessionManager {
 
   /** Kill all sessions (for app shutdown). */
   killAll(): void {
+    console.log(`${TAG} Killing all sessions (${this.sessions.size} active)`);
     for (const conversationId of this.sessions.keys()) {
       this.kill(conversationId);
     }
@@ -174,6 +213,7 @@ export class TerminalSessionManager {
       session.transcriptStream.end();
       this.sessions.delete(conversationId);
       this.savePids();
+      console.log(`${TAG} Session cleaned up: ${conversationId}`);
     }
   }
 
@@ -187,7 +227,7 @@ export class TerminalSessionManager {
       }));
       fs.writeFileSync(this.pidFilePath, JSON.stringify(entries));
     } catch (err) {
-      console.error('[TerminalSessionManager] Failed to save PIDs:', err);
+      console.error(`${TAG} Failed to save PIDs:`, err);
     }
   }
 

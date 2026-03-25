@@ -62,15 +62,17 @@ const ModeToggle: React.FC<{
 
   return (
     <Tooltip position='bottom' content={t('settings.terminalWrapper.modeTooltip')}>
-      <Radio.Group
-        type='button'
-        size='mini'
-        value={currentMode}
-        onChange={(val) => handleToggle(val as ConversationMode)}
-      >
-        <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
-        <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
-      </Radio.Group>
+      <span>
+        <Radio.Group
+          type='button'
+          size='mini'
+          value={currentMode}
+          onChange={(val) => handleToggle(val as ConversationMode)}
+        >
+          <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
+          <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
+        </Radio.Group>
+      </span>
     </Tooltip>
   );
 };
