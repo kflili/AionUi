@@ -231,8 +231,10 @@ export function initCliHistoryBridge(): void {
         let inserted = 0;
         for (const msg of allMessages) {
           if ((msg.createdAt ?? 0) > terminalSwitchedAt) {
-            db.insertMessage(msg);
-            inserted++;
+            const result = db.insertMessage(msg);
+            if (result?.success !== false) {
+              inserted++;
+            }
           }
         }
 
