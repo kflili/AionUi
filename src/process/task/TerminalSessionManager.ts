@@ -54,6 +54,8 @@ interface TerminalSession {
   outputBuffer: string[];
   /** Current buffer size in bytes (for cap enforcement) */
   outputBufferBytes: number;
+  /** Whether the PTY process has exited (session preserved for buffer replay) */
+  exited: boolean;
 }
 
 /**
@@ -140,6 +142,7 @@ export class TerminalSessionManager {
       attached: true,
       outputBuffer: [],
       outputBufferBytes: 0,
+      exited: false,
     };
 
     this.sessions.set(conversationId, session);
@@ -173,8 +176,17 @@ export class TerminalSessionManager {
       console.log(
         `${TAG} PTY exited: conv=${conversationId}, pid=${ptyProcess.pid}, code=${exitCode}, signal=${signal}`
       );
-      ipcBridge.pty.exit.emit({ conversationId, exitCode, signal });
-      this.cleanupSession(conversationId);
+      if (session.attached) {
+        // Renderer is listening — emit exit and clean up immediately
+        ipcBridge.pty.exit.emit({ conversationId, exitCode, signal });
+        this.cleanupSession(conversationId);
+      } else {
+        // Detached — preserve session so reattach can replay buffer + exit message
+        session.outputBuffer.push(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
+        session.exited = true;
+        session.transcriptStream.end();
+        console.log(`${TAG} PTY exited while detached, preserving buffer: conv=${conversationId}`);
+      }
     });
 
     return { pid: ptyProcess.pid };
@@ -199,19 +211,30 @@ export class TerminalSessionManager {
    * Reattach the renderer to a session (user navigated back).
    * Returns buffered output accumulated while detached.
    */
-  reattach(conversationId: string): { exists: boolean; buffer: string } {
+  reattach(conversationId: string): { exists: boolean; buffer: string; exited: boolean } {
     const session = this.sessions.get(conversationId);
     if (!session) {
       console.log(`${TAG} Reattach: no session found for ${conversationId}`);
-      return { exists: false, buffer: '' };
+      return { exists: false, buffer: '', exited: false };
     }
     // Flush buffer
     const buffer = session.outputBuffer.join('');
+    const exited = session.exited;
     session.outputBuffer = [];
     session.outputBufferBytes = 0;
     session.attached = true;
-    console.log(`${TAG} Reattached: conv=${conversationId}, pid=${session.pid}, buffered=${buffer.length} chars`);
-    return { exists: true, buffer };
+    console.log(
+      `${TAG} Reattached: conv=${conversationId}, pid=${session.pid}, buffered=${buffer.length} chars, exited=${exited}`
+    );
+
+    // If the PTY exited while detached, clean up now that buffer has been flushed
+    if (exited) {
+      this.sessions.delete(conversationId);
+      this.savePids();
+      console.log(`${TAG} Cleaned up exited-while-detached session: ${conversationId}`);
+    }
+
+    return { exists: true, buffer, exited };
   }
 
   /** Write data to PTY stdin. */

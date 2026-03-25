@@ -1064,9 +1064,10 @@ export const pty = {
   /** Detach renderer from PTY session (PTY keeps running, output buffered) */
   detach: bridge.buildProvider<IBridgeResponse, { conversationId: string }>('pty.detach'),
   /** Reattach renderer to PTY session (returns buffered output) */
-  reattach: bridge.buildProvider<IBridgeResponse<{ exists: boolean; buffer: string }>, { conversationId: string }>(
-    'pty.reattach'
-  ),
+  reattach: bridge.buildProvider<
+    IBridgeResponse<{ exists: boolean; buffer: string; exited: boolean }>,
+    { conversationId: string }
+  >('pty.reattach'),
   /** PTY stdout/stderr data output (streamed to renderer) */
   output: bridge.buildEmitter<{ conversationId: string; data: string }>('pty.output'),
   /** PTY process exited */
