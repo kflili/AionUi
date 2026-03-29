@@ -313,6 +313,7 @@ export class TerminalSessionManager {
   /** Evict the oldest detached session if at capacity. */
   private evictIfNeeded(): void {
     const maxSessions = this.maxSessions;
+    console.log(`${TAG} evictIfNeeded: sessions=${this.sessions.size}, max=${maxSessions}`);
     if (this.sessions.size < maxSessions) return;
 
     // Find the oldest detached session (by detachedAt)
@@ -347,6 +348,9 @@ export class TerminalSessionManager {
 
   /** Update max sessions from an externally-read config value. */
   setMaxSessions(value: number): void {
+    if (value !== this.maxSessions) {
+      console.log(`${TAG} maxSessions updated: ${this.maxSessions} → ${value}`);
+    }
     this.maxSessions = value;
   }
 

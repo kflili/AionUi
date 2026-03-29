@@ -5,10 +5,20 @@
  */
 
 import { ipcBridge } from '@/common';
-import { ConfigStorage } from '@/common/config/storage';
 import { getTerminalSessionManager } from '@process/task/TerminalSessionManager';
+import { ProcessConfig } from '@process/utils/initStorage';
 
 const TAG = '[ptyBridge]';
+
+/** Read max terminal sessions from ProcessConfig (direct file read, no IPC). */
+async function readMaxSessions(): Promise<number> {
+  try {
+    const config = await ProcessConfig.get('agentCli.config');
+    return config?.maxTerminalSessions ?? 10;
+  } catch {
+    return 10;
+  }
+}
 
 export function initPtyBridge(): void {
   const manager = getTerminalSessionManager();
@@ -16,19 +26,14 @@ export function initPtyBridge(): void {
   // Clean up orphaned PTY processes from previous crashes
   manager.cleanupOrphans();
 
-  // Load max session limit from config (non-blocking).
-  // Re-read on every spawn via a pre-cached value to avoid blocking the spawn path.
-  ConfigStorage.get('agentCli.config')
-    .then((config) => manager.setMaxSessions(config?.maxTerminalSessions ?? 10))
-    .catch(() => {});
+  // Load max session limit at init
+  readMaxSessions().then((max) => manager.setMaxSessions(max));
 
   ipcBridge.pty.spawn.provider(async ({ conversationId, command, args, cwd, cols, rows }) => {
     console.log(`${TAG} spawn: conv=${conversationId}, cmd=${command}, args=${JSON.stringify(args)}`);
     try {
-      // Refresh max sessions (non-blocking for current spawn, applies to next eviction check)
-      ConfigStorage.get('agentCli.config')
-        .then((config) => manager.setMaxSessions(config?.maxTerminalSessions ?? 10))
-        .catch(() => {});
+      // Read config before spawn (direct file read, safe to await)
+      manager.setMaxSessions(await readMaxSessions());
       const result = manager.spawn({ conversationId, command, args, cwd, cols, rows });
       console.log(`${TAG} spawn success: conv=${conversationId}, pid=${result.pid}`);
       return { success: true, data: { pid: result.pid } };
