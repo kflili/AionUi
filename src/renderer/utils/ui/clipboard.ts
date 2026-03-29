@@ -62,12 +62,25 @@ function restoreFocus(element: HTMLElement | null): void {
   }
 }
 
+/** Labels for the copy fallback modal — callers should pass i18n-translated strings */
+type CopyFallbackLabels = {
+  prompt?: string;
+  close?: string;
+};
+
 /**
  * Show a modal with selectable text so the user can long-press to copy on mobile.
  * Uses plain DOM to avoid React dependency in this utility.
+ * Pass translated labels via `labels` param to support i18n.
  */
-function showCopyFallbackModal(text: string): void {
+function showCopyFallbackModal(text: string, labels?: CopyFallbackLabels): void {
+  const promptText = labels?.prompt || 'Long-press to select and copy:';
+  const closeText = labels?.close || 'Close';
+
   const overlay = document.createElement('div');
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', promptText);
   Object.assign(overlay.style, {
     position: 'fixed',
     inset: '0',
@@ -93,7 +106,7 @@ function showCopyFallbackModal(text: string): void {
   });
 
   const label = document.createElement('div');
-  label.textContent = 'Long-press to select and copy:';
+  label.textContent = promptText;
   Object.assign(label.style, {
     fontSize: '14px',
     color: 'var(--color-text-2, #333)',
@@ -120,7 +133,7 @@ function showCopyFallbackModal(text: string): void {
   });
 
   const closeBtn = document.createElement('button');
-  closeBtn.textContent = 'Close';
+  closeBtn.textContent = closeText;
   Object.assign(closeBtn.style, {
     alignSelf: 'flex-end',
     padding: '6px 16px',
@@ -133,15 +146,21 @@ function showCopyFallbackModal(text: string): void {
   });
 
   const close = () => {
+    document.removeEventListener('keydown', handleKeydown);
     if (document.body.contains(overlay)) {
       document.body.removeChild(overlay);
     }
+  };
+
+  const handleKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') close();
   };
 
   closeBtn.addEventListener('click', close);
   overlay.addEventListener('click', (e) => {
     if (e.target === overlay) close();
   });
+  document.addEventListener('keydown', handleKeydown);
 
   card.appendChild(label);
   card.appendChild(textEl);

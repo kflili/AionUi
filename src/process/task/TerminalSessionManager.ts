@@ -18,6 +18,9 @@ const TAG = '[TerminalSessionManager]';
 /** Max scrollback buffer size in bytes (~100KB) */
 const MAX_BUFFER_BYTES = 100 * 1024;
 
+/** Max age for orphaned PTY processes — older processes are left alone to avoid killing unrelated PIDs */
+const ORPHAN_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
+
 /** Strip ANSI escape sequences from terminal output for plain-text transcripts. */
 function stripAnsi(text: string): string {
   // eslint-disable-next-line no-control-regex
@@ -94,7 +97,7 @@ export class TerminalSessionManager {
         try {
           process.kill(entry.pid, 0);
           const ageMs = Date.now() - entry.startedAt;
-          if (ageMs < 7 * 24 * 60 * 60 * 1000) {
+          if (ageMs < ORPHAN_MAX_AGE_MS) {
             killProcessTree(entry.pid);
             console.log(`${TAG} Killed orphaned PTY process: ${entry.pid}`);
           }

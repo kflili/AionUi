@@ -677,7 +677,7 @@
     "startInRichUi": "以富文本模式开始",
     "maxSessions": "最大活跃会话数",
     "maxSessionsDesc": "最大并发终端会话数。达到上限时自动关闭最旧的空闲会话。",
-    "sessionEvicted": "已关闭一个空闲终端��话（上限：{{max}}���。你可以在终端设置中增加上限。",
+    "sessionEvicted": "已关闭一个空闲终端会话（上限：{{max}}）。你可以在终端设置中增加上限。",
     "switchModeFailed": "切换模式失败"
   }
 }
