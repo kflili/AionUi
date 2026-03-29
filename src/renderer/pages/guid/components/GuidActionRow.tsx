@@ -252,17 +252,33 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
       {showTerminalToggle && (
         <span className='shrink-0 inline-flex items-center gap-6px'>
           <span
+            role='button'
+            tabIndex={0}
             className='text-13px cursor-pointer select-none'
             style={{ color: !terminalMode ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
             onClick={() => onTerminalModeChange(false)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onTerminalModeChange(false);
+              }
+            }}
           >
             {t('settings.terminalWrapper.richUI')}
           </span>
           <Switch size='small' checked={terminalMode} onChange={(checked) => onTerminalModeChange(checked)} />
           <span
+            role='button'
+            tabIndex={0}
             className='text-13px cursor-pointer select-none'
             style={{ color: terminalMode ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
             onClick={() => onTerminalModeChange(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                onTerminalModeChange(true);
+              }
+            }}
           >
             {t('settings.terminalWrapper.terminal')}
           </span>

@@ -142,7 +142,7 @@ export class TerminalSessionManager {
       cols,
       rows,
       cwd: cwd || os.homedir(),
-      env: process.env as Record<string, string>,
+      env: Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] != null)),
     });
 
     const transcriptDir = this.getTranscriptDir();

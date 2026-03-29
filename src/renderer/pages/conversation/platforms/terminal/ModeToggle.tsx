@@ -91,9 +91,17 @@ const ModeToggle: React.FC<{
     <Tooltip position='bottom' content={t('settings.terminalWrapper.modeTooltip')} disabled={isMobile}>
       <span className='inline-flex items-center gap-6px'>
         <span
+          role='button'
+          tabIndex={0}
           className='text-13px cursor-pointer select-none'
           style={{ color: currentMode === 'acp' ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
           onClick={() => handleToggle('acp')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggle('acp');
+            }
+          }}
         >
           {t('settings.terminalWrapper.richUI')}
         </span>
@@ -103,9 +111,17 @@ const ModeToggle: React.FC<{
           onChange={(checked) => handleToggle(checked ? 'terminal' : 'acp')}
         />
         <span
+          role='button'
+          tabIndex={0}
           className='text-13px cursor-pointer select-none'
           style={{ color: currentMode === 'terminal' ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
           onClick={() => handleToggle('terminal')}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              handleToggle('terminal');
+            }
+          }}
         >
           {t('settings.terminalWrapper.terminal')}
         </span>

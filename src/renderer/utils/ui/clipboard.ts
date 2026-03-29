@@ -16,8 +16,9 @@ export class CopyFallbackShown extends Error {
  * Copy text to clipboard with fallback for non-secure contexts (e.g. WebUI over HTTP).
  * Uses navigator.clipboard when available, otherwise falls back to document.execCommand('copy').
  * On mobile insecure contexts where both fail, shows text in a selectable prompt.
+ * Pass `fallbackLabels` for i18n support in the fallback modal.
  */
-export const copyText = async (text: string): Promise<void> => {
+export const copyText = async (text: string, fallbackLabels?: CopyFallbackLabels): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
     throw new Error('copyText requires a browser environment');
   }
@@ -46,7 +47,7 @@ export const copyText = async (text: string): Promise<void> => {
     // execCommand failed (common on mobile) — show selectable text prompt
     document.body.removeChild(textArea);
     restoreFocus(previousActiveElement);
-    showCopyFallbackModal(text);
+    showCopyFallbackModal(text, fallbackLabels);
     throw new CopyFallbackShown();
   } finally {
     if (document.body.contains(textArea)) {
@@ -76,6 +77,7 @@ type CopyFallbackLabels = {
 function showCopyFallbackModal(text: string, labels?: CopyFallbackLabels): void {
   const promptText = labels?.prompt || 'Long-press to select and copy:';
   const closeText = labels?.close || 'Close';
+  const previousFocus = document.activeElement as HTMLElement | null;
 
   const overlay = document.createElement('div');
   overlay.setAttribute('role', 'dialog');
@@ -150,6 +152,7 @@ function showCopyFallbackModal(text: string, labels?: CopyFallbackLabels): void 
     if (document.body.contains(overlay)) {
       document.body.removeChild(overlay);
     }
+    previousFocus?.focus();
   };
 
   const handleKeydown = (e: KeyboardEvent) => {
