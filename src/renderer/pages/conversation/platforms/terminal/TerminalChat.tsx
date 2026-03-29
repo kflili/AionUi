@@ -65,7 +65,7 @@ const TerminalChat: React.FC<{
   if (!resolved) return null;
 
   return (
-    <div className='flex-1 flex flex-col min-h-0' style={{ backgroundColor: 'var(--terminal-bg, #1e1e1e)' }}>
+    <div className='flex-1 flex flex-col min-h-0' style={{ backgroundColor: 'var(--terminal-bg)' }}>
       <TerminalComponent
         conversationId={conversationId}
         command={resolved.command}

@@ -38,6 +38,9 @@ vi.mock('../../src/common', () => ({
       responseStream: { on: vi.fn() },
       turnCompleted: { on: vi.fn() },
     },
+    pty: {
+      unreadOutput: { on: vi.fn() },
+    },
   },
 }));
 

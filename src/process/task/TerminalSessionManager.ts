@@ -47,7 +47,7 @@ function killProcessTree(pid: number): void {
   }
 }
 
-interface TerminalSession {
+type TerminalSession = {
   process: pty.IPty;
   conversationId: string;
   pid: number;
@@ -67,7 +67,7 @@ interface TerminalSession {
   hasUnreadOutput: boolean;
   /** Whether the PTY process has exited (session preserved for buffer replay) */
   exited: boolean;
-}
+};
 
 /**
  * Manages PTY terminal sessions in the main process.
@@ -199,6 +199,11 @@ export class TerminalSessionManager {
       console.log(
         `${TAG} PTY exited: conv=${conversationId}, pid=${ptyProcess.pid}, code=${exitCode}, signal=${signal}`
       );
+      // Guard: if this session was replaced by a respawn, ignore the stale exit event
+      if (this.sessions.get(conversationId) !== session) {
+        console.log(`${TAG} Ignoring stale onExit for replaced session: conv=${conversationId}`);
+        return;
+      }
       if (session.attached) {
         // Renderer is listening — emit exit and clean up immediately
         ipcBridge.pty.exit.emit({ conversationId, exitCode, signal });
@@ -364,7 +369,9 @@ export class TerminalSessionManager {
         session.hasUnreadOutput = false;
         ipcBridge.pty.unreadOutput.emit({ conversationId, hasUnread: false });
       }
-      session.transcriptStream.end();
+      if (!session.exited) {
+        session.transcriptStream.end();
+      }
       this.sessions.delete(conversationId);
       this.savePids();
       console.log(`${TAG} Session cleaned up: ${conversationId}`);
