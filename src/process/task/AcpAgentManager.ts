@@ -208,6 +208,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         if (legacyYoloMode && this.currentMode === 'default' && !data.sessionMode) {
           const yoloModeValues: Record<string, string> = {
             claude: 'bypassPermissions',
+            copilot: 'https://agentclientprotocol.com/protocol/session-modes#autopilot',
             qwen: 'yolo',
             iflow: 'yolo',
             codex: 'yolo',
@@ -946,7 +947,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
 
   /** Check if a mode value represents YOLO mode for any backend */
   private isYoloMode(mode: string): boolean {
-    return mode === 'yolo' || mode === 'bypassPermissions';
+    return mode === 'yolo' || mode === 'bypassPermissions' || mode.endsWith('#autopilot');
   }
 
   /**
