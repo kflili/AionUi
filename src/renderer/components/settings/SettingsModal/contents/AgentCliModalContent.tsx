@@ -7,7 +7,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfigStorage } from '@/common/config/storage';
-import { InputNumber, Radio, Switch } from '@arco-design/web-react';
+import { InputNumber, Switch } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
 
@@ -67,15 +67,30 @@ const AgentCliModalContent: React.FC = () => {
                 label={t('settings.terminalWrapper.defaultMode')}
                 description={t('settings.terminalWrapper.defaultModeDesc')}
               >
-                <Radio.Group
-                  type='button'
-                  size='small'
-                  value={config.defaultMode || 'acp'}
-                  onChange={(val) => saveConfig({ defaultMode: val })}
-                >
-                  <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
-                  <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
-                </Radio.Group>
+                <span className='inline-flex items-center gap-8px'>
+                  <span
+                    className='text-14px cursor-pointer select-none'
+                    style={{
+                      color: config.defaultMode !== 'terminal' ? 'rgb(var(--primary-6))' : 'var(--color-text-3)',
+                    }}
+                    onClick={() => saveConfig({ defaultMode: 'acp' })}
+                  >
+                    {t('settings.terminalWrapper.richUI')}
+                  </span>
+                  <Switch
+                    checked={config.defaultMode === 'terminal'}
+                    onChange={(checked) => saveConfig({ defaultMode: checked ? 'terminal' : 'acp' })}
+                  />
+                  <span
+                    className='text-14px cursor-pointer select-none'
+                    style={{
+                      color: config.defaultMode === 'terminal' ? 'rgb(var(--primary-6))' : 'var(--color-text-3)',
+                    }}
+                    onClick={() => saveConfig({ defaultMode: 'terminal' })}
+                  >
+                    {t('settings.terminalWrapper.terminal')}
+                  </span>
+                </span>
               </PreferenceRow>
 
               {/* Show Thinking */}

@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { ConversationMode } from '@/common/config/storage';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
-import { Message, Radio, Tooltip } from '@arco-design/web-react';
+import { Message, Switch, Tooltip } from '@arco-design/web-react';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mutate } from 'swr';
@@ -89,16 +89,26 @@ const ModeToggle: React.FC<{
 
   return (
     <Tooltip position='bottom' content={t('settings.terminalWrapper.modeTooltip')} disabled={isMobile}>
-      <span>
-        <Radio.Group
-          type='button'
-          size='mini'
-          value={currentMode}
-          onChange={(val) => handleToggle(val as ConversationMode)}
+      <span className='inline-flex items-center gap-6px'>
+        <span
+          className='text-13px cursor-pointer select-none'
+          style={{ color: currentMode === 'acp' ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
+          onClick={() => handleToggle('acp')}
         >
-          <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
-          <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
-        </Radio.Group>
+          {t('settings.terminalWrapper.richUI')}
+        </span>
+        <Switch
+          size='small'
+          checked={currentMode === 'terminal'}
+          onChange={(checked) => handleToggle(checked ? 'terminal' : 'acp')}
+        />
+        <span
+          className='text-13px cursor-pointer select-none'
+          style={{ color: currentMode === 'terminal' ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
+          onClick={() => handleToggle('terminal')}
+        >
+          {t('settings.terminalWrapper.terminal')}
+        </span>
       </span>
     </Tooltip>
   );
