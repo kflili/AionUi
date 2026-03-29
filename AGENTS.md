@@ -9,6 +9,7 @@ bun start
 ```
 
 Launches:
+
 - Native Electron window on Mac (local UI)
 - WebUI server with remote access (Tailscale HTTPS)
 
@@ -16,9 +17,9 @@ Remote access is enabled via `AIONUI_ALLOW_REMOTE=true` in `~/.zshrc`.
 
 ### Access URLs
 
-| Mode | Port | Local | Remote (Tailscale) |
-|------|------|-------|-------------------|
-| Dev (`bun start`) | 25809 | `http://localhost:25809` | `https://your-mac.ts.net:25809` |
+| Mode                | Port  | Local                    | Remote (Tailscale)              |
+| ------------------- | ----- | ------------------------ | ------------------------------- |
+| Dev (`bun start`)   | 25809 | `http://localhost:25809` | `https://your-mac.ts.net:25809` |
 | Prod (packaged app) | 25808 | `http://localhost:25808` | `https://your-mac.ts.net:25808` |
 
 ### Production
