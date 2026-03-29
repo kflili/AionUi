@@ -300,7 +300,9 @@ const GuidPage: React.FC = () => {
   return (
     <ConfigProvider getPopupContainer={() => guidContainerRef.current || document.body}>
       <div ref={guidContainerRef} className={styles.guidContainer}>
-        <SkillsMarketBanner />
+        <div className={styles.skillsBanner}>
+          <SkillsMarketBanner />
+        </div>
         <div className={styles.guidLayout}>
           <p className='text-2xl font-semibold mb-6 text-0 text-center'>{t('conversation.welcome.title')}</p>
 

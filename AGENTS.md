@@ -1,5 +1,59 @@
 # AionUi - Project Guide
 
+## Development: Launch for Local + Remote Access
+
+### Quick Start
+
+```bash
+bun start
+```
+
+Launches:
+- Native Electron window on Mac (local UI)
+- WebUI server with remote access (Tailscale HTTPS)
+
+Remote access is enabled via `AIONUI_ALLOW_REMOTE=true` in `~/.zshrc`.
+
+### Access URLs
+
+| Mode | Port | Local | Remote (Tailscale) |
+|------|------|-------|-------------------|
+| Dev (`bun start`) | 25809 | `http://localhost:25809` | `https://your-mac.ts.net:25809` |
+| Prod (packaged app) | 25808 | `http://localhost:25808` | `https://your-mac.ts.net:25808` |
+
+### Production
+
+```bash
+bun build                  # builds packaged app to out/mac/AionUi.app
+open out/mac/AionUi.app    # launch the built app
+```
+
+### Troubleshooting: Wrong Port
+
+Port is determined by `WEBUI_DEFAULT_PORT` in `src/common/config/constants.ts` (25809 dev, 25808 prod).
+If the wrong port is used, a stale `webui.desktop.port` may be saved in ProcessConfig
+(`~/Library/Application Support/AionUi/config/aionui-config.txt`, base64+URL-encoded JSON).
+Clear it with:
+
+```python
+python3 -c "
+import base64, json; from urllib.parse import unquote, quote
+fp = '$HOME/Library/Application Support/AionUi/config/aionui-config.txt'
+with open(fp) as f: raw = f.read()
+d = json.loads(unquote(base64.b64decode(raw).decode()))
+d.pop('webui.desktop.port', None)
+with open(fp, 'w') as f: f.write(base64.b64encode(quote(json.dumps(d)).encode()).decode())
+"
+```
+
+Then restart the app. The correct default port will be used.
+
+### Other Scenarios
+
+See `package.json` for headless server mode, extension dev, testing, etc.
+
+---
+
 ## Code Conventions
 
 ### File & Directory Structure

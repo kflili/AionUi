@@ -1,6 +1,7 @@
 # Terminal Wrapper Mode — Iteration 2 Fixes
 
 **Date:** 2026-03-25
+**Status:** Implemented
 **Branch:** `feat/terminal-wrapper-mode`
 **Parent plan:** [plan.md](./plan.md)
 
@@ -77,11 +78,11 @@ Manual testing revealed issues with the Terminal → Rich UI JSONL conversion an
 
 ## Done means
 
-- [ ] Switching ACP → Terminal → ACP no longer duplicates messages
-- [ ] Thinking blocks don't appear as raw `<details>` HTML in Rich UI
-- [ ] "Show Thinking" toggle in Terminal settings controls thinking visibility
-- [ ] Hovering on mode toggle shows tooltip explaining the difference
-- [ ] All 6 languages have new i18n keys
-- [ ] `bunx tsc --noEmit` passes
-- [ ] `bun run test` passes
-- [ ] `i18n-keys.d.ts` regenerated
+- [x] Switching ACP → Terminal → ACP no longer duplicates messages
+- [x] Thinking blocks don't appear as raw `<details>` HTML in Rich UI
+- [x] "Show Thinking" toggle in Terminal settings controls thinking visibility
+- [x] Hovering on mode toggle shows tooltip explaining the difference
+- [x] All 6 languages have new i18n keys
+- [x] `bunx tsc --noEmit` passes
+- [x] `bun run test` passes
+- [x] `i18n-keys.d.ts` regenerated

@@ -7,7 +7,7 @@
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
 import { emitter } from '@/renderer/utils/emitter';
-import { copyText } from '@/renderer/utils/ui/clipboard';
+import { copyText, CopyFallbackShown } from '@/renderer/utils/ui/clipboard';
 import { blockMobileInputFocus, blurActiveElement } from '@/renderer/utils/ui/focus';
 import { Message, Modal } from '@arco-design/web-react';
 import { useCallback, useEffect, useState } from 'react';
@@ -274,7 +274,8 @@ export const useConversationActions = ({
         .then(() => {
           Message.success(t('conversation.history.copyReferenceSuccess'));
         })
-        .catch(() => {
+        .catch((err: unknown) => {
+          if (err instanceof CopyFallbackShown) return;
           Message.error(t('common.copyFailed'));
         });
     },

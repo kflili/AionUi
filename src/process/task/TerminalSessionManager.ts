@@ -110,7 +110,10 @@ export class TerminalSessionManager {
     cols?: number;
     rows?: number;
   }): { pid: number } {
-    const { conversationId, command, args, cwd, cols = 80, rows = 24 } = params;
+    const { conversationId, command, args, cwd, cols: rawCols = 80, rows: rawRows = 24 } = params;
+    // Clamp to minimum 1 — prevents 0x0 PTY from mobile layout timing issues
+    const cols = Math.max(rawCols, 1);
+    const rows = Math.max(rawRows, 1);
 
     if (this.sessions.has(conversationId)) {
       console.log(`${TAG} Killing existing session before respawn: ${conversationId}`);

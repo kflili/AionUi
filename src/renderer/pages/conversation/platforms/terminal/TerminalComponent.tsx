@@ -12,6 +12,15 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 
+/** Detect touch device (mobile/tablet) to skip WebGL and handle layout timing */
+const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
+/** Ensure dimensions are at least 1 to prevent 0x0 PTY spawn on mobile */
+const clampDimensions = (cols: number, rows: number): { cols: number; rows: number } => ({
+  cols: Math.max(cols, 1),
+  rows: Math.max(rows, 1),
+});
+
 const TerminalComponent: React.FC<{
   conversationId: string;
   command: string;
@@ -29,11 +38,8 @@ const TerminalComponent: React.FC<{
 
     try {
       fitAddon.fit();
-      ipcBridge.pty.resize.invoke({
-        conversationId,
-        cols: terminal.cols,
-        rows: terminal.rows,
-      });
+      const { cols, rows } = clampDimensions(terminal.cols, terminal.rows);
+      ipcBridge.pty.resize.invoke({ conversationId, cols, rows });
     } catch {
       // Ignore resize errors during teardown
     }
@@ -78,16 +84,24 @@ const TerminalComponent: React.FC<{
 
         terminal.open(containerRef.current);
 
-        // Try loading WebGL addon for better performance
-        try {
-          const webglAddon = new WebglAddon();
-          webglAddon.onContextLoss(() => {
-            webglAddon.dispose();
-          });
-          terminal.loadAddon(webglAddon);
-        } catch {
-          // WebGL not available, canvas renderer will be used
+        // Skip WebGL on touch devices (mobile/tablet over remote HTTP)
+        // to avoid rendering failures; canvas renderer is sufficient
+        if (!isTouchDevice()) {
+          try {
+            const webglAddon = new WebglAddon();
+            webglAddon.onContextLoss(() => {
+              webglAddon.dispose();
+            });
+            terminal.loadAddon(webglAddon);
+          } catch {
+            // WebGL not available, canvas renderer will be used
+          }
         }
+
+        // Wait a frame for layout to stabilize before fitting
+        // (prevents 0x0 dimensions on mobile where layout isn't ready yet)
+        await new Promise<void>((r) => requestAnimationFrame(() => r()));
+        if (disposed || !containerRef.current) return;
 
         fitAddon.fit();
 
@@ -137,13 +151,14 @@ const TerminalComponent: React.FC<{
         }
 
         // No existing session — spawn a new PTY
+        const dims = clampDimensions(terminal.cols, terminal.rows);
         const result = await ipcBridge.pty.spawn.invoke({
           conversationId,
           command,
           args,
           cwd,
-          cols: terminal.cols,
-          rows: terminal.rows,
+          cols: dims.cols,
+          rows: dims.rows,
         });
 
         if (disposed) return;

@@ -35,6 +35,9 @@ export function initWebAdapter(wss: WebSocketServer): void {
   // Setup WebSocket message handler to forward messages to bridge emitter
   wsManager.setupConnectionHandler((name, data, _ws) => {
     const emitter = getBridgeEmitter();
+    if (name.includes('pty')) {
+      console.log(`[WebAdapter] PTY message received: name=${name}, emitter=${!!emitter}`);
+    }
     if (emitter) {
       emitter.emit(name, data);
     }
