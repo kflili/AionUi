@@ -18,7 +18,7 @@ export function initPtyBridge(): void {
   ipcBridge.pty.spawn.provider(async ({ conversationId, command, args, cwd, cols, rows }) => {
     console.log(`${TAG} spawn: conv=${conversationId}, cmd=${command}, args=${JSON.stringify(args)}`);
     try {
-      const result = manager.spawn({ conversationId, command, args, cwd, cols, rows });
+      const result = await manager.spawn({ conversationId, command, args, cwd, cols, rows });
       console.log(`${TAG} spawn success: conv=${conversationId}, pid=${result.pid}`);
       return { success: true, data: { pid: result.pid } };
     } catch (err) {

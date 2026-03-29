@@ -112,14 +112,14 @@ export class TerminalSessionManager {
   }
 
   /** Spawn a PTY process for a conversation. Async to read config for session limit. */
-  spawn(params: {
+  async spawn(params: {
     conversationId: string;
     command: string;
     args: string[];
     cwd?: string;
     cols?: number;
     rows?: number;
-  }): { pid: number } {
+  }): Promise<{ pid: number }> {
     const { conversationId, command, args, cwd, cols: rawCols = 80, rows: rawRows = 24 } = params;
     // Clamp to minimum 1 — prevents 0x0 PTY from mobile layout timing issues
     const cols = Math.max(rawCols, 1);
@@ -131,9 +131,7 @@ export class TerminalSessionManager {
     }
 
     // LRU eviction: if at capacity, kill the oldest detached session
-    // (refreshMaxSessions is fire-and-forget — uses cached value for this call,
-    // updates for next call if config changed)
-    this.refreshMaxSessions();
+    await this.refreshMaxSessions();
     this.evictIfNeeded();
 
     const shell = command || this.getDefaultShell();
@@ -351,14 +349,13 @@ export class TerminalSessionManager {
   private maxSessions = DEFAULT_MAX_SESSIONS;
 
   /** Refresh max sessions from config. Call before eviction check. */
-  refreshMaxSessions(): void {
-    ConfigStorage.get('agentCli.config')
-      .then((config) => {
-        this.maxSessions = config?.maxTerminalSessions ?? DEFAULT_MAX_SESSIONS;
-      })
-      .catch(() => {
-        // Use default on error
-      });
+  async refreshMaxSessions(): Promise<void> {
+    try {
+      const config = await ConfigStorage.get('agentCli.config');
+      this.maxSessions = config?.maxTerminalSessions ?? DEFAULT_MAX_SESSIONS;
+    } catch {
+      // Use default on error
+    }
   }
 
   private cleanupSession(conversationId: string): void {
