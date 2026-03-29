@@ -190,6 +190,15 @@ const initializeConversationListSyncStore = () => {
     clearGenerating(event.sessionId);
     refreshConversations();
   });
+
+  // PTY unread output — show blue dot when terminal output arrives while user is on another chat
+  ipcBridge.pty.unreadOutput.on((event) => {
+    if (event.hasUnread) {
+      markCompletionUnread(event.conversationId);
+    } else {
+      clearCompletionUnreadState(event.conversationId);
+    }
+  });
 };
 
 export const useConversationListSync = () => {

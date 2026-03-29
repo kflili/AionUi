@@ -62,6 +62,8 @@ interface TerminalSession {
   scrollbackBuffer: string[];
   /** Current scrollback buffer size in bytes */
   scrollbackBufferBytes: number;
+  /** Whether there is unread output (produced while detached, not yet seen by user) */
+  hasUnreadOutput: boolean;
   /** Whether the PTY process has exited (session preserved for buffer replay) */
   exited: boolean;
 }
@@ -158,6 +160,7 @@ export class TerminalSessionManager {
       outputBufferBytes: 0,
       scrollbackBuffer: [],
       scrollbackBufferBytes: 0,
+      hasUnreadOutput: false,
       exited: false,
     };
 
@@ -179,6 +182,11 @@ export class TerminalSessionManager {
       if (session.attached) {
         ipcBridge.pty.output.emit({ conversationId, data });
       } else {
+        // Mark as having unread output (emit only on first change)
+        if (!session.hasUnreadOutput) {
+          session.hasUnreadOutput = true;
+          ipcBridge.pty.unreadOutput.emit({ conversationId, hasUnread: true });
+        }
         // Buffer output while detached (cap at MAX_BUFFER_BYTES)
         if (session.outputBufferBytes < MAX_BUFFER_BYTES) {
           session.outputBuffer.push(data);
@@ -249,6 +257,10 @@ export class TerminalSessionManager {
     session.outputBuffer = [];
     session.outputBufferBytes = 0;
     session.attached = true;
+    if (session.hasUnreadOutput) {
+      session.hasUnreadOutput = false;
+      ipcBridge.pty.unreadOutput.emit({ conversationId, hasUnread: false });
+    }
     console.log(
       `${TAG} Reattached: conv=${conversationId}, pid=${session.pid}, scrollback=${buffer.length} chars, exited=${exited}`
     );

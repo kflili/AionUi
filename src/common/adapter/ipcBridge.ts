@@ -1074,6 +1074,8 @@ export const pty = {
   exit: bridge.buildEmitter<{ conversationId: string; exitCode: number; signal?: number }>('pty.exit'),
   /** PTY session evicted due to max session limit */
   sessionEvicted: bridge.buildEmitter<{ conversationId: string; maxSessions: number }>('pty.sessionEvicted'),
+  /** PTY session has unread output (produced while user was on another chat) */
+  unreadOutput: bridge.buildEmitter<{ conversationId: string; hasUnread: boolean }>('pty.unreadOutput'),
 };
 
 // CLI history utilities
