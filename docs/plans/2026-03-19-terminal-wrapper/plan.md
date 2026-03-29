@@ -1,6 +1,6 @@
 # Terminal Wrapper Mode (xterm.js)
 
-**Date:** 2026-03-19 (updated 2026-03-21)
+**Date:** 2026-03-19 (updated 2026-03-24)
 **Status:** Draft — research complete, no implementation yet
 
 ---
@@ -107,15 +107,12 @@ When switching Terminal → Rich UI, the content area needs to show conversation
 
 ### Implementation
 
-```typescript
-// ~400-600 lines per CLI format (includes error handling, streaming state reconstruction, tool_result merging)
-function jsonlToTMessages(lines: string[]): TMessage[] {
-  // Parse JSONL lines → extract user/assistant/tool messages
-  // Map Anthropic API blocks to AionUI TMessage types
-  // Merge tool_result into preceding tool_use
-  // Return ordered TMessage[] array
-}
-```
+Converters for Claude Code and Copilot **already exist** at `src/process/cli-history/converters/`:
+
+- `claude.ts` — Claude Code JSONL → TMessage[] (handles `tool_use`/`tool_result` merging, thinking blocks, `server_tool_use`)
+- `copilot.ts` — Copilot JSONL event envelope → TMessage[] (handles `session.*` event filtering, `toolRequest`/`toolConfirmation` merging)
+
+These were built for Step 2 (CLI History Import). For terminal toggle, they can be **reused directly** — the input is the same JSONL format regardless of whether the session ran through ACP or PTY. Review them for any gaps (e.g., edge cases specific to live terminal sessions vs imported history) but no from-scratch implementation is needed.
 
 ### Performance: background pre-conversion
 
@@ -147,7 +144,7 @@ This converter is shared infrastructure — needed by:
 - **Step 2 CLI History Integration**: convert imported CLI sessions to TMessages
 - **Step 3 Knowledge Consolidation**: parse JSONL for extraction pipeline
 
-Each CLI needs its own converter (Claude Code, Copilot, Codex have slightly different JSONL schemas), but these live in the shared Session Source Provider from the plan index.
+Claude Code and Copilot converters already exist at `src/process/cli-history/converters/`. Codex will need its own converter when Codex support is added. All converters live in the shared Session Source Provider from the plan index.
 
 ### Rendering quality
 
@@ -191,11 +188,14 @@ Why separate from `BaseAgentManager`: PTY needs resize events, raw I/O, shell ex
 
 ## Dependencies
 
-| Package            | Status                                                      | Notes                             |
-| ------------------ | ----------------------------------------------------------- | --------------------------------- |
-| `node-pty`         | Already in tree (optional dep of `@office-ai/aioncli-core`) | Promote to direct dependency      |
-| `@xterm/xterm`     | **Not installed**                                           | Terminal renderer for the browser |
-| `@xterm/addon-fit` | **Not installed**                                           | Auto-resize terminal to container |
+| Package              | Status            | Notes                                                                                       |
+| -------------------- | ----------------- | ------------------------------------------------------------------------------------------- |
+| `node-pty`           | **Not installed** | Native Node addon for PTY — requires `electron-rebuild` or prebuild binaries for Electron   |
+| `@xterm/xterm`       | **Not installed** | Terminal renderer for the browser (v5+)                                                     |
+| `@xterm/addon-fit`   | **Not installed** | Auto-resize terminal to container                                                           |
+| `@xterm/addon-webgl` | **Not installed** | WebGL renderer for xterm.js — recommended for smooth scrolling and large output performance |
+
+> **Note on `node-pty`:** This is a native C++ addon that must be compiled against Electron's Node ABI. Use `electron-rebuild` (or `@electron/rebuild`) in the postinstall step to ensure the binary matches the Electron version. Test on macOS, Linux, and Windows before merging — native compilation is the most common source of CI/platform failures.
 
 ---
 
@@ -328,12 +328,13 @@ Add an **AgentCLI** tab to Settings (alongside Model, Agent, Tools, etc.). Route
    - Spawns CLI via `node-pty` with `--resume {sessionId}`
    - Manages PTY lifecycle (start, resize, stop)
    - IPC bridge for stdin/stdout between renderer and main process
+   - **Orphan cleanup:** on app launch, scan for PTY child processes from previous sessions (track PIDs in a `{data dir}/terminal-pids.json` file; on startup, check if PIDs are still alive and kill stale ones). Remove PID entries on clean shutdown.
 
-3. **`src/process/cli-history/converters/`** (~400-600 lines per CLI)
-   - `claude.ts` — Claude Code JSONL → TMessage[]
-   - `copilot.ts` — Copilot JSONL → TMessage[]
+3. **`src/process/cli-history/converters/`** (already exists — review, not create)
+   - `claude.ts` — already implemented, Claude Code JSONL → TMessage[]
+   - `copilot.ts` — already implemented, Copilot JSONL event envelope → TMessage[]
+   - Review for terminal-toggle-specific edge cases; extend if needed
    - Shared with Step 2 (CLI History Import) and Step 3 (Knowledge Consolidation)
-   - Complexity drivers: tool_result merging into preceding tool_use, streaming state reconstruction, error handling for malformed JSONL lines, AcpAdapter streaming merge logic reproduction
 
 4. **Wire-in changes** (~50-80 lines across existing files)
    - `src/common/config/storage.ts` — add `currentMode` to ACP extra type

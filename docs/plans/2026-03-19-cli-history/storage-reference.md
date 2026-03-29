@@ -271,7 +271,7 @@ Main Process                              Renderer
 
 ACP pushes the structuring work to the CLI itself. The desktop app doesn't need to parse terminal output (fragile) or implement a proprietary protocol (vendor lock-in). The CLI says "here's a tool call, here's the result, here's my response" in a machine-readable format. The UI just renders it.
 
-The trade-off: the CLI must support ACP. Not all CLIs do (yet). That's why the terminal wrapper mode (Approach 3) is proposed as an option in AionUI for CLIs that don't support ACP — see `2026-03-19-terminal-wrapper-mode.md`.
+The trade-off: the CLI must support ACP. Not all CLIs do (yet). That's why the terminal wrapper mode (Approach 3) is proposed as an option in AionUI for CLIs that don't support ACP — see `../2026-03-19-terminal-wrapper/plan.md`.
 
 ---
 

@@ -615,6 +615,14 @@ app.on('before-quit', async () => {
   // 在应用退出前清理工作进程
   workerTaskManager.clear();
 
+  // Kill all terminal PTY sessions
+  try {
+    const { getTerminalSessionManager } = await import('@process/task/TerminalSessionManager');
+    getTerminalSessionManager().killAll();
+  } catch (error) {
+    console.error('[App] Failed to kill terminal sessions:', error);
+  }
+
   // Shutdown Channel subsystem
   try {
     const { getChannelManager } = await import('@process/channels');

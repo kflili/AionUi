@@ -5,15 +5,17 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
+import type { ConversationMode, IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
+import { ConfigStorage } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
 import { CronJobManager } from '@/renderer/pages/cron';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
+import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
 import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
-import { History } from '@icon-park/react';
-import React, { useCallback, useMemo } from 'react';
+import { Brain, History } from '@icon-park/react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import useSWR from 'swr';
@@ -25,12 +27,13 @@ import CodexChat from '../platforms/codex/CodexChat';
 import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
 import GeminiChat from '../platforms/gemini/GeminiChat';
+import TerminalChat from '../platforms/terminal/TerminalChat';
+import ModeToggle from '../platforms/terminal/ModeToggle';
 import AcpModelSelector from '@/renderer/components/agent/AcpModelSelector';
 import GeminiModelSelector from '../platforms/gemini/GeminiModelSelector';
 import { useGeminiModelSelection } from '../platforms/gemini/useGeminiModelSelection';
 import { usePreviewContext } from '../Preview';
 import StarOfficeMonitorCard from '../platforms/openclaw/StarOfficeMonitorCard.tsx';
-// import SkillRuleGenerator from './components/SkillRuleGenerator'; // Temporarily hidden
 
 const _AssociatedConversation: React.FC<{ conversation_id: string }> = ({ conversation_id }) => {
   const { data } = useSWR(['getAssociateConversation', conversation_id], () =>
@@ -178,12 +181,60 @@ const ChatConversation: React.FC<{
 }> = ({ conversation }) => {
   const { t } = useTranslation();
   const { openPreview } = usePreviewContext();
+  const layout = useLayoutContext();
+  const isMobile = layout?.isMobile ?? false;
   const workspaceEnabled = Boolean(conversation?.extra?.workspace);
 
   const isGeminiConversation = conversation?.type === 'gemini';
 
+  // Terminal mode state — only for ACP conversations
+  const [currentMode, setCurrentMode] = useState<ConversationMode>('acp');
+  const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
+
+  // Show Thinking toggle — global setting, quick-access from header
+  const [showThinking, setShowThinking] = useState(false);
+  useEffect(() => {
+    ConfigStorage.get('agentCli.config').then((config) => {
+      setShowThinking(config?.showThinking ?? false);
+    });
+  }, []);
+  const handleToggleThinking = useCallback(() => {
+    setShowThinking((prev) => {
+      const next = !prev;
+      ConfigStorage.get('agentCli.config').then((config) => {
+        ConfigStorage.set('agentCli.config', { ...config, showThinking: next });
+      });
+      return next;
+    });
+  }, []);
+
+  // Sync mode state when conversation changes or SWR revalidates with fresh extra data
+  const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
+  useEffect(() => {
+    if (conversation?.type === 'acp') {
+      setCurrentMode((persistedMode as ConversationMode) || 'acp');
+    } else {
+      setCurrentMode('acp');
+    }
+  }, [conversation?.id, conversation?.type, persistedMode]);
+
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
+
+    // Terminal mode rendering for ACP conversations
+    if (conversation.type === 'acp' && isTerminalMode) {
+      return (
+        <TerminalChat
+          key={`terminal-${conversation.id}`}
+          conversationId={conversation.id}
+          workspace={conversation.extra?.workspace}
+          backend={conversation.extra?.backend || 'claude'}
+          acpSessionId={conversation.extra?.acpSessionId}
+          cliPath={conversation.extra?.cliPath}
+        />
+      );
+    }
+
     switch (conversation.type) {
       case 'acp':
         return (
@@ -223,7 +274,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isGeminiConversation]);
+  }, [conversation, isGeminiConversation, isTerminalMode]);
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)
@@ -292,6 +343,37 @@ const ChatConversation: React.FC<{
 
   const headerExtraNode = (
     <div className='flex items-center gap-8px'>
+      {conversation?.type === 'acp' && (
+        <div className='shrink-0 flex items-center gap-4px'>
+          <Tooltip
+            position='bottom'
+            content={t('settings.terminalWrapper.showThinkingHeaderTooltip')}
+            disabled={isMobile}
+          >
+            <Button
+              type='text'
+              shape='circle'
+              size='mini'
+              aria-label={t('settings.terminalWrapper.showThinking')}
+              aria-pressed={showThinking}
+              icon={
+                <Brain
+                  theme={showThinking ? 'filled' : 'outline'}
+                  size='14'
+                  fill={showThinking ? 'rgb(var(--primary-6))' : iconColors.secondary}
+                />
+              }
+              onClick={handleToggleThinking}
+            />
+          </Tooltip>
+          <ModeToggle
+            conversationId={conversation.id}
+            currentMode={currentMode}
+            backend={conversation.extra?.backend || 'claude'}
+            onModeChange={setCurrentMode}
+          />
+        </div>
+      )}
       {conversation?.type === 'openclaw-gateway' && (
         <div className='shrink-0'>
           <StarOfficeMonitorCard

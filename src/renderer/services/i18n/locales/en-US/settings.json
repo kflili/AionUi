@@ -657,5 +657,26 @@
     "agent": "Agent",
     "agentDesc": "Used for DingTalk conversations"
   },
-  "extensionAssistantReadonly": "Extension assistants are read-only. You can duplicate it and edit the copy."
+  "extensionAssistantReadonly": "Extension assistants are read-only. You can duplicate it and edit the copy.",
+  "terminalWrapper": {
+    "title": "Terminal",
+    "richUI": "Rich UI",
+    "terminal": "Terminal",
+    "defaultMode": "Default Mode",
+    "defaultModeDesc": "Choose the default transport for new conversations",
+    "shell": "Shell",
+    "shellDesc": "Override the default shell (auto-detected if empty)",
+    "fontSize": "Font Size",
+    "showThinking": "Show Thinking",
+    "showThinkingDesc": "Display AI reasoning steps when converting terminal history to Rich UI",
+    "modeTooltip": "Rich UI shows full message history with modern interface. Terminal provides native CLI experience — history display follows CLI behavior.",
+    "note": "You can switch modes anytime using the toggle in the chat header.",
+    "showThinkingHeaderTooltip": "Show agent thinking (global, applies on next import)",
+    "startInTerminal": "Start in terminal",
+    "startInRichUi": "Start in Rich UI",
+    "maxSessions": "Max Live Sessions",
+    "maxSessionsDesc": "Maximum concurrent terminal sessions. Oldest idle session is closed when limit is reached.",
+    "sessionEvicted": "Closed an idle terminal session (limit: {{max}}). You can increase this in Terminal settings.",
+    "switchModeFailed": "Failed to switch mode"
+  }
 }

@@ -14,6 +14,7 @@ import {
   Puzzle,
   Robot,
   System,
+  Terminal,
   Toolkit,
 } from '@icon-park/react';
 import { useTranslation } from 'react-i18next';
@@ -59,6 +60,12 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
         path: 'agent',
       },
       { id: 'tools', label: t('settings.tools'), icon: <Toolkit theme='outline' size='16' />, path: 'tools' },
+      {
+        id: 'agent-cli',
+        label: t('settings.terminalWrapper.title', { defaultValue: 'Terminal' }),
+        icon: <Terminal theme='outline' size='16' />,
+        path: 'agent-cli',
+      },
       { id: 'display', label: t('settings.display'), icon: <Computer theme='outline' size='16' />, path: 'display' },
       {
         id: 'webui',

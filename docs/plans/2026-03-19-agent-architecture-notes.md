@@ -93,8 +93,8 @@ Not needed now — the manual tmux commands work fine. Build this when the patte
 
 ## How This Connects to Other Plans
 
-- **Terminal wrapper mode** (`2026-03-19-terminal-wrapper-mode.md`) — enables attaching to tmux sessions inside AionUI for the cost-saving escape hatch
-- **CLI history integration** (`2026-03-19-cli-history-integration.md`) — tmux-delegated sessions write normal JSONL history, show up in the history browser
+- **Terminal wrapper mode** (`2026-03-19-terminal-wrapper/plan.md`) — enables attaching to tmux sessions inside AionUI for the cost-saving escape hatch
+- **CLI history integration** (`2026-03-19-cli-history/plan.md`) — tmux-delegated sessions write normal JSONL history, show up in the history browser
 - **Knowledge consolidation** (`2026-03-19-personal-knowledge-consolidation.md`) — scanner picks up all sessions regardless of how they were launched
 - **Default workspace for random chats** — use `temp_ideas/` or `workspace/` folder as default, daily consolidation captures everything
 
