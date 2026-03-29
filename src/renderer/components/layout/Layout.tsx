@@ -12,6 +12,7 @@ import { Layout as ArcoLayout, Message } from '@arco-design/web-react';
 import { MenuFold, MenuUnfold } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutContext } from '@renderer/hooks/context/LayoutContext';
 import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
@@ -88,6 +89,7 @@ const Layout: React.FC<{
   const [customCss, setCustomCss] = useState<string>('');
   const [shouldMountUpdateModal, setShouldMountUpdateModal] = useState(false);
   const { onClick } = useDebug();
+  const { t } = useTranslation();
   const { contextHolder: multiAgentContextHolder } = useMultiAgentDetection();
   const { contextHolder: directorySelectionContextHolder } = useDirectorySelection();
   useDeepLink();
@@ -97,11 +99,11 @@ const Layout: React.FC<{
   useEffect(() => {
     return ipcBridge.pty.sessionEvicted.on((event) => {
       Message.warning({
-        content: `Closed an idle terminal session (limit: ${event.maxSessions}). You can increase this in Terminal settings.`,
+        content: t('settings.terminalWrapper.sessionEvicted', { max: event.maxSessions }),
         duration: 5000,
       });
     });
-  }, []);
+  }, [t]);
   const navigate = useNavigate();
   const location = useLocation();
   const workspaceAvailable = location.pathname.startsWith('/conversation/');

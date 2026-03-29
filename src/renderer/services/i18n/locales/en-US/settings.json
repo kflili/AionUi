@@ -675,6 +675,7 @@
     "startInTerminal": "Start in terminal",
     "startInRichUi": "Start in Rich UI",
     "maxSessions": "Max Live Sessions",
-    "maxSessionsDesc": "Maximum concurrent terminal sessions. Oldest idle session is closed when limit is reached."
+    "maxSessionsDesc": "Maximum concurrent terminal sessions. Oldest idle session is closed when limit is reached.",
+    "sessionEvicted": "Closed an idle terminal session (limit: {{max}}). You can increase this in Terminal settings."
   }
 }

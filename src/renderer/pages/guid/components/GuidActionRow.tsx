@@ -240,19 +240,6 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           )}
         </div>
 
-        {showTerminalToggle && (
-          <Radio.Group
-            type='button'
-            size='mini'
-            className='shrink-0'
-            value={terminalMode ? 'terminal' : 'acp'}
-            onChange={(val) => onTerminalModeChange(val === 'terminal')}
-          >
-            <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
-            <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
-          </Radio.Group>
-        )}
-
         {isPresetAgent && selectedAgentInfo && (
           <PresetAgentTag
             agentInfo={selectedAgentInfo}
@@ -262,6 +249,18 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           />
         )}
       </div>
+      {showTerminalToggle && (
+        <Radio.Group
+          type='button'
+          size='mini'
+          className='shrink-0'
+          value={terminalMode ? 'terminal' : 'acp'}
+          onChange={(val) => onTerminalModeChange(val === 'terminal')}
+        >
+          <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
+          <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
+        </Radio.Group>
+      )}
       <div className={styles.actionSubmit}>
         <Button
           shape='circle'

@@ -1217,6 +1217,7 @@ export type I18nKey =
   | 'settings.terminalWrapper.modeTooltip'
   | 'settings.terminalWrapper.note'
   | 'settings.terminalWrapper.richUI'
+  | 'settings.terminalWrapper.sessionEvicted'
   | 'settings.terminalWrapper.shell'
   | 'settings.terminalWrapper.shellDesc'
   | 'settings.terminalWrapper.showThinking'
