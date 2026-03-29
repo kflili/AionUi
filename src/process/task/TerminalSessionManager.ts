@@ -369,6 +369,11 @@ export class TerminalSessionManager {
   private cleanupSession(conversationId: string): void {
     const session = this.sessions.get(conversationId);
     if (session) {
+      // Clear unread indicator before deleting session
+      if (session.hasUnreadOutput) {
+        session.hasUnreadOutput = false;
+        ipcBridge.pty.unreadOutput.emit({ conversationId, hasUnread: false });
+      }
       session.transcriptStream.end();
       this.sessions.delete(conversationId);
       this.savePids();
