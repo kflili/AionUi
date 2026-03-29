@@ -81,7 +81,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   const modeOptions = getAgentModes(modeBackend);
   const currentModeOption = modeOptions.find((mode) => mode.value === selectedMode);
   const showModeSwitch = supportsModeSwitch(modeBackend);
-  const configOptionCount = (modelSelectorNode ? 1 : 0) + (showModeSwitch ? 1 : 0) + (showTerminalToggle ? 1 : 0);
+  const configOptionCount = (modelSelectorNode ? 1 : 0) + (showModeSwitch ? 1 : 0);
 
   // Browser file picker ref (WebUI only)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -238,19 +238,20 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               modeLabelFormatter={getModeDisplayLabel}
             />
           )}
-
-          {showTerminalToggle && (
-            <Radio.Group
-              type='button'
-              size='mini'
-              value={terminalMode ? 'terminal' : 'acp'}
-              onChange={(val) => onTerminalModeChange(val === 'terminal')}
-            >
-              <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
-              <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
-            </Radio.Group>
-          )}
         </div>
+
+        {showTerminalToggle && (
+          <Radio.Group
+            type='button'
+            size='mini'
+            className='shrink-0'
+            value={terminalMode ? 'terminal' : 'acp'}
+            onChange={(val) => onTerminalModeChange(val === 'terminal')}
+          >
+            <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
+            <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
+          </Radio.Group>
+        )}
 
         {isPresetAgent && selectedAgentInfo && (
           <PresetAgentTag

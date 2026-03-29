@@ -8,7 +8,7 @@ import { ipcBridge } from '@/common';
 import { ConfigStorage, type ICssTheme } from '@/common/config/storage';
 import PwaPullToRefresh from '@/renderer/components/layout/PwaPullToRefresh';
 import Titlebar from '@/renderer/components/layout/Titlebar';
-import { Layout as ArcoLayout } from '@arco-design/web-react';
+import { Layout as ArcoLayout, Message } from '@arco-design/web-react';
 import { MenuFold, MenuUnfold } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
@@ -92,6 +92,16 @@ const Layout: React.FC<{
   const { contextHolder: directorySelectionContextHolder } = useDirectorySelection();
   useDeepLink();
   useNotificationClick();
+
+  // Global listener for PTY session eviction toast (must be in always-mounted component)
+  useEffect(() => {
+    return ipcBridge.pty.sessionEvicted.on((event) => {
+      Message.warning({
+        content: `Closed an idle terminal session (limit: ${event.maxSessions}). You can increase this in Terminal settings.`,
+        duration: 5000,
+      });
+    });
+  }, []);
   const navigate = useNavigate();
   const location = useLocation();
   const workspaceAvailable = location.pathname.startsWith('/conversation/');
