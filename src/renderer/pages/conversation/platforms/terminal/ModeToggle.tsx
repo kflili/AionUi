@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { Message, Radio, Tooltip } from '@arco-design/web-react';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -19,6 +20,8 @@ const ModeToggle: React.FC<{
   onModeChange: (mode: ConversationMode) => void;
 }> = ({ conversationId, currentMode, backend, onModeChange }) => {
   const { t } = useTranslation();
+  const layout = useLayoutContext();
+  const isMobile = layout?.isMobile ?? false;
 
   const handleToggle = useCallback(
     async (mode: ConversationMode) => {
@@ -86,7 +89,7 @@ const ModeToggle: React.FC<{
   );
 
   return (
-    <Tooltip position='bottom' content={t('settings.terminalWrapper.modeTooltip')}>
+    <Tooltip position='bottom' content={t('settings.terminalWrapper.modeTooltip')} disabled={isMobile}>
       <span>
         <Radio.Group
           type='button'

@@ -3,7 +3,7 @@
 **Date:** 2026-03-28
 **Status:** Implemented
 **Branch:** `feat/terminal-wrapper-mode`
-**Parent plan:** [plan.md](./plan.md)
+**Parent plan:** [plan.md](../plan.md)
 
 ---
 

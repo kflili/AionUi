@@ -14,7 +14,7 @@ import { isElectronDesktop } from '@/renderer/utils/platform';
 import type { AcpBackend, AcpBackendConfig, AvailableAgent } from '../types';
 import PresetAgentTag from './PresetAgentTag';
 import { Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
-import { ArrowUp, FolderOpen, Plus, Shield, UploadOne } from '@icon-park/react';
+import { ArrowUp, Code, FolderOpen, Plus, Shield, UploadOne } from '@icon-park/react';
 import React, { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from '../index.module.css';
@@ -41,6 +41,11 @@ type GuidActionRowProps = {
   localeKey: string;
   onClosePresetTag: () => void;
 
+  // Terminal mode toggle
+  terminalMode: boolean;
+  onTerminalModeChange: (enabled: boolean) => void;
+  showTerminalToggle: boolean;
+
   // Send button
   loading: boolean;
   isButtonDisabled: boolean;
@@ -61,6 +66,9 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   customAgents,
   localeKey,
   onClosePresetTag,
+  terminalMode,
+  onTerminalModeChange,
+  showTerminalToggle,
   loading,
   isButtonDisabled,
   onSend,
@@ -241,6 +249,33 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           />
         )}
       </div>
+      {showTerminalToggle && (
+        <Tooltip
+          content={
+            terminalMode ? t('settings.terminalWrapper.startInTerminal') : t('settings.terminalWrapper.startInRichUi')
+          }
+          disabled={isMobile}
+        >
+          <Button
+            type='text'
+            shape='circle'
+            size='mini'
+            aria-label={
+              terminalMode ? t('settings.terminalWrapper.startInTerminal') : t('settings.terminalWrapper.startInRichUi')
+            }
+            aria-pressed={terminalMode}
+            icon={
+              <Code
+                theme={terminalMode ? 'filled' : 'outline'}
+                size='14'
+                fill={terminalMode ? 'rgb(var(--primary-6))' : iconColors.secondary}
+              />
+            }
+            style={terminalMode ? { backgroundColor: 'rgb(var(--primary-1))' } : undefined}
+            onClick={() => onTerminalModeChange(!terminalMode)}
+          />
+        </Tooltip>
+      )}
       <div className={styles.actionSubmit}>
         <Button
           shape='circle'

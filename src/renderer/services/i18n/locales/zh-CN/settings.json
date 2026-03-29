@@ -671,6 +671,9 @@
     "showThinking": "显示思维过程",
     "showThinkingDesc": "将终端历史转换为富文本时显示 AI 推理步骤",
     "modeTooltip": "富文本显示完整聊天记录和现代界面。终端提供原生 CLI 体验，历史显示取决于 CLI 行为。",
-    "note": "你可以随时通过聊天头部的切换按钮更改模式。"
+    "note": "你可以随时通过聊天头部的切换按钮更改模式。",
+    "showThinkingHeaderTooltip": "显示 AI 思考过程（全局设置，下次导入时生效）",
+    "startInTerminal": "以终端模式开始",
+    "startInRichUi": "以富文本模式开始"
   }
 }

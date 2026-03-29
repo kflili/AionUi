@@ -6,13 +6,15 @@
 
 import { ipcBridge } from '@/common';
 import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
+import { ConfigStorage } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
 import { CronJobManager } from '@/renderer/pages/cron';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
+import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
 import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
-import { History } from '@icon-park/react';
+import { Brain, History } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -181,6 +183,8 @@ const ChatConversation: React.FC<{
 }> = ({ conversation }) => {
   const { t } = useTranslation();
   const { openPreview } = usePreviewContext();
+  const layout = useLayoutContext();
+  const isMobile = layout?.isMobile ?? false;
   const workspaceEnabled = Boolean(conversation?.extra?.workspace);
 
   const isGeminiConversation = conversation?.type === 'gemini';
@@ -188,6 +192,23 @@ const ChatConversation: React.FC<{
   // Terminal mode state — only for ACP conversations
   const [currentMode, setCurrentMode] = useState<ConversationMode>('acp');
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
+
+  // Show Thinking toggle — global setting, quick-access from header
+  const [showThinking, setShowThinking] = useState(false);
+  useEffect(() => {
+    ConfigStorage.get('agentCli.config').then((config) => {
+      setShowThinking(config?.showThinking ?? false);
+    });
+  }, []);
+  const handleToggleThinking = useCallback(() => {
+    setShowThinking((prev) => {
+      const next = !prev;
+      ConfigStorage.get('agentCli.config').then((config) => {
+        ConfigStorage.set('agentCli.config', { ...config, showThinking: next });
+      });
+      return next;
+    });
+  }, []);
 
   // Sync mode state when conversation changes or SWR revalidates with fresh extra data
   const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
@@ -325,7 +346,28 @@ const ChatConversation: React.FC<{
   const headerExtraNode = (
     <div className='flex items-center gap-8px'>
       {conversation?.type === 'acp' && (
-        <div className='shrink-0'>
+        <div className='shrink-0 flex items-center gap-4px'>
+          <Tooltip
+            position='bottom'
+            content={t('settings.terminalWrapper.showThinkingHeaderTooltip')}
+            disabled={isMobile}
+          >
+            <Button
+              type='text'
+              shape='circle'
+              size='mini'
+              aria-label={t('settings.terminalWrapper.showThinking')}
+              aria-pressed={showThinking}
+              icon={
+                <Brain
+                  theme={showThinking ? 'filled' : 'outline'}
+                  size='14'
+                  fill={showThinking ? 'rgb(var(--primary-6))' : iconColors.secondary}
+                />
+              }
+              onClick={handleToggleThinking}
+            />
+          </Tooltip>
           <ModeToggle
             conversationId={conversation.id}
             currentMode={currentMode}

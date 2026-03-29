@@ -17,6 +17,9 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { AcpBackend, AvailableAgent, EffectiveAgentInfo } from '../types';
 
 export type GuidSendDeps = {
+  // Terminal mode override (from guide page toggle)
+  terminalModeOverride?: boolean;
+
   // Input state
   input: string;
   setInput: React.Dispatch<React.SetStateAction<string>>;
@@ -73,6 +76,7 @@ export type GuidSendResult = {
  */
 export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   const {
+    terminalModeOverride,
     input,
     setInput,
     files,
@@ -318,9 +322,13 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
 
       try {
-        // Read terminal wrapper default mode setting
-        const agentCliConfig = await ConfigStorage.get('agentCli.config');
-        const defaultTransport = agentCliConfig?.defaultMode ?? 'acp';
+        // Use terminal mode override from guide page toggle, or fall back to global default
+        const defaultTransport =
+          terminalModeOverride !== undefined
+            ? terminalModeOverride
+              ? 'terminal'
+              : 'acp'
+            : ((await ConfigStorage.get('agentCli.config'))?.defaultMode ?? 'acp');
 
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'acp',
@@ -369,6 +377,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
     }
   }, [
+    terminalModeOverride,
     input,
     files,
     dir,
