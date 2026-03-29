@@ -5,6 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
+import { ConfigStorage } from '@/common/config/storage';
 import { getTerminalSessionManager } from '@process/task/TerminalSessionManager';
 
 const TAG = '[ptyBridge]';
@@ -18,7 +19,10 @@ export function initPtyBridge(): void {
   ipcBridge.pty.spawn.provider(async ({ conversationId, command, args, cwd, cols, rows }) => {
     console.log(`${TAG} spawn: conv=${conversationId}, cmd=${command}, args=${JSON.stringify(args)}`);
     try {
-      const result = await manager.spawn({ conversationId, command, args, cwd, cols, rows });
+      // Read config here (safe in IPC provider context) and pass to manager
+      const config = await ConfigStorage.get('agentCli.config');
+      manager.setMaxSessions(config?.maxTerminalSessions ?? 10);
+      const result = manager.spawn({ conversationId, command, args, cwd, cols, rows });
       console.log(`${TAG} spawn success: conv=${conversationId}, pid=${result.pid}`);
       return { success: true, data: { pid: result.pid } };
     } catch (err) {

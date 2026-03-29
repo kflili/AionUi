@@ -9,7 +9,6 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { ipcBridge } from '@/common';
-import { ConfigStorage } from '@/common/config/storage';
 import { getSystemDir } from '@process/utils/initStorage';
 
 const DEFAULT_MAX_SESSIONS = 10;
@@ -83,7 +82,6 @@ export class TerminalSessionManager {
   constructor() {
     const dataDir = this.getDataDir();
     this.pidFilePath = path.join(dataDir, 'terminal-pids.json');
-    this.refreshMaxSessions();
   }
 
   /** Clean up orphaned PTY processes from previous crashes. Call on app launch. */
@@ -111,15 +109,15 @@ export class TerminalSessionManager {
     }
   }
 
-  /** Spawn a PTY process for a conversation. Async to read config for session limit. */
-  async spawn(params: {
+  /** Spawn a PTY process for a conversation. */
+  spawn(params: {
     conversationId: string;
     command: string;
     args: string[];
     cwd?: string;
     cols?: number;
     rows?: number;
-  }): Promise<{ pid: number }> {
+  }): { pid: number } {
     const { conversationId, command, args, cwd, cols: rawCols = 80, rows: rawRows = 24 } = params;
     // Clamp to minimum 1 — prevents 0x0 PTY from mobile layout timing issues
     const cols = Math.max(rawCols, 1);
@@ -131,7 +129,6 @@ export class TerminalSessionManager {
     }
 
     // LRU eviction: if at capacity, kill the oldest detached session
-    await this.refreshMaxSessions();
     this.evictIfNeeded();
 
     const shell = command || this.getDefaultShell();
@@ -348,14 +345,9 @@ export class TerminalSessionManager {
   /** Cached max sessions value (refreshed on each spawn). */
   private maxSessions = DEFAULT_MAX_SESSIONS;
 
-  /** Refresh max sessions from config. Call before eviction check. */
-  async refreshMaxSessions(): Promise<void> {
-    try {
-      const config = await ConfigStorage.get('agentCli.config');
-      this.maxSessions = config?.maxTerminalSessions ?? DEFAULT_MAX_SESSIONS;
-    } catch {
-      // Use default on error
-    }
+  /** Update max sessions from an externally-read config value. */
+  setMaxSessions(value: number): void {
+    this.maxSessions = value;
   }
 
   private cleanupSession(conversationId: string): void {
