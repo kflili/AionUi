@@ -678,6 +678,7 @@
     "startInRichUi": "以富文本模式開始",
     "maxSessions": "最大活躍會話數",
     "maxSessionsDesc": "最大並行終端會話數。達到上限時自動關閉最舊的閒置會話。",
-    "sessionEvicted": "已關閉一個閒置終端會話（上限：{{max}}）。你可以在終端設定中增加上限。"
+    "sessionEvicted": "已關閉一個閒置終端�����（上限：{{max}}）��你可以在終端設定中增加上限。",
+    "switchModeFailed": "切換模式失敗"
   }
 }

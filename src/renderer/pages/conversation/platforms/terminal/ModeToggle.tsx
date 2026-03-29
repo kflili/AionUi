@@ -5,13 +5,12 @@
  */
 
 import { ipcBridge } from '@/common';
+import type { ConversationMode } from '@/common/config/storage';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { Message, Radio, Tooltip } from '@arco-design/web-react';
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { mutate } from 'swr';
-
-type ConversationMode = 'acp' | 'terminal';
 
 const ModeToggle: React.FC<{
   conversationId: string;
@@ -45,7 +44,7 @@ const ModeToggle: React.FC<{
         await mutate(`conversation/${conversationId}`);
       } catch (err) {
         console.error('[ModeToggle] Failed to persist mode:', err);
-        Message.error('Failed to switch mode');
+        Message.error(t('settings.terminalWrapper.switchModeFailed'));
         onModeChange(currentMode); // Revert on failure
         return;
       }

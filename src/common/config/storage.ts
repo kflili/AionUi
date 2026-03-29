@@ -7,6 +7,9 @@
 import type { AcpBackend, AcpBackendAll, AcpBackendConfig } from '@/common/types/acpTypes';
 import { storage } from '@office-ai/platform';
 
+/** Transport mode for ACP conversations: Rich UI or terminal (xterm.js PTY) */
+export type ConversationMode = 'acp' | 'terminal';
+
 /**
  * @description 聊天相关的存储
  */
@@ -235,7 +238,7 @@ export type TChatConversation =
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
           /** Current transport mode: 'acp' (rich UI) or 'terminal' (xterm.js PTY) */
-          currentMode?: 'acp' | 'terminal';
+          currentMode?: ConversationMode;
           /** Timestamp (ms) when user last switched to terminal mode — used as JSONL import boundary */
           terminalSwitchedAt?: number;
         }

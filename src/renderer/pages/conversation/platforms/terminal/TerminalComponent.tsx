@@ -12,7 +12,12 @@ import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
 import '@xterm/xterm/css/xterm.css';
 
-/** Detect touch device (mobile/tablet) to skip WebGL and handle layout timing */
+/**
+ * Detect touch device (mobile/tablet) to skip WebGL and handle layout timing.
+ * Intentionally simpler than detectMobileViewportOrTouch — WebGL should be
+ * skipped on ANY touch device (including touch laptops) since WebGL rendering
+ * issues are tied to touch capability, not viewport size.
+ */
 const isTouchDevice = (): boolean => 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
 /** Ensure dimensions are at least 1 to prevent 0x0 PTY spawn on mobile */

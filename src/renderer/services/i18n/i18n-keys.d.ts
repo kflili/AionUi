@@ -1225,6 +1225,7 @@ export type I18nKey =
   | 'settings.terminalWrapper.showThinkingHeaderTooltip'
   | 'settings.terminalWrapper.startInRichUi'
   | 'settings.terminalWrapper.startInTerminal'
+  | 'settings.terminalWrapper.switchModeFailed'
   | 'settings.terminalWrapper.terminal'
   | 'settings.terminalWrapper.title'
   | 'settings.testAllKeys'

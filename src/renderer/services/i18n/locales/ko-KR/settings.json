@@ -678,6 +678,7 @@
     "startInRichUi": "리치 UI에서 시작",
     "maxSessions": "최대 활성 세션",
     "maxSessionsDesc": "최대 동시 터미널 세션 수. 한도에 도달하면 가장 오래된 유휴 세션이 종료됩니다.",
-    "sessionEvicted": "유휴 터미널 세션을 닫았습니다 (한도: {{max}}). 터미널 설정에서 한도를 늘릴 수 있습니다."
+    "sessionEvicted": "유휴 터미널 세션을 닫았습니다 (한도: {{max}}). 터미널 설정에서 한도를 늘릴 수 있습니다.",
+    "switchModeFailed": "모드 전환에 실패했습니다"
   }
 }

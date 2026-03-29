@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
+import type { ConversationMode, IProvider, TChatConversation, TProviderWithModel } from '@/common/config/storage';
 import { ConfigStorage } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
@@ -175,8 +175,6 @@ const GeminiConversationPanel: React.FC<{ conversation: GeminiConversation; slid
     </ChatLayout>
   );
 };
-
-type ConversationMode = 'acp' | 'terminal';
 
 const ChatConversation: React.FC<{
   conversation?: TChatConversation;

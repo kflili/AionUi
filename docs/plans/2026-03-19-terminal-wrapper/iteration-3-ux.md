@@ -147,10 +147,10 @@ Add `disabled={isMobile}` to the Tooltip in `ModeToggle.tsx`, using `useLayoutCo
 
 ## Done means
 
-- [ ] Brain icon toggle in chat header toggles showThinking (affects future imports)
-- [ ] Terminal icon toggle on guide page overrides default mode for new conversations
-- [ ] ModeToggle tooltip auto-dismisses on mobile (disabled on touch devices)
-- [ ] All new i18n keys added for 6 languages
-- [ ] `bunx tsc --noEmit` passes
-- [ ] `bun run test` passes
-- [ ] `i18n-keys.d.ts` regenerated
+- [x] Brain icon toggle in chat header toggles showThinking (affects future imports)
+- [x] Radio.Group "Rich UI | Terminal" on guide page overrides default mode for new conversations
+- [x] ModeToggle tooltip auto-dismisses on mobile (disabled on touch devices)
+- [x] All new i18n keys added for 6 languages
+- [x] `bunx tsc --noEmit` passes
+- [x] `bun run test` passes
+- [x] `i18n-keys.d.ts` regenerated

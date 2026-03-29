@@ -676,6 +676,7 @@
     "startInRichUi": "Zengin UI'de başlat",
     "maxSessions": "Maksimum Aktif Oturum",
     "maxSessionsDesc": "Maksimum eşzamanlı terminal oturumu sayısı. Sınıra ulaşıldığında en eski boşta oturum kapatılır.",
-    "sessionEvicted": "Boşta bir terminal oturumu kapatıldı (sınır: {{max}}). Sınırı Terminal ayarlarından artırabilirsiniz."
+    "sessionEvicted": "Boşta bir terminal oturumu kapatıldı (sınır: {{max}}). Sınırı Terminal ayarlarından artırabilirsiniz.",
+    "switchModeFailed": "Mod değiştirme başarısız oldu"
   }
 }

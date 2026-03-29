@@ -15,7 +15,7 @@ const DEFAULT_MAX_SESSIONS = 10;
 
 const TAG = '[TerminalSessionManager]';
 
-/** Max buffer size in bytes when detached (~100KB) */
+/** Max scrollback buffer size in bytes (~100KB) */
 const MAX_BUFFER_BYTES = 100 * 1024;
 
 /** Strip ANSI escape sequences from terminal output for plain-text transcripts. */
@@ -54,14 +54,12 @@ interface TerminalSession {
   attached: boolean;
   /** Timestamp when session was last detached (for LRU eviction) */
   detachedAt?: number;
-  /** Buffered output while renderer is detached */
-  outputBuffer: string[];
-  /** Current buffer size in bytes (for cap enforcement) */
-  outputBufferBytes: number;
   /** Rolling buffer of ALL output for replay on reattach (xterm.js is destroyed on navigate) */
   scrollbackBuffer: string[];
   /** Current scrollback buffer size in bytes */
   scrollbackBufferBytes: number;
+  /** Timestamp when PTY was spawned (for orphan cleanup age check) */
+  startedAt: number;
   /** Whether there is unread output (produced while detached, not yet seen by user) */
   hasUnreadOutput: boolean;
   /** Whether the PTY process has exited (session preserved for buffer replay) */
@@ -156,10 +154,9 @@ export class TerminalSessionManager {
       transcriptPath,
       transcriptStream,
       attached: true,
-      outputBuffer: [],
-      outputBufferBytes: 0,
       scrollbackBuffer: [],
       scrollbackBufferBytes: 0,
+      startedAt: Date.now(),
       hasUnreadOutput: false,
       exited: false,
     };
@@ -187,16 +184,6 @@ export class TerminalSessionManager {
           session.hasUnreadOutput = true;
           ipcBridge.pty.unreadOutput.emit({ conversationId, hasUnread: true });
         }
-        // Buffer output while detached (cap at MAX_BUFFER_BYTES)
-        if (session.outputBufferBytes < MAX_BUFFER_BYTES) {
-          session.outputBuffer.push(data);
-          session.outputBufferBytes += data.length;
-        }
-        // If over cap, drop oldest entries to make room
-        while (session.outputBufferBytes > MAX_BUFFER_BYTES && session.outputBuffer.length > 1) {
-          const removed = session.outputBuffer.shift()!;
-          session.outputBufferBytes -= removed.length;
-        }
       }
       // Always write to transcript
       const clean = stripAnsi(data);
@@ -214,8 +201,10 @@ export class TerminalSessionManager {
         ipcBridge.pty.exit.emit({ conversationId, exitCode, signal });
         this.cleanupSession(conversationId);
       } else {
-        // Detached — preserve session so reattach can replay buffer + exit message
-        session.outputBuffer.push(`\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`);
+        // Detached — preserve session so reattach can replay scrollback + exit message
+        const exitMsg = `\r\n\x1b[90m[Process exited with code ${exitCode}]\x1b[0m\r\n`;
+        session.scrollbackBuffer.push(exitMsg);
+        session.scrollbackBufferBytes += exitMsg.length;
         session.exited = true;
         session.transcriptStream.end();
         console.log(`${TAG} PTY exited while detached, preserving buffer: conv=${conversationId}`);
@@ -254,8 +243,6 @@ export class TerminalSessionManager {
     // Return full scrollback (not just detached buffer) — xterm.js was destroyed on navigate
     const buffer = session.scrollbackBuffer.join('');
     const exited = session.exited;
-    session.outputBuffer = [];
-    session.outputBufferBytes = 0;
     session.attached = true;
     if (session.hasUnreadOutput) {
       session.hasUnreadOutput = false;
@@ -387,7 +374,7 @@ export class TerminalSessionManager {
       fs.mkdirSync(dir, { recursive: true });
       const entries = Array.from(this.sessions.values()).map((s) => ({
         pid: s.pid,
-        startedAt: Date.now(),
+        startedAt: s.startedAt,
       }));
       fs.writeFileSync(this.pidFilePath, JSON.stringify(entries));
     } catch (err) {
