@@ -256,24 +256,29 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           }
           disabled={isMobile}
         >
-          <Button
-            type='text'
-            shape='circle'
-            size='mini'
+          <div
+            className='flex items-center gap-4px cursor-pointer rd-12px px-4px py-2px transition-all duration-200'
+            style={
+              terminalMode ? { backgroundColor: 'rgb(var(--primary-1))', color: 'rgb(var(--primary-6))' } : undefined
+            }
+            role='button'
             aria-label={
               terminalMode ? t('settings.terminalWrapper.startInTerminal') : t('settings.terminalWrapper.startInRichUi')
             }
             aria-pressed={terminalMode}
-            icon={
-              <Code
-                theme={terminalMode ? 'filled' : 'outline'}
-                size='14'
-                fill={terminalMode ? 'rgb(var(--primary-6))' : iconColors.secondary}
-              />
-            }
-            style={terminalMode ? { backgroundColor: 'rgb(var(--primary-1))' } : undefined}
             onClick={() => onTerminalModeChange(!terminalMode)}
-          />
+          >
+            <Code
+              theme={terminalMode ? 'filled' : 'outline'}
+              size='14'
+              fill={terminalMode ? 'rgb(var(--primary-6))' : iconColors.secondary}
+            />
+            {terminalMode && (
+              <span className='text-12px font-medium whitespace-nowrap' style={{ color: 'rgb(var(--primary-6))' }}>
+                CLI
+              </span>
+            )}
+          </div>
         </Tooltip>
       )}
       <div className={styles.actionSubmit}>
