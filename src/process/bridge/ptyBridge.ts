@@ -16,12 +16,19 @@ export function initPtyBridge(): void {
   // Clean up orphaned PTY processes from previous crashes
   manager.cleanupOrphans();
 
+  // Load max session limit from config (non-blocking).
+  // Re-read on every spawn via a pre-cached value to avoid blocking the spawn path.
+  ConfigStorage.get('agentCli.config')
+    .then((config) => manager.setMaxSessions(config?.maxTerminalSessions ?? 10))
+    .catch(() => {});
+
   ipcBridge.pty.spawn.provider(async ({ conversationId, command, args, cwd, cols, rows }) => {
     console.log(`${TAG} spawn: conv=${conversationId}, cmd=${command}, args=${JSON.stringify(args)}`);
     try {
-      // Read config here (safe in IPC provider context) and pass to manager
-      const config = await ConfigStorage.get('agentCli.config');
-      manager.setMaxSessions(config?.maxTerminalSessions ?? 10);
+      // Refresh max sessions (non-blocking for current spawn, applies to next eviction check)
+      ConfigStorage.get('agentCli.config')
+        .then((config) => manager.setMaxSessions(config?.maxTerminalSessions ?? 10))
+        .catch(() => {});
       const result = manager.spawn({ conversationId, command, args, cwd, cols, rows });
       console.log(`${TAG} spawn success: conv=${conversationId}, pid=${result.pid}`);
       return { success: true, data: { pid: result.pid } };
