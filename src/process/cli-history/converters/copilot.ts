@@ -169,7 +169,11 @@ function truncate(text: string, max: number): string {
  *   Defaults to `'cli-history-import'`.
  * @returns An ordered array of `TMessage` objects ready for rendering.
  */
-export function convertCopilotJsonl(lines: string[], conversationId?: string): TMessage[] {
+export function convertCopilotJsonl(
+  lines: string[],
+  conversationId?: string,
+  options?: { showThinking?: boolean }
+): TMessage[] {
   const convId = conversationId ?? CONVERTED_CONVERSATION_ID;
   const messages: TMessage[] = [];
 
@@ -191,7 +195,7 @@ export function convertCopilotJsonl(lines: string[], conversationId?: string): T
         break;
 
       case 'assistant.message':
-        processAssistantMessage(parsed, timestamp, convId, messages, toolMessageIndex);
+        processAssistantMessage(parsed, timestamp, convId, options?.showThinking ?? false, messages, toolMessageIndex);
         break;
 
       case 'tool.execution_complete':
@@ -232,15 +236,20 @@ function processAssistantMessage(
   event: CopilotJsonlEvent,
   timestamp: number,
   convId: string,
+  showThinking: boolean,
   messages: TMessage[],
   toolMessageIndex: Map<string, number>
 ): void {
   const data = event.data;
 
-  // Handle reasoning/thinking text
+  // Handle reasoning/thinking text — only include when showThinking is enabled
   const reasoningText = data.reasoningText;
-  if (typeof reasoningText === 'string' && reasoningText.trim().length > 0) {
-    const thinkingContent = '<details><summary>Thinking</summary>\n\n' + reasoningText + '\n\n</details>';
+  if (showThinking && typeof reasoningText === 'string' && reasoningText.trim().length > 0) {
+    const thinkingLines = reasoningText
+      .split('\n')
+      .map((line: string) => `> ${line}`)
+      .join('\n');
+    const thinkingContent = `> **Thinking**\n>\n${thinkingLines}`;
     messages.push(createTextMessage(thinkingContent, 'left', convId, timestamp));
   }
 

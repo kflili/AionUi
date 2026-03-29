@@ -193,7 +193,11 @@ function truncate(text: string, max: number): string {
  *   Defaults to `'cli-history-import'`.
  * @returns An ordered array of `TMessage` objects ready for rendering.
  */
-export function convertClaudeJsonl(lines: string[], conversationId?: string): TMessage[] {
+export function convertClaudeJsonl(
+  lines: string[],
+  conversationId?: string,
+  options?: { showThinking?: boolean }
+): TMessage[] {
   const convId = conversationId ?? CONVERTED_CONVERSATION_ID;
   const messages: TMessage[] = [];
 
@@ -217,7 +221,7 @@ export function convertClaudeJsonl(lines: string[], conversationId?: string): TM
 
     // --- Assistant message ---
     if (parsed.type === 'assistant' && parsed.message) {
-      processAssistantMessage(parsed, timestamp, convId, messages, toolMessageIndex);
+      processAssistantMessage(parsed, timestamp, convId, options?.showThinking ?? false, messages, toolMessageIndex);
       continue;
     }
   }
@@ -286,6 +290,7 @@ function processAssistantMessage(
   parsed: ClaudeJsonlLine,
   timestamp: number,
   convId: string,
+  showThinking: boolean,
   messages: TMessage[],
   toolMessageIndex: Map<string, number>
 ): void {
@@ -317,15 +322,21 @@ function processAssistantMessage(
       }
 
       case 'thinking': {
+        // Skip thinking blocks unless showThinking is enabled
+        if (!showThinking) break;
+
         // Flush any accumulated text before the thinking block
         flushText();
 
         // Skip empty thinking blocks
         if (!typedBlock.thinking || typedBlock.thinking.trim().length === 0) break;
 
-        // Render thinking as a left-aligned text message wrapped in
-        // a <details> block so the UI can present it as collapsible.
-        const thinkingContent = '<details><summary>Thinking</summary>\n\n' + typedBlock.thinking + '\n\n</details>';
+        // Render thinking as a blockquote so it displays cleanly in the markdown renderer
+        const thinkingLines = typedBlock.thinking
+          .split('\n')
+          .map((line: string) => `> ${line}`)
+          .join('\n');
+        const thinkingContent = `> **Thinking**\n>\n${thinkingLines}`;
         messages.push(createTextMessage(thinkingContent, 'left', convId, timestamp));
         break;
       }

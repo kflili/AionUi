@@ -10,12 +10,29 @@ vi.mock('../../src/common', () => ({
     cliHistory: {
       resolveSessionFilePath: { provider: vi.fn() },
       getDbPath: { provider: vi.fn() },
+      convertSessionToMessages: { provider: vi.fn() },
     },
   },
 }));
 
 vi.mock('../../src/process/utils/utils', () => ({
   getDataPath: vi.fn(() => '/tmp'),
+  getConfigPath: vi.fn(() => '/tmp'),
+}));
+
+vi.mock('../../src/process/services/database/export', () => ({
+  getDatabase: vi.fn(() => ({
+    deleteConversationMessages: vi.fn(),
+    insertMessage: vi.fn(() => ({ success: true })),
+  })),
+}));
+
+vi.mock('../../src/process/cli-history/converters/claude', () => ({
+  convertClaudeJsonl: vi.fn(() => []),
+}));
+
+vi.mock('../../src/process/cli-history/converters/copilot', () => ({
+  convertCopilotJsonl: vi.fn(() => []),
 }));
 
 // Mock os.homedir so resolveClaudeSessionPath looks in our temp dir

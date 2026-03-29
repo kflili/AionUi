@@ -4,9 +4,18 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+/** Thrown when clipboard APIs fail and a manual-copy dialog was shown instead. */
+export class CopyFallbackShown extends Error {
+  constructor() {
+    super('Clipboard unavailable — opened manual copy dialog');
+    this.name = 'CopyFallbackShown';
+  }
+}
+
 /**
  * Copy text to clipboard with fallback for non-secure contexts (e.g. WebUI over HTTP).
  * Uses navigator.clipboard when available, otherwise falls back to document.execCommand('copy').
+ * On mobile insecure contexts where both fail, shows text in a selectable prompt.
  */
 export const copyText = async (text: string): Promise<void> => {
   if (typeof window === 'undefined' || typeof document === 'undefined') {
@@ -33,14 +42,133 @@ export const copyText = async (text: string): Promise<void> => {
     if (!success) {
       throw new Error('execCommand copy returned false');
     }
-  } finally {
+  } catch {
+    // execCommand failed (common on mobile) — show selectable text prompt
     document.body.removeChild(textArea);
-    if (
-      previousActiveElement &&
-      typeof previousActiveElement.focus === 'function' &&
-      document.contains(previousActiveElement)
-    ) {
-      previousActiveElement.focus();
+    restoreFocus(previousActiveElement);
+    showCopyFallbackModal(text);
+    throw new CopyFallbackShown();
+  } finally {
+    if (document.body.contains(textArea)) {
+      document.body.removeChild(textArea);
     }
+    restoreFocus(previousActiveElement);
   }
 };
+
+function restoreFocus(element: HTMLElement | null): void {
+  if (element && typeof element.focus === 'function' && document.contains(element)) {
+    element.focus();
+  }
+}
+
+/** Labels for the copy fallback modal — callers should pass i18n-translated strings */
+type CopyFallbackLabels = {
+  prompt?: string;
+  close?: string;
+};
+
+/**
+ * Show a modal with selectable text so the user can long-press to copy on mobile.
+ * Uses plain DOM to avoid React dependency in this utility.
+ * Pass translated labels via `labels` param to support i18n.
+ */
+function showCopyFallbackModal(text: string, labels?: CopyFallbackLabels): void {
+  const promptText = labels?.prompt || 'Long-press to select and copy:';
+  const closeText = labels?.close || 'Close';
+
+  const overlay = document.createElement('div');
+  overlay.setAttribute('role', 'dialog');
+  overlay.setAttribute('aria-modal', 'true');
+  overlay.setAttribute('aria-label', promptText);
+  Object.assign(overlay.style, {
+    position: 'fixed',
+    inset: '0',
+    background: 'rgba(0,0,0,0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: '10000',
+    padding: '16px',
+  });
+
+  const card = document.createElement('div');
+  Object.assign(card.style, {
+    background: 'var(--color-bg-2, #fff)',
+    borderRadius: '8px',
+    padding: '16px',
+    maxWidth: '90vw',
+    maxHeight: '60vh',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    boxShadow: '0 4px 24px rgba(0,0,0,0.2)',
+  });
+
+  const label = document.createElement('div');
+  label.textContent = promptText;
+  Object.assign(label.style, {
+    fontSize: '14px',
+    color: 'var(--color-text-2, #333)',
+    fontWeight: '500',
+  });
+
+  const textEl = document.createElement('textarea');
+  textEl.value = text;
+  textEl.readOnly = true;
+  Object.assign(textEl.style, {
+    width: '100%',
+    minHeight: '80px',
+    maxHeight: '40vh',
+    padding: '8px',
+    border: '1px solid var(--color-border, #e5e5e5)',
+    borderRadius: '4px',
+    fontSize: '13px',
+    fontFamily: 'monospace',
+    wordBreak: 'break-all',
+    boxSizing: 'border-box',
+    resize: 'vertical',
+    background: 'var(--color-bg-3, #f5f5f5)',
+    color: 'var(--color-text-1, #000)',
+  });
+
+  const closeBtn = document.createElement('button');
+  closeBtn.textContent = closeText;
+  Object.assign(closeBtn.style, {
+    alignSelf: 'flex-end',
+    padding: '6px 16px',
+    borderRadius: '4px',
+    border: 'none',
+    background: 'var(--color-primary-light-1, #e8f3ff)',
+    color: 'var(--color-primary-6, #165dff)',
+    fontSize: '14px',
+    cursor: 'pointer',
+  });
+
+  const close = () => {
+    document.removeEventListener('keydown', handleKeydown);
+    if (document.body.contains(overlay)) {
+      document.body.removeChild(overlay);
+    }
+  };
+
+  const handleKeydown = (e: KeyboardEvent) => {
+    if (e.key === 'Escape') close();
+  };
+
+  closeBtn.addEventListener('click', close);
+  overlay.addEventListener('click', (e) => {
+    if (e.target === overlay) close();
+  });
+  document.addEventListener('keydown', handleKeydown);
+
+  card.appendChild(label);
+  card.appendChild(textEl);
+  card.appendChild(closeBtn);
+  overlay.appendChild(card);
+  document.body.appendChild(overlay);
+
+  // Auto-select text for easy copying
+  textEl.focus();
+  textEl.select();
+}

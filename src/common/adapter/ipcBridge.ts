@@ -783,6 +783,8 @@ export interface ICreateConversationParams {
     };
     /** Explicit marker for temporary health-check conversations */
     isHealthCheck?: boolean;
+    /** Initial transport mode for ACP conversations / ACP 会话的初始传输模式 */
+    currentMode?: 'acp' | 'terminal';
   };
 }
 interface IResetConversationParams {
@@ -1039,6 +1041,43 @@ export const channel = {
   userAuthorized: bridge.buildEmitter<IChannelUser>('channel.user-authorized'),
 };
 
+// PTY terminal session API / PTY 终端会话接口
+export const pty = {
+  /** Spawn a PTY process for a conversation */
+  spawn: bridge.buildProvider<
+    IBridgeResponse<{ pid: number }>,
+    {
+      conversationId: string;
+      command: string;
+      args: string[];
+      cwd?: string;
+      cols?: number;
+      rows?: number;
+    }
+  >('pty.spawn'),
+  /** Write data to PTY stdin */
+  write: bridge.buildProvider<IBridgeResponse, { conversationId: string; data: string }>('pty.write'),
+  /** Resize PTY */
+  resize: bridge.buildProvider<IBridgeResponse, { conversationId: string; cols: number; rows: number }>('pty.resize'),
+  /** Kill PTY process */
+  kill: bridge.buildProvider<IBridgeResponse, { conversationId: string }>('pty.kill'),
+  /** Detach renderer from PTY session (PTY keeps running, output buffered) */
+  detach: bridge.buildProvider<IBridgeResponse, { conversationId: string }>('pty.detach'),
+  /** Reattach renderer to PTY session (returns buffered output) */
+  reattach: bridge.buildProvider<
+    IBridgeResponse<{ exists: boolean; buffer: string; exited: boolean }>,
+    { conversationId: string }
+  >('pty.reattach'),
+  /** PTY stdout/stderr data output (streamed to renderer) */
+  output: bridge.buildEmitter<{ conversationId: string; data: string }>('pty.output'),
+  /** PTY process exited */
+  exit: bridge.buildEmitter<{ conversationId: string; exitCode: number; signal?: number }>('pty.exit'),
+  /** PTY session evicted due to max session limit */
+  sessionEvicted: bridge.buildEmitter<{ conversationId: string; maxSessions: number }>('pty.sessionEvicted'),
+  /** PTY session has unread output (produced while user was on another chat) */
+  unreadOutput: bridge.buildEmitter<{ conversationId: string; hasUnread: boolean }>('pty.unreadOutput'),
+};
+
 // CLI history utilities
 export const cliHistory = {
   /** Resolve a CLI session ID to its JSONL file path on disk. Scans backend-specific directories. */
@@ -1047,4 +1086,9 @@ export const cliHistory = {
   ),
   /** Get the AionUI database file path for fallback references */
   getDbPath: bridge.buildProvider<string, void>('cli-history.get-db-path'),
+  /** Convert a CLI session's JSONL to TMessages and insert into the conversation's message store */
+  convertSessionToMessages: bridge.buildProvider<
+    IBridgeResponse<{ count: number }>,
+    { conversationId: string; sessionId: string; backend: string; terminalSwitchedAt: number }
+  >('cli-history.convert-session-to-messages'),
 };

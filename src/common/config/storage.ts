@@ -7,6 +7,9 @@
 import type { AcpBackend, AcpBackendAll, AcpBackendConfig } from '@/common/types/acpTypes';
 import { storage } from '@office-ai/platform';
 
+/** Transport mode for ACP conversations: Rich UI or terminal (xterm.js PTY) */
+export type ConversationMode = 'acp' | 'terminal';
+
 /**
  * @description 聊天相关的存储
  */
@@ -128,6 +131,17 @@ export interface IConfigStorageRefer {
   };
   // Skills Market: whether the aionui-skills builtin skill is enabled
   'skillsMarket.enabled'?: boolean;
+  // Terminal wrapper mode settings / 终端包装模式设置
+  'agentCli.config'?: {
+    /** Default transport for new conversations / 新会话默认传输方式 */
+    defaultMode?: 'acp' | 'terminal';
+    /** Terminal font size / 终端字体大小 */
+    fontSize?: number;
+    /** Show thinking blocks when converting JSONL to Rich UI / 转换时显示思维过程 */
+    showThinking?: boolean;
+    /** Max concurrent live terminal sessions (LRU eviction when exceeded) / 最大终端会话数 */
+    maxTerminalSessions?: number;
+  };
 }
 
 export interface IEnvStorageRefer {
@@ -223,6 +237,10 @@ export type TChatConversation =
           currentModelId?: string;
           /** Explicit marker for temporary health-check conversations */
           isHealthCheck?: boolean;
+          /** Current transport mode: 'acp' (rich UI) or 'terminal' (xterm.js PTY) */
+          currentMode?: ConversationMode;
+          /** Timestamp (ms) when user last switched to terminal mode — used as JSONL import boundary */
+          terminalSwitchedAt?: number;
         }
       >,
       'model'

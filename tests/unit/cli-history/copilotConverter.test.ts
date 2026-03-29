@@ -264,22 +264,35 @@ describe('convertCopilotJsonl', () => {
       }),
     ];
 
-    const result = convertCopilotJsonl(lines);
+    // With showThinking enabled
+    const result = convertCopilotJsonl(lines, undefined, { showThinking: true });
     expect(result).toHaveLength(2);
 
-    // Thinking message (collapsible)
     const thinkingMsg = result[0];
     expect(thinkingMsg.type).toBe('text');
     expect(thinkingMsg.position).toBe('left');
     if (thinkingMsg.type === 'text') {
-      expect(thinkingMsg.content.content).toContain('<details>');
+      expect(thinkingMsg.content.content).toContain('> **Thinking**');
       expect(thinkingMsg.content.content).toContain('Let me analyze this problem...');
-      expect(thinkingMsg.content.content).toContain('</details>');
     }
 
-    // Text message
     if (result[1].type === 'text') {
       expect(result[1].content.content).toBe('Here is my answer.');
+    }
+  });
+
+  it('skips reasoningText by default', () => {
+    const lines = [
+      assistantMessageLine({
+        reasoningText: 'Let me analyze this problem...',
+        content: 'Here is my answer.',
+      }),
+    ];
+
+    const result = convertCopilotJsonl(lines);
+    expect(result).toHaveLength(1);
+    if (result[0].type === 'text') {
+      expect(result[0].content.content).toBe('Here is my answer.');
     }
   });
 
@@ -548,17 +561,21 @@ describe('convertCopilotJsonl', () => {
       }),
     ];
 
+    // Without showThinking: reasoning skipped → text + tool = 2
     const result = convertCopilotJsonl(lines);
-    expect(result).toHaveLength(3);
-    // thinking (collapsible text)
+    expect(result).toHaveLength(2);
     expect(result[0].type).toBe('text');
-    if (result[0].type === 'text') {
-      expect(result[0].content.content).toContain('<details>');
+    expect(result[1].type).toBe('acp_tool_call');
+
+    // With showThinking: reasoning + text + tool = 3
+    const resultWithThinking = convertCopilotJsonl(lines, undefined, { showThinking: true });
+    expect(resultWithThinking).toHaveLength(3);
+    expect(resultWithThinking[0].type).toBe('text');
+    if (resultWithThinking[0].type === 'text') {
+      expect(resultWithThinking[0].content.content).toContain('> **Thinking**');
     }
-    // text
-    expect(result[1].type).toBe('text');
-    // tool call
-    expect(result[2].type).toBe('acp_tool_call');
+    expect(resultWithThinking[1].type).toBe('text');
+    expect(resultWithThinking[2].type).toBe('acp_tool_call');
   });
 
   // -----------------------------------------------------------------------
@@ -600,32 +617,24 @@ describe('convertCopilotJsonl', () => {
       hookStartLine(),
     ];
 
+    // Without showThinking: thinking skipped → user, tool call, assistant = 3 messages
     const result = convertCopilotJsonl(lines);
-
-    // Expected messages: user text, thinking, tool call (with result merged), assistant text
-    expect(result).toHaveLength(4);
+    expect(result).toHaveLength(3);
 
     // 1. User message
     expect(result[0].type).toBe('text');
     expect(result[0].position).toBe('right');
 
-    // 2. Thinking block
-    expect(result[1].type).toBe('text');
-    expect(result[1].position).toBe('left');
-    if (result[1].type === 'text') {
-      expect(result[1].content.content).toContain('<details>');
+    // 2. Tool call with result merged (thinking skipped)
+    expect(result[1].type).toBe('acp_tool_call');
+    if (result[1].type === 'acp_tool_call') {
+      expect(result[1].content.update.status).toBe('completed');
+      expect(result[1].content.update.content).toHaveLength(1);
     }
 
-    // 3. Tool call with result merged
-    expect(result[2].type).toBe('acp_tool_call');
-    if (result[2].type === 'acp_tool_call') {
-      expect(result[2].content.update.status).toBe('completed');
-      expect(result[2].content.update.content).toHaveLength(1);
-    }
-
-    // 4. Assistant text response
-    expect(result[3].type).toBe('text');
-    expect(result[3].position).toBe('left');
+    // 3. Assistant text response
+    expect(result[2].type).toBe('text');
+    expect(result[2].position).toBe('left');
   });
 
   // -----------------------------------------------------------------------

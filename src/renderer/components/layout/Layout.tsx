@@ -8,10 +8,11 @@ import { ipcBridge } from '@/common';
 import { ConfigStorage, type ICssTheme } from '@/common/config/storage';
 import PwaPullToRefresh from '@/renderer/components/layout/PwaPullToRefresh';
 import Titlebar from '@/renderer/components/layout/Titlebar';
-import { Layout as ArcoLayout } from '@arco-design/web-react';
+import { Layout as ArcoLayout, Message } from '@arco-design/web-react';
 import { MenuFold, MenuUnfold } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { LayoutContext } from '@renderer/hooks/context/LayoutContext';
 import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
@@ -88,10 +89,21 @@ const Layout: React.FC<{
   const [customCss, setCustomCss] = useState<string>('');
   const [shouldMountUpdateModal, setShouldMountUpdateModal] = useState(false);
   const { onClick } = useDebug();
+  const { t } = useTranslation();
   const { contextHolder: multiAgentContextHolder } = useMultiAgentDetection();
   const { contextHolder: directorySelectionContextHolder } = useDirectorySelection();
   useDeepLink();
   useNotificationClick();
+
+  // Global listener for PTY session eviction toast (must be in always-mounted component)
+  useEffect(() => {
+    return ipcBridge.pty.sessionEvicted.on((event) => {
+      Message.warning({
+        content: t('settings.terminalWrapper.sessionEvicted', { max: event.maxSessions }),
+        duration: 5000,
+      });
+    });
+  }, [t]);
   const navigate = useNavigate();
   const location = useLocation();
   const workspaceAvailable = location.pathname.startsWith('/conversation/');

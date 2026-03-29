@@ -5,6 +5,7 @@
  */
 
 import { resolveLocaleKey } from '@/common/utils';
+import { ConfigStorage } from '@/common/config/storage';
 import { useInputFocusRing } from '@/renderer/hooks/chat/useInputFocusRing';
 import { openExternalUrl } from '@/renderer/utils/platform';
 import { useConversationTabs } from '@/renderer/pages/conversation/hooks/ConversationTabsContext';
@@ -24,7 +25,7 @@ import { useGuidModelSelection } from './hooks/useGuidModelSelection';
 import { useGuidSend } from './hooks/useGuidSend';
 import { useTypewriterPlaceholder } from './hooks/useTypewriterPlaceholder';
 import { ConfigProvider } from '@arco-design/web-react';
-import React, { useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import styles from './index.module.css';
@@ -45,6 +46,14 @@ const GuidPage: React.FC = () => {
     } catch (error) {
       console.error('Failed to open external link:', error);
     }
+  }, []);
+
+  // Terminal mode toggle — undefined until config loads, then reflects global default
+  const [terminalMode, setTerminalMode] = useState<boolean | undefined>(undefined);
+  useEffect(() => {
+    ConfigStorage.get('agentCli.config').then((config) => {
+      setTerminalMode(config?.defaultMode === 'terminal');
+    });
   }, []);
 
   // --- Hooks ---
@@ -70,6 +79,9 @@ const GuidPage: React.FC = () => {
   });
 
   const send = useGuidSend({
+    // Terminal mode override
+    terminalModeOverride: terminalMode,
+
     // Input state
     input: guidInput.input,
     setInput: guidInput.setInput,
@@ -271,6 +283,21 @@ const GuidPage: React.FC = () => {
     />
   );
 
+  // Terminal toggle visibility — only for agents that create ACP conversations
+  const showTerminalToggle = (() => {
+    const agent = agentSelection.selectedAgent;
+    if (!agent || agent === 'gemini' || agent === 'openclaw-gateway' || agent === 'nanobot') return false;
+    // Preset agents may fallback to gemini at send time — resolve the final target
+    if (agentSelection.isPresetAgent) {
+      const resolved = agentSelection.currentEffectiveAgentInfo;
+      const finalAgent = resolved.isAvailable
+        ? resolved.agentType
+        : (agentSelection.getAvailableFallbackAgent() ?? resolved.agentType);
+      return finalAgent !== 'gemini' && finalAgent !== 'openclaw-gateway' && finalAgent !== 'nanobot';
+    }
+    return true;
+  })();
+
   // Build the action row
   const actionRowNode = (
     <GuidActionRow
@@ -287,6 +314,9 @@ const GuidPage: React.FC = () => {
       customAgents={agentSelection.customAgents}
       localeKey={localeKey}
       onClosePresetTag={() => agentSelection.setSelectedAgentKey('gemini')}
+      terminalMode={terminalMode ?? false}
+      onTerminalModeChange={setTerminalMode}
+      showTerminalToggle={showTerminalToggle}
       loading={guidInput.loading}
       isButtonDisabled={send.isButtonDisabled}
       onSend={() => {
@@ -300,7 +330,9 @@ const GuidPage: React.FC = () => {
   return (
     <ConfigProvider getPopupContainer={() => guidContainerRef.current || document.body}>
       <div ref={guidContainerRef} className={styles.guidContainer}>
-        <SkillsMarketBanner />
+        <div className={styles.skillsBanner}>
+          <SkillsMarketBanner />
+        </div>
         <div className={styles.guidLayout}>
           <p className='text-2xl font-semibold mb-6 text-0 text-center'>{t('conversation.welcome.title')}</p>
 

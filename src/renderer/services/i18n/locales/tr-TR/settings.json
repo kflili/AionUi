@@ -657,5 +657,26 @@
     "agent": "Ajan",
     "agentDesc": "DingTalk sohbetleri icin kullanilir"
   },
-  "extensionAssistantReadonly": "Uzantı asistanları salt okunurdur. Kopyalayıp düzenleyebilirsiniz."
+  "extensionAssistantReadonly": "Uzantı asistanları salt okunurdur. Kopyalayıp düzenleyebilirsiniz.",
+  "terminalWrapper": {
+    "title": "Terminal",
+    "richUI": "Zengin UI",
+    "terminal": "Terminal",
+    "defaultMode": "Varsayılan Mod",
+    "defaultModeDesc": "Yeni sohbetler için varsayılan aktarım yöntemini seçin",
+    "shell": "Kabuk",
+    "shellDesc": "Varsayılan kabuğu geçersiz kıl (boş bırakırsanız otomatik algılanır)",
+    "fontSize": "Yazı Tipi Boyutu",
+    "showThinking": "Düşünce Sürecini Göster",
+    "showThinkingDesc": "Terminal geçmişini Zengin UI'ye dönüştürürken AI akıl yürütme adımlarını göster",
+    "modeTooltip": "Zengin UI, tam mesaj geçmişi ve modern arayüz sunar. Terminal, yerel CLI deneyimi sağlar — geçmiş görüntüleme CLI davranışına uyar.",
+    "note": "Sohbet başlığındaki düğmeyi kullanarak istediğiniz zaman mod değiştirebilirsiniz.",
+    "showThinkingHeaderTooltip": "AI düşünce sürecini göster (genel ayar, bir sonraki içe aktarmada uygulanır)",
+    "startInTerminal": "Terminalde başlat",
+    "startInRichUi": "Zengin UI'de başlat",
+    "maxSessions": "Maksimum Aktif Oturum",
+    "maxSessionsDesc": "Maksimum eşzamanlı terminal oturumu sayısı. Sınıra ulaşıldığında en eski boşta oturum kapatılır.",
+    "sessionEvicted": "Boşta bir terminal oturumu kapatıldı (sınır: {{max}}). Sınırı Terminal ayarlarından artırabilirsiniz.",
+    "switchModeFailed": "Mod değiştirme başarısız oldu"
+  }
 }

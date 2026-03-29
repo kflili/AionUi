@@ -13,7 +13,7 @@ import { iconColors } from '@/renderer/styles/colors';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import type { AcpBackend, AcpBackendConfig, AvailableAgent } from '../types';
 import PresetAgentTag from './PresetAgentTag';
-import { Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
+import { Button, Dropdown, Menu, Message, Switch, Tooltip } from '@arco-design/web-react';
 import { ArrowUp, FolderOpen, Plus, Shield, UploadOne } from '@icon-park/react';
 import React, { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
@@ -41,6 +41,11 @@ type GuidActionRowProps = {
   localeKey: string;
   onClosePresetTag: () => void;
 
+  // Terminal mode toggle
+  terminalMode: boolean;
+  onTerminalModeChange: (enabled: boolean) => void;
+  showTerminalToggle: boolean;
+
   // Send button
   loading: boolean;
   isButtonDisabled: boolean;
@@ -61,6 +66,9 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   customAgents,
   localeKey,
   onClosePresetTag,
+  terminalMode,
+  onTerminalModeChange,
+  showTerminalToggle,
   loading,
   isButtonDisabled,
   onSend,
@@ -241,6 +249,25 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           />
         )}
       </div>
+      {showTerminalToggle && (
+        <span className='shrink-0 inline-flex items-center gap-6px'>
+          <span
+            className='text-13px cursor-pointer select-none'
+            style={{ color: !terminalMode ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
+            onClick={() => onTerminalModeChange(false)}
+          >
+            {t('settings.terminalWrapper.richUI')}
+          </span>
+          <Switch size='small' checked={terminalMode} onChange={(checked) => onTerminalModeChange(checked)} />
+          <span
+            className='text-13px cursor-pointer select-none'
+            style={{ color: terminalMode ? 'rgb(var(--primary-6))' : 'var(--color-text-3)' }}
+            onClick={() => onTerminalModeChange(true)}
+          >
+            {t('settings.terminalWrapper.terminal')}
+          </span>
+        </span>
+      )}
       <div className={styles.actionSubmit}>
         <Button
           shape='circle'

@@ -659,5 +659,26 @@
     "agent": "エージェント",
     "agentDesc": "DingTalk の会話に使用"
   },
-  "extensionAssistantReadonly": "拡張アシスタントは読み取り専用です。複製して編集することができます。"
+  "extensionAssistantReadonly": "拡張アシスタントは読み取り専用です。複製して編集することができます。",
+  "terminalWrapper": {
+    "title": "ターミナル",
+    "richUI": "リッチUI",
+    "terminal": "ターミナル",
+    "defaultMode": "デフォルトモード",
+    "defaultModeDesc": "新しい会話のデフォルトトランスポートを選択",
+    "shell": "シェル",
+    "shellDesc": "デフォルトシェルを上書き（空欄で自動検出）",
+    "fontSize": "フォントサイズ",
+    "showThinking": "思考プロセスを表示",
+    "showThinkingDesc": "ターミナル履歴をリッチUIに変換する際にAIの推論ステップを表示",
+    "modeTooltip": "リッチUIは完全なメッセージ履歴とモダンなインターフェースを表示します。ターミナルはネイティブCLI体験を提供し、履歴表示はCLIの動作に従います。",
+    "note": "チャットヘッダーのトグルでいつでもモードを切り替えられます。",
+    "showThinkingHeaderTooltip": "AIの思考プロセスを表示（グローバル設定、次回インポート時に適用）",
+    "startInTerminal": "ターミナルで開始",
+    "startInRichUi": "リッチUIで開始",
+    "maxSessions": "最大ライブセッション数",
+    "maxSessionsDesc": "同時実行可能なターミナルセッションの最大数。上限に達すると最も古いアイドルセッションが閉じられます。",
+    "sessionEvicted": "アイドル状態のターミナルセッションを閉じました（上限：{{max}}）。ターミナル設定で上限を増やせます。",
+    "switchModeFailed": "モード切り替えに失敗しました"
+  }
 }

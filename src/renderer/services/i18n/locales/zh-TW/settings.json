@@ -659,5 +659,26 @@
     "agent": "對話Agent",
     "agentDesc": "用於與Channel進行對話"
   },
-  "extensionAssistantReadonly": "擴展助手為唯讀，你可以複製它並編輯副本。"
+  "extensionAssistantReadonly": "擴展助手為唯讀，你可以複製它並編輯副本。",
+  "terminalWrapper": {
+    "title": "終端",
+    "richUI": "富文本",
+    "terminal": "終端",
+    "defaultMode": "預設模式",
+    "defaultModeDesc": "選擇新對話的預設傳輸方式",
+    "shell": "Shell",
+    "shellDesc": "覆蓋預設 Shell（留空則自動偵測）",
+    "fontSize": "字體大小",
+    "showThinking": "顯示思維過程",
+    "showThinkingDesc": "將終端歷史轉換為富文本時顯示 AI 推理步驟",
+    "modeTooltip": "富文本顯示完整聊天記錄和現代介面。終端提供原生 CLI 體驗，歷史顯示取決於 CLI 行為。",
+    "note": "你可以隨時透過聊天標頭的切換按鈕更改模式。",
+    "showThinkingHeaderTooltip": "顯示 AI 思考過程（全域設定，下次匯入時生效）",
+    "startInTerminal": "以終端模式開始",
+    "startInRichUi": "以富文本模式開始",
+    "maxSessions": "最大活躍會話數",
+    "maxSessionsDesc": "最大並行終端會話數。達到上限時自動關閉最舊的閒置會話。",
+    "sessionEvicted": "已關閉一個閒置終端會話（上限：{{max}}）。你可以在終端設定中增加上限。",
+    "switchModeFailed": "切換模式失敗"
+  }
 }

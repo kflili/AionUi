@@ -9,7 +9,7 @@ import { vs, vs2015 } from 'react-syntax-highlighter/dist/esm/styles/hljs';
 
 import katex from 'katex';
 
-import { copyText } from '@/renderer/utils/ui/clipboard';
+import { copyText, CopyFallbackShown } from '@/renderer/utils/ui/clipboard';
 import { Message } from '@arco-design/web-react';
 import { Copy, Down, Up } from '@icon-park/react';
 import React, { useMemo, useState } from 'react';
@@ -142,7 +142,8 @@ function CodeBlock(props: CodeBlockProps) {
                     .then(() => {
                       Message.success(t('common.copySuccess'));
                     })
-                    .catch(() => {
+                    .catch((err: unknown) => {
+                      if (err instanceof CopyFallbackShown) return;
                       Message.error(t('common.copyFailed'));
                     });
                 }}

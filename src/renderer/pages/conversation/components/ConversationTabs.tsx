@@ -50,26 +50,33 @@ const ConversationTabView: React.FC<ConversationTabViewProps> = ({
 }) => {
   const tabClassName = `flex items-center gap-8px px-12px h-full max-w-240px cursor-pointer transition-all duration-200 shrink-0 border-r border-[color:var(--border-base)] ${isActive ? 'bg-1 text-[color:var(--color-text-1)] font-medium' : 'bg-2 text-[color:var(--color-text-3)] hover:text-[color:var(--color-text-2)] border-b border-[color:var(--border-base)]'}`;
 
+  const tabContent = (
+    <div
+      className={tabClassName}
+      style={{ borderRight: '1px solid var(--border-base)' }}
+      onClick={() => onSwitch(tabId)}
+      title={isMobile ? undefined : tabName}
+    >
+      <span className='text-15px whitespace-nowrap overflow-hidden text-ellipsis select-none flex-1'>{tabName}</span>
+      <Close
+        theme='outline'
+        size='14'
+        fill={iconColors.secondary}
+        className='shrink-0 transition-all duration-200 hover:fill-[rgb(var(--danger-6))]'
+        onClick={(event) => {
+          event.stopPropagation();
+          onClose(tabId);
+        }}
+      />
+    </div>
+  );
+
+  // Skip context menu on mobile — long press interferes with tap/scroll
+  if (isMobile) return tabContent;
+
   return (
     <Dropdown droplist={contextMenu} trigger='contextMenu' position='bl'>
-      <div
-        className={tabClassName}
-        style={{ borderRight: '1px solid var(--border-base)' }}
-        onClick={() => onSwitch(tabId)}
-        title={isMobile ? undefined : tabName}
-      >
-        <span className='text-15px whitespace-nowrap overflow-hidden text-ellipsis select-none flex-1'>{tabName}</span>
-        <Close
-          theme='outline'
-          size='14'
-          fill={iconColors.secondary}
-          className='shrink-0 transition-all duration-200 hover:fill-[rgb(var(--danger-6))]'
-          onClick={(event) => {
-            event.stopPropagation();
-            onClose(tabId);
-          }}
-        />
-      </div>
+      {tabContent}
     </Dropdown>
   );
 };
@@ -374,7 +381,8 @@ const ConversationTabs: React.FC = () => {
         {/* Tabs 滚动区域 */}
         <div
           ref={tabsContainerRef}
-          className='flex items-center h-full flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden'
+          className='flex items-center h-full flex-1 overflow-x-auto overflow-y-hidden [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden [-webkit-tap-highlight-color:transparent]'
+          style={{ touchAction: 'pan-x' }}
         >
           {openTabs.map((tab) => (
             <ConversationTabView

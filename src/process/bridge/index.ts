@@ -36,6 +36,7 @@ import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
 import { initCliHistoryBridge } from './cliHistoryBridge';
 import { initExtensionsBridge } from './extensionsBridge';
+import { initPtyBridge } from './ptyBridge';
 
 export interface BridgeDependencies {
   conversationService: IConversationService;
@@ -76,6 +77,7 @@ export function initAllBridges(deps: BridgeDependencies): void {
   initTaskBridge(deps.workerTaskManager);
   initStarOfficeBridge();
   initCliHistoryBridge();
+  initPtyBridge();
 }
 
 /**
@@ -92,6 +94,7 @@ export async function initializeAcpDetector(): Promise<void> {
 // 导出初始化函数供单独使用
 
 export {
+  initPtyBridge,
   initCliHistoryBridge,
   initAcpConversationBridge,
   initApplicationBridge,

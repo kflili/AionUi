@@ -69,6 +69,7 @@
   --fill-white-to-black: #ffffff; /* 白到黑填充色 */
   --border-special: var(--bg-3); /* 特殊边框色 */
   --color-guid-agent-bar: #eaecf7; /* 首页 Agent 选择条背景 - 亮色 */
+  --terminal-bg: #1e1e1e; /* Terminal background - always dark */
 }
 
 /* Dark Mode */

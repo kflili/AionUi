@@ -1,31 +1,32 @@
 # AionUI Enhancement Plans — Index
 
-**Date:** 2026-03-19 (updated 2026-03-21)
+**Date:** 2026-03-19 (updated 2026-03-24)
 **Context:** Research and planning session covering AionUI architecture, CLI agent ecosystem, knowledge management, and personal AI workflow design.
 
 ---
 
 ## Implementation Order
 
-Each step = one plan file. Sub-features live inside their plan file.
+Each step has its own plan. Multi-file plans live in a subfolder; standalone plans stay flat.
 
 ### Step 0.5: Copy Chat Reference
 
-**Plan:** Inside [`2026-03-19-cli-history-integration.md`](./2026-03-19-cli-history-integration.md) (Feature 1)
+**Plan:** Inside [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (Feature 1)
 **Where:** AionUI project
 
 Add "Copy Chat Reference" to conversation `...` menu. Low-risk, high-leverage, independent of other steps. Copies a file path or session ID that any CLI agent can use to read the conversation via existing tools. Can be built standalone before or alongside Step 1.
 
 ### Step 1: Terminal Wrapper Mode
 
-**Plan:** [`2026-03-19-terminal-wrapper-mode.md`](./2026-03-19-terminal-wrapper-mode.md)
+**Plan:** [`2026-03-19-terminal-wrapper/plan.md`](./2026-03-19-terminal-wrapper/plan.md)
 **Where:** AionUI project
+**Also:** [manual-tests.md](./2026-03-19-terminal-wrapper/manual-tests.md), [design-mockup.html](./2026-03-19-terminal-wrapper/design-mockup.html)
 
 Build terminal wrapper infrastructure: embed xterm.js in the renderer, spawn CLIs via node-pty, create `TerminalSessionManager` for PTY lifecycle. Exposed as a mode toggle (`💬 Rich UI | >_ Terminal`) in the chat header — not a separate conversation type, but an alternative rendering mode on existing conversations. Both directions work via CLI `--resume`. Includes JSONL → TMessage converter for rendering terminal history as rich UI. New "AgentCLI" settings tab for default mode.
 
 ### Step 2: CLI History Integration
 
-**Plan:** [`2026-03-19-cli-history-integration.md`](./2026-03-19-cli-history-integration.md)
+**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md)
 **Where:** AionUI project
 
 Import CLI sessions (Claude Code, Copilot, Codex) into AionUI's SQLite as first-class conversations. No separate data model — imported sessions appear in the normal sidebar timeline with full functionality (rename, pin, delete, export, resume). JSONL + SQLite hybrid approach, same as Copilot and Codex already use. Background message conversion newest-first.
@@ -80,7 +81,7 @@ These are different databases for different purposes. Step 2's SQLite is AionUI'
 
 ### CLI History Storage Reference
 
-**Doc:** [`2026-03-19-cli-history-storage-reference.md`](./2026-03-19-cli-history-storage-reference.md)
+**Doc:** [`2026-03-19-cli-history/storage-reference.md`](./2026-03-19-cli-history/storage-reference.md)
 
 Research findings on how every CLI and desktop app stores conversation history. Covers Claude Code CLI, Claude Desktop (Chat/Code/Cowork modes), Copilot CLI, Codex CLI, Gemini CLI, Google Antigravity, and AionUI. Includes JSON vs JSONL comparison, why CLIs use JSONL, three approaches to Desktop UI ↔ CLI communication (Claude Desktop proprietary IPC, AionUI ACP, terminal wrapper), and comparison table. Includes cross-platform path notes.
 

@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import type { TProviderWithModel } from '@/common/config/storage';
+import { ConfigStorage, type TProviderWithModel } from '@/common/config/storage';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
 import { updateWorkspaceTime } from '@/renderer/utils/workspace/workspaceHistory';
@@ -17,6 +17,9 @@ import type { NavigateFunction } from 'react-router-dom';
 import type { AcpBackend, AvailableAgent, EffectiveAgentInfo } from '../types';
 
 export type GuidSendDeps = {
+  // Terminal mode override (from guide page toggle)
+  terminalModeOverride?: boolean;
+
   // Input state
   input: string;
   setInput: React.Dispatch<React.SetStateAction<string>>;
@@ -73,6 +76,7 @@ export type GuidSendResult = {
  */
 export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
   const {
+    terminalModeOverride,
     input,
     setInput,
     files,
@@ -318,6 +322,14 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
 
       try {
+        // Use terminal mode override from guide page toggle, or fall back to global default
+        const defaultTransport =
+          terminalModeOverride !== undefined
+            ? terminalModeOverride
+              ? 'terminal'
+              : 'acp'
+            : ((await ConfigStorage.get('agentCli.config'))?.defaultMode ?? 'acp');
+
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'acp',
           name: input,
@@ -335,6 +347,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             presetAssistantId: isPreset ? agentInfo?.customAgentId || acpAgentInfo?.customAgentId : undefined,
             sessionMode: selectedMode,
             currentModelId: selectedAcpModel || undefined,
+            currentMode: defaultTransport,
           },
         });
 
@@ -364,6 +377,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
     }
   }, [
+    terminalModeOverride,
     input,
     files,
     dir,

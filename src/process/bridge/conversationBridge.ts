@@ -222,6 +222,10 @@ export function initConversationBridge(
       // Kill the running task if exists
       workerTaskManager.kill(id);
 
+      // Kill any terminal PTY session for this conversation
+      const { getTerminalSessionManager } = await import('@process/task/TerminalSessionManager');
+      getTerminalSessionManager().kill(id);
+
       // If source is not 'aionui' (e.g., telegram), cleanup channel resources
       // 如果来源不是 aionui（如 telegram），需要清理 channel 相关资源
       if (source && source !== 'aionui') {

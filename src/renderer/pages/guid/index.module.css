@@ -197,6 +197,15 @@
   }
 }
 
+/* Skills Market banner positioning */
+.skillsBanner {
+  position: absolute;
+  right: 12px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  z-index: 10;
+  max-width: 280px;
+}
+
 /* 移动端容器滚动支持 */
 .guidContainer {
   height: 100%;
@@ -240,6 +249,16 @@
 }
 
 @media (max-width: 768px) {
+  .skillsBanner {
+    position: relative;
+    right: auto;
+    top: auto;
+    max-width: 100%;
+    width: 100%;
+    margin-bottom: 12px;
+    z-index: auto;
+  }
+
   .guidContainer {
     justify-content: flex-start;
     overflow-y: auto;
