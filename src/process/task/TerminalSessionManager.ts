@@ -54,6 +54,10 @@ interface TerminalSession {
   outputBuffer: string[];
   /** Current buffer size in bytes (for cap enforcement) */
   outputBufferBytes: number;
+  /** Rolling buffer of ALL output for replay on reattach (xterm.js is destroyed on navigate) */
+  scrollbackBuffer: string[];
+  /** Current scrollback buffer size in bytes */
+  scrollbackBufferBytes: number;
   /** Whether the PTY process has exited (session preserved for buffer replay) */
   exited: boolean;
 }
@@ -145,6 +149,8 @@ export class TerminalSessionManager {
       attached: true,
       outputBuffer: [],
       outputBufferBytes: 0,
+      scrollbackBuffer: [],
+      scrollbackBufferBytes: 0,
       exited: false,
     };
 
@@ -154,6 +160,15 @@ export class TerminalSessionManager {
 
     // Stream output — emit to renderer when attached, buffer when detached
     ptyProcess.onData((data: string) => {
+      // Always maintain scrollback buffer (xterm.js is destroyed on navigate,
+      // so we need full history for replay on reattach)
+      session.scrollbackBuffer.push(data);
+      session.scrollbackBufferBytes += data.length;
+      while (session.scrollbackBufferBytes > MAX_BUFFER_BYTES && session.scrollbackBuffer.length > 1) {
+        const removed = session.scrollbackBuffer.shift()!;
+        session.scrollbackBufferBytes -= removed.length;
+      }
+
       if (session.attached) {
         ipcBridge.pty.output.emit({ conversationId, data });
       } else {
@@ -212,7 +227,7 @@ export class TerminalSessionManager {
 
   /**
    * Reattach the renderer to a session (user navigated back).
-   * Returns buffered output accumulated while detached.
+   * Returns full scrollback buffer so xterm.js (which was destroyed on navigate) can replay history.
    */
   reattach(conversationId: string): { exists: boolean; buffer: string; exited: boolean } {
     const session = this.sessions.get(conversationId);
@@ -220,14 +235,14 @@ export class TerminalSessionManager {
       console.log(`${TAG} Reattach: no session found for ${conversationId}`);
       return { exists: false, buffer: '', exited: false };
     }
-    // Flush buffer
-    const buffer = session.outputBuffer.join('');
+    // Return full scrollback (not just detached buffer) — xterm.js was destroyed on navigate
+    const buffer = session.scrollbackBuffer.join('');
     const exited = session.exited;
     session.outputBuffer = [];
     session.outputBufferBytes = 0;
     session.attached = true;
     console.log(
-      `${TAG} Reattached: conv=${conversationId}, pid=${session.pid}, buffered=${buffer.length} chars, exited=${exited}`
+      `${TAG} Reattached: conv=${conversationId}, pid=${session.pid}, scrollback=${buffer.length} chars, exited=${exited}`
     );
 
     // If the PTY exited while detached, clean up now that buffer has been flushed
