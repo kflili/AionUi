@@ -349,6 +349,7 @@ export const useGuidAgentSelection = ({
         if (yoloMode) {
           const yoloValues: Record<string, string> = {
             claude: 'bypassPermissions',
+            copilot: 'https://agentclientprotocol.com/protocol/session-modes#autopilot',
             gemini: 'yolo',
             codex: 'yolo',
             iflow: 'yolo',
