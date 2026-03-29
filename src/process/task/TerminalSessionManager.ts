@@ -9,7 +9,10 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { ipcBridge } from '@/common';
+import { ConfigStorage } from '@/common/config/storage';
 import { getSystemDir } from '@process/utils/initStorage';
+
+const DEFAULT_MAX_SESSIONS = 10;
 
 const TAG = '[TerminalSessionManager]';
 
@@ -50,6 +53,8 @@ interface TerminalSession {
   transcriptStream: fs.WriteStream;
   /** Whether the renderer is currently listening (false = navigated away) */
   attached: boolean;
+  /** Timestamp when session was last detached (for LRU eviction) */
+  detachedAt?: number;
   /** Buffered output while renderer is detached */
   outputBuffer: string[];
   /** Current buffer size in bytes (for cap enforcement) */
@@ -78,6 +83,7 @@ export class TerminalSessionManager {
   constructor() {
     const dataDir = this.getDataDir();
     this.pidFilePath = path.join(dataDir, 'terminal-pids.json');
+    this.refreshMaxSessions();
   }
 
   /** Clean up orphaned PTY processes from previous crashes. Call on app launch. */
@@ -105,7 +111,7 @@ export class TerminalSessionManager {
     }
   }
 
-  /** Spawn a PTY process for a conversation. */
+  /** Spawn a PTY process for a conversation. Async to read config for session limit. */
   spawn(params: {
     conversationId: string;
     command: string;
@@ -123,6 +129,12 @@ export class TerminalSessionManager {
       console.log(`${TAG} Killing existing session before respawn: ${conversationId}`);
       this.kill(conversationId);
     }
+
+    // LRU eviction: if at capacity, kill the oldest detached session
+    // (refreshMaxSessions is fire-and-forget — uses cached value for this call,
+    // updates for next call if config changed)
+    this.refreshMaxSessions();
+    this.evictIfNeeded();
 
     const shell = command || this.getDefaultShell();
     console.log(`${TAG} Spawning PTY: conv=${conversationId}, cmd=${shell}, args=${JSON.stringify(args)}, cwd=${cwd}`);
@@ -221,6 +233,7 @@ export class TerminalSessionManager {
       return false;
     }
     session.attached = false;
+    session.detachedAt = Date.now();
     console.log(`${TAG} Detached: conv=${conversationId}, pid=${session.pid}`);
     return true;
   }
@@ -300,6 +313,52 @@ export class TerminalSessionManager {
     for (const conversationId of this.sessions.keys()) {
       this.kill(conversationId);
     }
+  }
+
+  /** Evict the oldest detached session if at capacity. */
+  private evictIfNeeded(): void {
+    const maxSessions = this.maxSessions;
+    if (this.sessions.size < maxSessions) return;
+
+    // Find the oldest detached session (by detachedAt)
+    let oldest: { id: string; detachedAt: number } | undefined;
+    for (const [id, session] of this.sessions) {
+      if (!session.attached && session.detachedAt) {
+        if (!oldest || session.detachedAt < oldest.detachedAt) {
+          oldest = { id, detachedAt: session.detachedAt };
+        }
+      }
+    }
+
+    if (!oldest) {
+      console.log(`${TAG} At capacity (${this.sessions.size}/${maxSessions}) but no detached sessions to evict`);
+      return;
+    }
+
+    console.log(
+      `${TAG} Evicting oldest detached session: ${oldest.id} (detached ${Date.now() - oldest.detachedAt}ms ago)`
+    );
+    this.kill(oldest.id);
+
+    // Notify renderer so it can show a toast
+    ipcBridge.pty.sessionEvicted.emit({
+      conversationId: oldest.id,
+      maxSessions,
+    });
+  }
+
+  /** Cached max sessions value (refreshed on each spawn). */
+  private maxSessions = DEFAULT_MAX_SESSIONS;
+
+  /** Refresh max sessions from config. Call before eviction check. */
+  refreshMaxSessions(): void {
+    ConfigStorage.get('agentCli.config')
+      .then((config) => {
+        this.maxSessions = config?.maxTerminalSessions ?? DEFAULT_MAX_SESSIONS;
+      })
+      .catch(() => {
+        // Use default on error
+      });
   }
 
   private cleanupSession(conversationId: string): void {

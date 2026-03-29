@@ -15,6 +15,7 @@ type AgentCliConfig = {
   defaultMode?: 'acp' | 'terminal';
   fontSize?: number;
   showThinking?: boolean;
+  maxTerminalSessions?: number;
 };
 
 const PreferenceRow: React.FC<{
@@ -83,6 +84,21 @@ const AgentCliModalContent: React.FC = () => {
                 description={t('settings.terminalWrapper.showThinkingDesc')}
               >
                 <Switch checked={config.showThinking ?? false} onChange={(val) => saveConfig({ showThinking: val })} />
+              </PreferenceRow>
+
+              {/* Max Terminal Sessions */}
+              <PreferenceRow
+                label={t('settings.terminalWrapper.maxSessions')}
+                description={t('settings.terminalWrapper.maxSessionsDesc')}
+              >
+                <InputNumber
+                  className='max-w-120px'
+                  min={1}
+                  max={20}
+                  step={1}
+                  value={config.maxTerminalSessions ?? 10}
+                  onChange={(val) => saveConfig({ maxTerminalSessions: val || 10 })}
+                />
               </PreferenceRow>
 
               {/* Font Size */}

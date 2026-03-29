@@ -673,6 +673,8 @@
     "note": "You can switch modes anytime using the toggle in the chat header.",
     "showThinkingHeaderTooltip": "Show agent thinking (global, applies on next import)",
     "startInTerminal": "Start in terminal",
-    "startInRichUi": "Start in Rich UI"
+    "startInRichUi": "Start in Rich UI",
+    "maxSessions": "Max Live Sessions",
+    "maxSessionsDesc": "Maximum concurrent terminal sessions. Oldest idle session is closed when limit is reached."
   }
 }

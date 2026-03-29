@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import { ConfigStorage } from '@/common/config/storage';
+import { Message } from '@arco-design/web-react';
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -50,6 +51,7 @@ const TerminalComponent: React.FC<{
     let disposed = false;
     let unsubOutput: (() => void) | undefined;
     let unsubExit: (() => void) | undefined;
+    let unsubEvicted: (() => void) | undefined;
     let resizeObserver: ResizeObserver | undefined;
     let terminal: Terminal | undefined;
 
@@ -124,6 +126,14 @@ const TerminalComponent: React.FC<{
           }
         });
 
+        // Listen for session eviction (another terminal hit the max limit)
+        unsubEvicted = ipcBridge.pty.sessionEvicted.on((event) => {
+          Message.warning({
+            content: `Closed an idle terminal session (limit: ${event.maxSessions}). You can increase this in Terminal settings.`,
+            duration: 5000,
+          });
+        });
+
         // Forward keyboard input to PTY
         terminal.onData((data: string) => {
           ipcBridge.pty.write.invoke({ conversationId, data });
@@ -182,6 +192,7 @@ const TerminalComponent: React.FC<{
       disposed = true;
       unsubOutput?.();
       unsubExit?.();
+      unsubEvicted?.();
       resizeObserver?.disconnect();
       if (terminal) {
         terminal.dispose();

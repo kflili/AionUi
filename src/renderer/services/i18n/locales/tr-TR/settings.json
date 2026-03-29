@@ -673,6 +673,8 @@
     "note": "Sohbet başlığındaki düğmeyi kullanarak istediğiniz zaman mod değiştirebilirsiniz.",
     "showThinkingHeaderTooltip": "AI düşünce sürecini göster (genel ayar, bir sonraki içe aktarmada uygulanır)",
     "startInTerminal": "Terminalde başlat",
-    "startInRichUi": "Zengin UI'de başlat"
+    "startInRichUi": "Zengin UI'de başlat",
+    "maxSessions": "Maksimum Aktif Oturum",
+    "maxSessionsDesc": "Maksimum eşzamanlı terminal oturumu sayısı. Sınıra ulaşıldığında en eski boşta oturum kapatılır."
   }
 }

@@ -1212,6 +1212,8 @@ export type I18nKey =
   | 'settings.terminalWrapper.defaultMode'
   | 'settings.terminalWrapper.defaultModeDesc'
   | 'settings.terminalWrapper.fontSize'
+  | 'settings.terminalWrapper.maxSessions'
+  | 'settings.terminalWrapper.maxSessionsDesc'
   | 'settings.terminalWrapper.modeTooltip'
   | 'settings.terminalWrapper.note'
   | 'settings.terminalWrapper.richUI'

@@ -136,6 +136,8 @@ export interface IConfigStorageRefer {
     fontSize?: number;
     /** Show thinking blocks when converting JSONL to Rich UI / 转换时显示思维过程 */
     showThinking?: boolean;
+    /** Max concurrent live terminal sessions (LRU eviction when exceeded) / 最大终端会话数 */
+    maxTerminalSessions?: number;
   };
 }
 

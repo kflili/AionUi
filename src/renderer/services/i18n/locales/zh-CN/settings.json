@@ -674,6 +674,8 @@
     "note": "你可以随时通过聊天头部的切换按钮更改模式。",
     "showThinkingHeaderTooltip": "显示 AI 思考过程（全局设置，下次导入时生效）",
     "startInTerminal": "以终端模式开始",
-    "startInRichUi": "以富文本模式开始"
+    "startInRichUi": "以富文本模式开始",
+    "maxSessions": "最大活跃会话数",
+    "maxSessionsDesc": "最大并发终端会话数。达到上限时自动关闭最旧的空闲会话。"
   }
 }
