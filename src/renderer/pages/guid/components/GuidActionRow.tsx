@@ -13,8 +13,8 @@ import { iconColors } from '@/renderer/styles/colors';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import type { AcpBackend, AcpBackendConfig, AvailableAgent } from '../types';
 import PresetAgentTag from './PresetAgentTag';
-import { Button, Dropdown, Menu, Message, Tooltip } from '@arco-design/web-react';
-import { ArrowUp, Code, FolderOpen, Plus, Shield, UploadOne } from '@icon-park/react';
+import { Button, Dropdown, Menu, Message, Radio, Tooltip } from '@arco-design/web-react';
+import { ArrowUp, FolderOpen, Plus, Shield, UploadOne } from '@icon-park/react';
 import React, { useCallback, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import styles from '../index.module.css';
@@ -81,7 +81,7 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
   const modeOptions = getAgentModes(modeBackend);
   const currentModeOption = modeOptions.find((mode) => mode.value === selectedMode);
   const showModeSwitch = supportsModeSwitch(modeBackend);
-  const configOptionCount = (modelSelectorNode ? 1 : 0) + (showModeSwitch ? 1 : 0);
+  const configOptionCount = (modelSelectorNode ? 1 : 0) + (showModeSwitch ? 1 : 0) + (showTerminalToggle ? 1 : 0);
 
   // Browser file picker ref (WebUI only)
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -238,6 +238,18 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
               modeLabelFormatter={getModeDisplayLabel}
             />
           )}
+
+          {showTerminalToggle && (
+            <Radio.Group
+              type='button'
+              size='mini'
+              value={terminalMode ? 'terminal' : 'acp'}
+              onChange={(val) => onTerminalModeChange(val === 'terminal')}
+            >
+              <Radio value='acp'>{t('settings.terminalWrapper.richUI')}</Radio>
+              <Radio value='terminal'>{t('settings.terminalWrapper.terminal')}</Radio>
+            </Radio.Group>
+          )}
         </div>
 
         {isPresetAgent && selectedAgentInfo && (
@@ -249,38 +261,6 @@ const GuidActionRow: React.FC<GuidActionRowProps> = ({
           />
         )}
       </div>
-      {showTerminalToggle && (
-        <Tooltip
-          content={
-            terminalMode ? t('settings.terminalWrapper.startInTerminal') : t('settings.terminalWrapper.startInRichUi')
-          }
-          disabled={isMobile}
-        >
-          <div
-            className='flex items-center gap-4px cursor-pointer rd-12px px-4px py-2px transition-all duration-200'
-            style={
-              terminalMode ? { backgroundColor: 'rgb(var(--primary-1))', color: 'rgb(var(--primary-6))' } : undefined
-            }
-            role='button'
-            aria-label={
-              terminalMode ? t('settings.terminalWrapper.startInTerminal') : t('settings.terminalWrapper.startInRichUi')
-            }
-            aria-pressed={terminalMode}
-            onClick={() => onTerminalModeChange(!terminalMode)}
-          >
-            <Code
-              theme={terminalMode ? 'filled' : 'outline'}
-              size='14'
-              fill={terminalMode ? 'rgb(var(--primary-6))' : iconColors.secondary}
-            />
-            {terminalMode && (
-              <span className='text-12px font-medium whitespace-nowrap' style={{ color: 'rgb(var(--primary-6))' }}>
-                CLI
-              </span>
-            )}
-          </div>
-        </Tooltip>
-      )}
       <div className={styles.actionSubmit}>
         <Button
           shape='circle'
