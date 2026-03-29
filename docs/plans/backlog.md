@@ -26,6 +26,20 @@ Automatically convert CLI JSONL to TMessages after each CLI response completes w
 
 ---
 
+### Shared `useAgentCliConfig()` hook
+
+**Source:** Pre-PR review (Agent 5, finding #10)
+**Status:** Deferred — works without it, cleanup only
+**Priority:** Low
+
+`ConfigStorage.get('agentCli.config')` is called independently in 9 places with separate `useEffect` + `useState` patterns. No shared hook means components don't sync when config changes while both are mounted.
+
+**Fix:** Create `useAgentCliConfig()` hook with read + subscribe pattern (~20 lines), replace 9 call sites across 6 files. Straightforward refactor, ~30 min.
+
+**Why deferred:** No user-facing bug. Each component reads config on mount which works for current usage. The only edge case (two views reading same config open simultaneously) is extremely unlikely.
+
+---
+
 ### CLI `--resume` may skip middle conversation turns
 
 **Source:** Manual testing of terminal wrapper mode
