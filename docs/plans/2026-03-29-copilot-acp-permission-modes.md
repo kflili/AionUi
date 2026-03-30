@@ -1,7 +1,7 @@
 # Copilot CLI ACP Permission Modes
 
 **Date:** 2026-03-29
-**Status:** Planned
+**Status:** Implemented
 **Branch:** `feat/copilot-acp-permission-modes`
 
 ---
@@ -137,12 +137,13 @@ copilot: 'https://agentclientprotocol.com/protocol/session-modes#autopilot',
 
 ## Files Summary
 
-| File                                     | Change                                   | Risk |
-| ---------------------------------------- | ---------------------------------------- | ---- |
-| `src/renderer/utils/model/agentModes.ts` | Add `copilot` modes array + comment      | None |
-| `src/process/task/AcpAgentManager.ts`    | Extend `isYoloMode()`, add to legacy map | Low  |
-| `src/process/agent/acp/constants.ts`     | Add `COPILOT_YOLO_SESSION_MODE`          | None |
-| `src/process/agent/acp/index.ts`         | Add copilot to 2x yoloModeMap            | Low  |
+| File                                                     | Change                                        | Risk |
+| -------------------------------------------------------- | --------------------------------------------- | ---- |
+| `src/renderer/utils/model/agentModes.ts`                 | Add `copilot` modes array + comment           | None |
+| `src/process/task/AcpAgentManager.ts`                    | Extend `isYoloMode()`, add to legacy map      | Low  |
+| `src/process/agent/acp/constants.ts`                     | Add `COPILOT_YOLO_SESSION_MODE`               | None |
+| `src/process/agent/acp/index.ts`                         | Add copilot to 2x yoloModeMap                 | Low  |
+| `src/renderer/pages/guid/hooks/useGuidAgentSelection.ts` | Add copilot to legacy yoloValues fallback map | Low  |
 
 **No UI component changes needed** — `AgentModeSelector`, `GuidActionRow`, and `AcpSendBox` are all driven by `AGENT_MODES` config.
 
