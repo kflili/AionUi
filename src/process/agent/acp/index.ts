@@ -35,6 +35,7 @@ import { AcpApprovalStore, createAcpApprovalKey } from './ApprovalStore';
 import {
   CLAUDE_YOLO_SESSION_MODE,
   CODEBUDDY_YOLO_SESSION_MODE,
+  COPILOT_YOLO_SESSION_MODE,
   IFLOW_YOLO_SESSION_MODE,
   QWEN_YOLO_SESSION_MODE,
 } from './constants';
@@ -318,6 +319,7 @@ export class AcpAgent {
         const yoloModeMap: Partial<Record<AcpBackend, string>> = {
           claude: CLAUDE_YOLO_SESSION_MODE,
           codebuddy: CODEBUDDY_YOLO_SESSION_MODE,
+          copilot: COPILOT_YOLO_SESSION_MODE,
           qwen: QWEN_YOLO_SESSION_MODE,
           iflow: IFLOW_YOLO_SESSION_MODE,
         };
@@ -391,6 +393,7 @@ export class AcpAgent {
     if (this.connection.isConnected && this.connection.hasActiveSession) {
       const yoloModeMap: Partial<Record<AcpBackend, string>> = {
         claude: CLAUDE_YOLO_SESSION_MODE,
+        copilot: COPILOT_YOLO_SESSION_MODE,
         qwen: QWEN_YOLO_SESSION_MODE,
       };
       const sessionMode = yoloModeMap[this.extra.backend];

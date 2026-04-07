@@ -33,6 +33,9 @@ export interface AgentModeOption {
  * - Codex: supports suggest/autoEdit/fullAuto (maps to CLI's Suggest/Auto Edit/Full Auto via Shift+Tab)
  * - Goose: mode set at startup only, not during session
  * - Cursor: agent/plan/ask modes via ACP session/set_mode (verified via `agent acp` session/new response)
+ * - Copilot: uses ACP-spec URL-based mode IDs (verified via `copilot --acp --stdio` test)
+ *   - Rejects plain strings; requires full URLs from https://agentclientprotocol.com/protocol/session-modes
+ *   - Modes: #agent (default), #plan, #autopilot (YOLO — auto-approve via Manager layer)
  */
 export const AGENT_MODES: Record<string, AgentModeOption[]> = {
   claude: [
@@ -70,6 +73,15 @@ export const AGENT_MODES: Record<string, AgentModeOption[]> = {
     { value: 'agent', label: 'Agent', description: 'Full agent capabilities with tool access' },
     { value: 'plan', label: 'Plan', description: 'Read-only mode for planning and designing before implementation' },
     { value: 'ask', label: 'Ask', description: 'Q&A mode - no edits or command execution' },
+  ],
+  // Copilot: ACP-spec URL-based mode IDs (plain strings like 'plan' are rejected)
+  copilot: [
+    { value: 'https://agentclientprotocol.com/protocol/session-modes#agent', label: 'Default' },
+    { value: 'https://agentclientprotocol.com/protocol/session-modes#plan', label: 'Plan' },
+    {
+      value: 'https://agentclientprotocol.com/protocol/session-modes#autopilot',
+      label: 'Autopilot (YOLO)',
+    },
   ],
 };
 

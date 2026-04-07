@@ -87,7 +87,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
     this.persistedModelId = data.currentModelId || null;
     this.status = 'pending';
     // Sync yoloMode from sessionMode so addConfirmation auto-approves when Full Auto is selected
-    this.yoloMode = this.yoloMode || this.currentMode === 'yolo' || this.currentMode === 'bypassPermissions';
+    this.yoloMode = this.yoloMode || this.isYoloMode(this.currentMode);
   }
 
   private makeStreamBufferKey(message: Extract<TMessage, { type: 'text' }>): string {
@@ -208,6 +208,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
         if (legacyYoloMode && this.currentMode === 'default' && !data.sessionMode) {
           const yoloModeValues: Record<string, string> = {
             claude: 'bypassPermissions',
+            copilot: 'https://agentclientprotocol.com/protocol/session-modes#autopilot',
             qwen: 'yolo',
             iflow: 'yolo',
             codex: 'yolo',
@@ -946,7 +947,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
 
   /** Check if a mode value represents YOLO mode for any backend */
   private isYoloMode(mode: string): boolean {
-    return mode === 'yolo' || mode === 'bypassPermissions';
+    return mode === 'yolo' || mode === 'bypassPermissions' || mode.endsWith('#autopilot');
   }
 
   /**

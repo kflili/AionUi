@@ -19,6 +19,9 @@ export const IFLOW_YOLO_SESSION_MODE = 'yolo' as const;
 /** CodeBuddy: bypass all permission checks (same as Claude's mode name) */
 export const CODEBUDDY_YOLO_SESSION_MODE = 'bypassPermissions' as const;
 
+/** Copilot CLI: ACP-spec URL-based autopilot mode (verified via `copilot --acp --stdio` test) */
+export const COPILOT_YOLO_SESSION_MODE = 'https://agentclientprotocol.com/protocol/session-modes#autopilot' as const;
+
 /** Goose: environment variable for auto mode (set before process spawn) */
 export const GOOSE_YOLO_ENV_VAR = 'GOOSE_MODE' as const;
 export const GOOSE_YOLO_ENV_VALUE = 'auto' as const;
