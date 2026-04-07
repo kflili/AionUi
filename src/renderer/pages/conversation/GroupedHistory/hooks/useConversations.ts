@@ -20,7 +20,7 @@ export const useConversations = () => {
       const stored = localStorage.getItem(EXPANSION_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed) ? [...new Set(parsed.filter((v): v is string => typeof v === 'string'))] : [];
       }
     } catch {
       // ignore

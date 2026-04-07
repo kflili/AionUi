@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { groupConversationsByTimelineAndWorkspace } from '../../src/renderer/pages/conversation/GroupedHistory/utils/groupingHelpers';
 
@@ -7,6 +7,9 @@ vi.mock('@/renderer/utils/workspace/workspace', () => ({
 }));
 
 const DAY_MS = 86_400_000;
+
+// Fixed "now" at noon to avoid midnight boundary flakes
+const FIXED_NOW = new Date(2026, 5, 15, 12, 0, 0).getTime();
 
 const makeConv = (id: string, modifyTime: number, workspace?: string, customWorkspace?: boolean) =>
   ({
@@ -20,10 +23,18 @@ const makeConv = (id: string, modifyTime: number, workspace?: string, customWork
 const t = (key: string) => key;
 
 describe('groupConversationsByTimelineAndWorkspace', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(FIXED_NOW);
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('splits a workspace across multiple timeline sections', () => {
-    const now = Date.now();
-    const todayConv = makeConv('c1', now, '/ws/project', true);
-    const earlierConv = makeConv('c2', now - 10 * DAY_MS, '/ws/project', true);
+    const todayConv = makeConv('c1', FIXED_NOW, '/ws/project', true);
+    const earlierConv = makeConv('c2', FIXED_NOW - 10 * DAY_MS, '/ws/project', true);
 
     const sections = groupConversationsByTimelineAndWorkspace([todayConv, earlierConv], t);
 
@@ -50,10 +61,9 @@ describe('groupConversationsByTimelineAndWorkspace', () => {
   });
 
   it('sorts workspace groups by max activity time within each section', () => {
-    const now = Date.now();
     // Two workspaces in "today", wsB has more recent conversation
-    const wsA = makeConv('a1', now - 3600_000, '/ws/a', true); // 1 hour ago
-    const wsB = makeConv('b1', now - 60_000, '/ws/b', true); // 1 minute ago
+    const wsA = makeConv('a1', FIXED_NOW - 3600_000, '/ws/a', true); // 1 hour ago
+    const wsB = makeConv('b1', FIXED_NOW - 60_000, '/ws/b', true); // 1 minute ago
 
     const sections = groupConversationsByTimelineAndWorkspace([wsA, wsB], t);
 
@@ -67,9 +77,8 @@ describe('groupConversationsByTimelineAndWorkspace', () => {
   });
 
   it('keeps conversations without workspace in their own timeline sections', () => {
-    const now = Date.now();
-    const wsConv = makeConv('c1', now, '/ws/project', true);
-    const standaloneConv = makeConv('c2', now - 2 * DAY_MS); // no workspace, 2 days ago
+    const wsConv = makeConv('c1', FIXED_NOW, '/ws/project', true);
+    const standaloneConv = makeConv('c2', FIXED_NOW - 2 * DAY_MS); // no workspace, 2 days ago
 
     const sections = groupConversationsByTimelineAndWorkspace([wsConv, standaloneConv], t);
 
@@ -85,10 +94,9 @@ describe('groupConversationsByTimelineAndWorkspace', () => {
   });
 
   it('sorts conversations within a split workspace group by activity time desc', () => {
-    const now = Date.now();
     // Two conversations in same workspace, same timeline section
-    const older = makeConv('c1', now - 3600_000, '/ws/project', true);
-    const newer = makeConv('c2', now - 60_000, '/ws/project', true);
+    const older = makeConv('c1', FIXED_NOW - 3600_000, '/ws/project', true);
+    const newer = makeConv('c2', FIXED_NOW - 60_000, '/ws/project', true);
 
     const sections = groupConversationsByTimelineAndWorkspace([older, newer], t);
 
