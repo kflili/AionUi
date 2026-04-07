@@ -7,7 +7,6 @@
 import type { TChatConversation } from '@/common/config/storage';
 import { getActivityTime, getTimelineLabel } from '@/renderer/utils/chat/timeline';
 import { getWorkspaceDisplayName } from '@/renderer/utils/workspace/workspace';
-import { getWorkspaceUpdateTime } from '@/renderer/utils/workspace/workspaceHistory';
 
 import type { GroupedHistoryResult, TimelineItem, TimelineSection, WorkspaceGroup } from '../types';
 import { getConversationSortOrder } from './sortOrderHelpers';
@@ -54,18 +53,30 @@ export const groupConversationsByTimelineAndWorkspace = (
   const workspaceGroupsByTimeline = new Map<string, WorkspaceGroup[]>();
 
   allWorkspaceGroups.forEach((convList, workspace) => {
-    const sortedConvs = [...convList].toSorted((a, b) => getActivityTime(b) - getActivityTime(a));
-    const latestConv = sortedConvs[0];
-    const timeline = getConversationTimelineLabel(latestConv, t);
+    convList.forEach((conv) => {
+      const timeline = getConversationTimelineLabel(conv, t);
 
-    if (!workspaceGroupsByTimeline.has(timeline)) {
-      workspaceGroupsByTimeline.set(timeline, []);
-    }
+      if (!workspaceGroupsByTimeline.has(timeline)) {
+        workspaceGroupsByTimeline.set(timeline, []);
+      }
 
-    workspaceGroupsByTimeline.get(timeline)!.push({
-      workspace,
-      displayName: getWorkspaceDisplayName(workspace),
-      conversations: sortedConvs,
+      const timelineGroups = workspaceGroupsByTimeline.get(timeline)!;
+      let group = timelineGroups.find((g) => g.workspace === workspace);
+      if (!group) {
+        group = {
+          workspace,
+          displayName: getWorkspaceDisplayName(workspace),
+          conversations: [],
+        };
+        timelineGroups.push(group);
+      }
+      group.conversations.push(conv);
+    });
+  });
+
+  workspaceGroupsByTimeline.forEach((groups) => {
+    groups.forEach((group) => {
+      group.conversations.sort((a, b) => getActivityTime(b) - getActivityTime(a));
     });
   });
 
@@ -97,8 +108,7 @@ export const groupConversationsByTimelineAndWorkspace = (
     const items: TimelineItem[] = [];
 
     withWorkspace.forEach((group) => {
-      const updateTime = getWorkspaceUpdateTime(group.workspace);
-      const time = updateTime > 0 ? updateTime : getActivityTime(group.conversations[0]);
+      const time = Math.max(...group.conversations.map((c) => getActivityTime(c)));
       items.push({
         type: 'workspace',
         time,
