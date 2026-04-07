@@ -76,16 +76,16 @@ export const useConversations = () => {
       hasAutoExpandedRef.current = true;
       return;
     }
-    const allWorkspaces: string[] = [];
+    const allWorkspaces = new Set<string>();
     timelineSections.forEach((section) => {
       section.items.forEach((item) => {
         if (item.type === 'workspace' && item.workspaceGroup) {
-          allWorkspaces.push(item.workspaceGroup.workspace);
+          allWorkspaces.add(item.workspaceGroup.workspace);
         }
       });
     });
-    if (allWorkspaces.length > 0) {
-      setExpandedWorkspaces(allWorkspaces);
+    if (allWorkspaces.size > 0) {
+      setExpandedWorkspaces([...allWorkspaces]);
       hasAutoExpandedRef.current = true;
     }
   }, [timelineSections]);
