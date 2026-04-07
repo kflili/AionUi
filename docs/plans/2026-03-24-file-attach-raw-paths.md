@@ -67,8 +67,10 @@ The CLI/LLM receives absolute paths and uses its own read/list tools to access c
 
 ```ts
 // After sending to agent, clean up temp files (replaces copyFilesToDirectory's cleanup)
+// Note: requires `import fs from 'node:fs'` and `import path from 'node:path'`
+// `cacheDir` must be resolved from app paths (e.g., electron app.getPath('userData'))
 const tempDir = path.join(cacheDir, 'temp');
-files?.filter((f) => f.startsWith(tempDir)).forEach((f) => fs.unlink(f).catch(() => {}));
+files?.filter((f) => f.startsWith(tempDir)).forEach((f) => fs.promises.unlink(f).catch(() => {}));
 ```
 
 > **Platform note:** `openFile + openDirectory` combined in Electron gives mixed file-and-folder selection on Mac only. On Windows/Linux it becomes directory-only. This app is Mac-first, so acceptable — but document this limitation in the code comment.
