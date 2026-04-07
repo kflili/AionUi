@@ -51,6 +51,7 @@ export const groupConversationsByTimelineAndWorkspace = (
   });
 
   const workspaceGroupsByTimeline = new Map<string, WorkspaceGroup[]>();
+  const groupLookup = new Map<string, WorkspaceGroup>();
 
   allWorkspaceGroups.forEach((convList, workspace) => {
     convList.forEach((conv) => {
@@ -60,15 +61,16 @@ export const groupConversationsByTimelineAndWorkspace = (
         workspaceGroupsByTimeline.set(timeline, []);
       }
 
-      const timelineGroups = workspaceGroupsByTimeline.get(timeline)!;
-      let group = timelineGroups.find((g) => g.workspace === workspace);
+      const lookupKey = `${timeline}\0${workspace}`;
+      let group = groupLookup.get(lookupKey);
       if (!group) {
         group = {
           workspace,
           displayName: getWorkspaceDisplayName(workspace),
           conversations: [],
         };
-        timelineGroups.push(group);
+        workspaceGroupsByTimeline.get(timeline)!.push(group);
+        groupLookup.set(lookupKey, group);
       }
       group.conversations.push(conv);
     });
@@ -108,7 +110,7 @@ export const groupConversationsByTimelineAndWorkspace = (
     const items: TimelineItem[] = [];
 
     withWorkspace.forEach((group) => {
-      const time = Math.max(...group.conversations.map((c) => getActivityTime(c)));
+      const time = getActivityTime(group.conversations[0]);
       items.push({
         type: 'workspace',
         time,
