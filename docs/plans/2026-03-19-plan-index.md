@@ -1,6 +1,6 @@
 # AionUI Enhancement Plans — Index
 
-**Date:** 2026-03-19 (updated 2026-03-24)
+**Date:** 2026-03-19 (updated 2026-03-29)
 **Context:** Research and planning session covering AionUI architecture, CLI agent ecosystem, knowledge management, and personal AI workflow design.
 
 ---
@@ -95,12 +95,13 @@ Design notes on the "root agent" pattern. Current CLI session already serves as 
 
 ## Already Done
 
-### ACP Permission Race Condition Fix
+Implemented plans are archived in `docs/plans/archive/`.
 
-**Branch:** `fix/acp-concurrent-permission-race-condition`
-**Commit:** `372ba6a1`
-
-Fixed a race condition where parallel tool calls from Copilot CLI caused the first permission request to be instantly rejected (7ms) while the second properly waited for user input. Root cause: duplicate toolCallId in `pendingPermissions` Map triggered `oldRequest.reject()`. Fix: reuse existing Promise for duplicate toolCallIds instead of rejecting.
+- **ACP Permission Race Condition Fix** — `fix/acp-concurrent-permission-race-condition` (`372ba6a1`)
+- **ACP Stale Running State Fix** — archived `2026-03-22-acp-stale-running-state-fix.md`
+- **Copilot ACP Permission Modes** — archived `2026-03-29-copilot-acp-permission-modes.md`
+- **Terminal Wrapper Iteration 2 Fixes** — archived in `2026-03-19-terminal-wrapper/archive/`
+- **Terminal Remote Access Fixes** — archived in `2026-03-19-terminal-wrapper/archive/`
 
 ---
 

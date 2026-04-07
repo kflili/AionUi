@@ -131,6 +131,8 @@ Common Oxfmt rules (Prettier-compatible, avoid a fix pass):
 
 Commit format: `<type>(<scope>): <subject>` in English. Types: feat, fix, refactor, chore, docs, test, style, perf. **NEVER add AI signatures** (Co-Authored-By, Generated with, etc.).
 
+**Pull Requests**: Always create PRs on the personal fork `kflili/AionUi` (`origin`), never on the upstream org `iOfficeAI/AionUi` (`upstream`). Use `--repo kflili/AionUi` with `gh pr create`.
+
 See the `commit` skill (`.claude/skills/commit/SKILL.md`) for complete workflow, quality gates, and rules. For pull request creation, see the `pr` skill (`.claude/skills/pr/SKILL.md`).
 
 ## Skills Index
