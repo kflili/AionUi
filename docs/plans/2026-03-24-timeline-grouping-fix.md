@@ -1,7 +1,7 @@
 # Plan: Chat History Timeline Grouping Bug
 
 **Date:** 2026-03-24 (updated 2026-03-29)
-**Status:** Ready to implement
+**Status:** Implemented
 **Branch:** `fix/timeline-grouping`
 
 ---
@@ -83,11 +83,22 @@ const time = Math.max(...group.conversations.map((c) => getActivityTime(c)));
 
 ---
 
+## Fix 3: Dedup workspace expansion state
+
+After the per-conversation split, the same workspace can appear in multiple timeline sections. The `useConversations` hook's auto-expand logic pushed raw workspace IDs into an array, creating duplicates.
+
+- Use `Set<string>` for auto-expand collection (no duplicates on new writes)
+- Dedup + type-filter on localStorage read (heals old dirty data)
+- Extract `collectWorkspaceNames()` helper shared by auto-expand and stale-cleanup effects
+
+---
+
 ## Critical Files
 
-| File                                                                      | Change                                              |
-| ------------------------------------------------------------------------- | --------------------------------------------------- |
-| `src/renderer/pages/conversation/GroupedHistory/utils/groupingHelpers.ts` | Per-conversation timeline assignment + sort key fix  |
+| File                                                                       | Change                                              |
+| -------------------------------------------------------------------------- | --------------------------------------------------- |
+| `src/renderer/pages/conversation/GroupedHistory/utils/groupingHelpers.ts`  | Per-conversation timeline assignment + sort key fix |
+| `src/renderer/pages/conversation/GroupedHistory/hooks/useConversations.ts` | Dedup expansion state + shared workspace collector  |
 
 ---
 
@@ -105,4 +116,5 @@ const time = Math.max(...group.conversations.map((c) => getActivityTime(c)));
 **Reviewed:** 2026-03-29 via GPT-5.4
 
 Key finding incorporated:
+
 - Lines 99-107 sort key uses `getWorkspaceUpdateTime()` which would make older split groups sort artificially high — fixed by using per-group `Math.max(getActivityTime(...))` instead

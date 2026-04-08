@@ -8,11 +8,23 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import type { GroupedHistoryResult } from '../types';
+import type { GroupedHistoryResult, TimelineSection } from '../types';
 import { useConversationListSync } from './useConversationListSync';
 import { buildGroupedHistory } from '../utils/groupingHelpers';
 
 const EXPANSION_STORAGE_KEY = 'aionui_workspace_expansion';
+
+const collectWorkspaceNames = (sections: TimelineSection[]): Set<string> => {
+  const names = new Set<string>();
+  sections.forEach((section) => {
+    section.items.forEach((item) => {
+      if (item.type === 'workspace' && item.workspaceGroup) {
+        names.add(item.workspaceGroup.workspace);
+      }
+    });
+  });
+  return names;
+};
 
 export const useConversations = () => {
   const [expandedWorkspaces, setExpandedWorkspaces] = useState<string[]>(() => {
@@ -20,7 +32,7 @@ export const useConversations = () => {
       const stored = localStorage.getItem(EXPANSION_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        return Array.isArray(parsed) ? parsed : [];
+        return Array.isArray(parsed) ? [...new Set(parsed.filter((v): v is string => typeof v === 'string'))] : [];
       }
     } catch {
       // ignore
@@ -76,30 +88,16 @@ export const useConversations = () => {
       hasAutoExpandedRef.current = true;
       return;
     }
-    const allWorkspaces: string[] = [];
-    timelineSections.forEach((section) => {
-      section.items.forEach((item) => {
-        if (item.type === 'workspace' && item.workspaceGroup) {
-          allWorkspaces.push(item.workspaceGroup.workspace);
-        }
-      });
-    });
-    if (allWorkspaces.length > 0) {
-      setExpandedWorkspaces(allWorkspaces);
+    const allWorkspaces = collectWorkspaceNames(timelineSections);
+    if (allWorkspaces.size > 0) {
+      setExpandedWorkspaces([...allWorkspaces]);
       hasAutoExpandedRef.current = true;
     }
   }, [timelineSections]);
 
   // Remove stale workspace entries that no longer exist in the data
   useEffect(() => {
-    const currentWorkspaces = new Set<string>();
-    timelineSections.forEach((section) => {
-      section.items.forEach((item) => {
-        if (item.type === 'workspace' && item.workspaceGroup) {
-          currentWorkspaces.add(item.workspaceGroup.workspace);
-        }
-      });
-    });
+    const currentWorkspaces = collectWorkspaceNames(timelineSections);
     if (currentWorkspaces.size === 0) return;
     setExpandedWorkspaces((prev) => {
       const filtered = prev.filter((ws) => currentWorkspaces.has(ws));

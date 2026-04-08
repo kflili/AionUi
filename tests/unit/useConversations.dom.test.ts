@@ -85,6 +85,30 @@ const makeWorkspaceSection = (workspaces: string[]): TimelineSection[] => [
   },
 ];
 
+/** Same workspace in two timeline sections (simulates per-conversation split) */
+const makeMultiSectionWorkspace = (workspace: string): TimelineSection[] => [
+  {
+    timeline: 'conversation.history.today',
+    items: [
+      {
+        type: 'workspace' as const,
+        time: Date.now(),
+        workspaceGroup: { workspace, displayName: workspace.split('/').pop()!, conversations: [] },
+      },
+    ],
+  },
+  {
+    timeline: 'conversation.history.earlier',
+    items: [
+      {
+        type: 'workspace' as const,
+        time: Date.now() - 10 * 86_400_000,
+        workspaceGroup: { workspace, displayName: workspace.split('/').pop()!, conversations: [] },
+      },
+    ],
+  },
+];
+
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 // Import the hook statically since mocks are hoisted
@@ -163,6 +187,27 @@ describe('useConversations - workspace expansion', () => {
 
     expect(result.current.expandedWorkspaces).not.toContain('/ws/stale');
     expect(result.current.expandedWorkspaces).toContain('/ws/a');
+  });
+
+  it('should dedup expanded workspaces when same workspace appears in multiple timeline sections', async () => {
+    testState.sections = makeMultiSectionWorkspace('/ws/project');
+
+    const { result } = renderHook(() => useConversations());
+    await act(async () => {});
+
+    // Should contain the workspace only once, not duplicated
+    expect(result.current.expandedWorkspaces).toEqual(['/ws/project']);
+  });
+
+  it('should dedup duplicate workspace IDs read from localStorage', async () => {
+    // Simulate old dirty data with duplicates
+    storageMap.set(STORAGE_KEY, JSON.stringify(['/ws/a', '/ws/a', '/ws/b']));
+    testState.sections = makeWorkspaceSection(['/ws/a', '/ws/b']);
+
+    const { result } = renderHook(() => useConversations());
+    await act(async () => {});
+
+    expect(result.current.expandedWorkspaces).toEqual(['/ws/a', '/ws/b']);
   });
 
   it('should not re-expand workspaces after user manually collapses all (#1156)', async () => {
