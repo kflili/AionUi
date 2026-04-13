@@ -423,18 +423,10 @@ export function initConversationBridge(
 
     // Pass raw file paths directly to the agent — no copy step.
     // The CLI/LLM receives absolute paths and uses its own read/list tools to access contents.
+    // Note: temp files from paste/drag-drop (in cache/temp/) are NOT deleted here because
+    // sendMessage() returns before the agent finishes reading. Temp files are cleaned up
+    // on app restart or by the OS. This avoids a race where files are deleted mid-read.
     const rawFiles = files ?? [];
-
-    // Identify temp files for cleanup after agent processes them.
-    // Paste/drag-drop creates temp files in cache/temp/ that need cleanup,
-    // but only after the agent has read them.
-    let tempFiles: string[] = [];
-    if (rawFiles.length > 0) {
-      const { getSystemDir } = await import('@process/utils/initStorage');
-      const pathMod = await import('node:path');
-      const tempDir = pathMod.default.join(getSystemDir().cacheDir, 'temp');
-      tempFiles = rawFiles.filter((f) => f.startsWith(tempDir + pathMod.default.sep) || f.startsWith(tempDir + '/'));
-    }
 
     // Precompute agent content with optional skill injection.
     // OpenClaw uses full-content mode: inject full skill text rather than index paths,
@@ -475,18 +467,6 @@ export function initConversationBridge(
       return { success: true };
     } catch (err: unknown) {
       return { success: false, msg: err instanceof Error ? err.message : String(err) };
-    } finally {
-      // Clean up temp files after agent has processed them
-      if (tempFiles.length > 0) {
-        const fsMod = await import('node:fs');
-        await Promise.allSettled(
-          tempFiles.map((f) =>
-            fsMod.default.promises.unlink(f).catch((error: unknown) => {
-              mainWarn('[conversationBridge]', 'Failed to cleanup temp attachment', { path: f, error });
-            })
-          )
-        );
-      }
     }
   });
 

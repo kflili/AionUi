@@ -1,4 +1,5 @@
 import { ipcBridge } from '@/common';
+import { isElectronDesktop } from '@/renderer/utils/platform';
 import { useCallback } from 'react';
 
 interface UseOpenFileSelectorOptions {
@@ -21,8 +22,14 @@ export function useOpenFileSelector(options: UseOpenFileSelectorOptions): UseOpe
   const { onFilesSelected } = options;
 
   const openFileSelector = useCallback(() => {
+    // Electron supports mixed file+folder selection on Mac (openFile + openDirectory).
+    // WebUI uses a separate DirectorySelectionModal that infers mode from properties,
+    // so only include openDirectory on Electron to avoid breaking WebUI's file mode.
+    const properties: Array<'openFile' | 'openDirectory' | 'multiSelections'> = isElectronDesktop()
+      ? ['openFile', 'openDirectory', 'multiSelections']
+      : ['openFile', 'multiSelections'];
     void ipcBridge.dialog.showOpen
-      .invoke({ properties: ['openFile', 'openDirectory', 'multiSelections'] })
+      .invoke({ properties })
       .then((files) => {
         if (!files || files.length === 0) {
           return;
