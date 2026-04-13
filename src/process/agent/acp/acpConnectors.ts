@@ -29,6 +29,7 @@ import {
   resolveNpxPath,
 } from '@process/utils/shellEnv';
 import { mainLog, mainWarn } from '@process/utils/mainLogger';
+import { ProcessConfig } from '@process/utils/initStorage';
 
 const execFile = promisify(execFileCb);
 
@@ -248,10 +249,41 @@ export function spawnNpxBackend(
   return { child, isDetached: detached };
 }
 
+/**
+ * Detect a running copilot-gateway on localhost:8787 and inject
+ * ANTHROPIC_BASE_URL + dummy auth token into the given env.
+ * No-op if any Anthropic env vars are already set or the gateway is unreachable.
+ * @param enabled - Pass false to skip detection entirely (from settings toggle).
+ */
+export async function injectCopilotGatewayEnv(
+  env: Record<string, string | undefined>,
+  enabled = true
+): Promise<void> {
+  if (!enabled) return;
+  if (env.ANTHROPIC_BASE_URL || env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY) return;
+  try {
+    const resp = await fetch('http://localhost:8787/health', {
+      signal: AbortSignal.timeout(300),
+    });
+    if (resp.ok) {
+      const body = await resp.json();
+      if (body?.status === 'ok') {
+        env.ANTHROPIC_BASE_URL = 'http://localhost:8787';
+        env.ANTHROPIC_AUTH_TOKEN = 'dummy';
+        mainLog('[ACP]', 'Copilot gateway detected at localhost:8787 — routing Claude through gateway');
+      }
+    }
+  } catch {
+    // Gateway not running or unresponsive — use default API path
+  }
+}
+
 /** Prepare clean env + resolve npx for Claude ACP bridge. */
-function prepareClaude(): NpxPrepareResult {
+async function prepareClaude(): Promise<NpxPrepareResult> {
   const cleanEnv = prepareCleanEnv();
   ensureMinNodeVersion(cleanEnv, 20, 10, 'Claude ACP bridge');
+  const cliConfig = await ProcessConfig.get('agentCli.config');
+  await injectCopilotGatewayEnv(cleanEnv, cliConfig?.copilotGateway ?? true);
   return { cleanEnv, npxCommand: resolveNpxPath(cleanEnv) };
 }
 

@@ -141,6 +141,8 @@ export interface IConfigStorageRefer {
     showThinking?: boolean;
     /** Max concurrent live terminal sessions (LRU eviction when exceeded) / 最大终端会话数 */
     maxTerminalSessions?: number;
+    /** Auto-detect and route Claude through local copilot-gateway / 自动检测并通过本地 copilot-gateway 路由 Claude */
+    copilotGateway?: boolean;
   };
 }
 

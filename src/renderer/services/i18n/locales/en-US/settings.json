@@ -659,7 +659,7 @@
   },
   "extensionAssistantReadonly": "Extension assistants are read-only. You can duplicate it and edit the copy.",
   "terminalWrapper": {
-    "title": "Terminal",
+    "title": "Agent CLI",
     "richUI": "Rich UI",
     "terminal": "Terminal",
     "defaultMode": "Default Mode",
@@ -677,6 +677,8 @@
     "maxSessions": "Max Live Sessions",
     "maxSessionsDesc": "Maximum concurrent terminal sessions. Oldest idle session is closed when limit is reached.",
     "sessionEvicted": "Closed an idle terminal session (limit: {{max}}). You can increase this in Terminal settings.",
-    "switchModeFailed": "Failed to switch mode"
+    "switchModeFailed": "Failed to switch mode",
+    "copilotGateway": "Copilot Gateway",
+    "copilotGatewayDesc": "Auto-detect and route Claude through local copilot-gateway when running"
   }
 }

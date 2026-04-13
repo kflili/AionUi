@@ -62,7 +62,7 @@ const SettingsPageWrapper: React.FC<SettingsPageWrapperProps> = ({ children, cla
       { id: 'tools', label: t('settings.tools'), icon: <Toolkit theme='outline' size='16' />, path: 'tools' },
       {
         id: 'agent-cli',
-        label: t('settings.terminalWrapper.title', { defaultValue: 'Terminal' }),
+        label: t('settings.terminalWrapper.title', { defaultValue: 'Agent CLI' }),
         icon: <Terminal theme='outline' size='16' />,
         path: 'agent-cli',
       },

@@ -661,7 +661,7 @@
   },
   "extensionAssistantReadonly": "拡張アシスタントは読み取り専用です。複製して編集することができます。",
   "terminalWrapper": {
-    "title": "ターミナル",
+    "title": "Agent CLI",
     "richUI": "リッチUI",
     "terminal": "ターミナル",
     "defaultMode": "デフォルトモード",
@@ -679,6 +679,8 @@
     "maxSessions": "最大ライブセッション数",
     "maxSessionsDesc": "同時実行可能なターミナルセッションの最大数。上限に達すると最も古いアイドルセッションが閉じられます。",
     "sessionEvicted": "アイドル状態のターミナルセッションを閉じました（上限：{{max}}）。ターミナル設定で上限を増やせます。",
-    "switchModeFailed": "モード切り替えに失敗しました"
+    "switchModeFailed": "モード切り替えに失敗しました",
+    "copilotGateway": "Copilot ゲートウェイ",
+    "copilotGatewayDesc": "ローカルの copilot-gateway が実行中の場合、自動検出して Claude をルーティング"
   }
 }

@@ -16,6 +16,7 @@ type AgentCliConfig = {
   fontSize?: number;
   showThinking?: boolean;
   maxTerminalSessions?: number;
+  copilotGateway?: boolean;
 };
 
 const PreferenceRow: React.FC<{
@@ -125,6 +126,17 @@ const AgentCliModalContent: React.FC = () => {
                   step={1}
                   value={config.fontSize || 14}
                   onChange={(val) => saveConfig({ fontSize: val || 14 })}
+                />
+              </PreferenceRow>
+
+              {/* Copilot Gateway */}
+              <PreferenceRow
+                label={t('settings.terminalWrapper.copilotGateway')}
+                description={t('settings.terminalWrapper.copilotGatewayDesc')}
+              >
+                <Switch
+                  checked={config.copilotGateway ?? true}
+                  onChange={(val) => saveConfig({ copilotGateway: val })}
                 />
               </PreferenceRow>
             </div>

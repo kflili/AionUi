@@ -659,7 +659,7 @@
   },
   "extensionAssistantReadonly": "Uzantı asistanları salt okunurdur. Kopyalayıp düzenleyebilirsiniz.",
   "terminalWrapper": {
-    "title": "Terminal",
+    "title": "Agent CLI",
     "richUI": "Zengin UI",
     "terminal": "Terminal",
     "defaultMode": "Varsayılan Mod",
@@ -677,6 +677,8 @@
     "maxSessions": "Maksimum Aktif Oturum",
     "maxSessionsDesc": "Maksimum eşzamanlı terminal oturumu sayısı. Sınıra ulaşıldığında en eski boşta oturum kapatılır.",
     "sessionEvicted": "Boşta bir terminal oturumu kapatıldı (sınır: {{max}}). Sınırı Terminal ayarlarından artırabilirsiniz.",
-    "switchModeFailed": "Mod değiştirme başarısız oldu"
+    "switchModeFailed": "Mod değiştirme başarısız oldu",
+    "copilotGateway": "Copilot Ağ Geçidi",
+    "copilotGatewayDesc": "Yerel copilot-gateway çalışırken Claude'u otomatik algıla ve yönlendir"
   }
 }
