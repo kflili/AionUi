@@ -1,7 +1,7 @@
 # Plan: File Attach UX + Raw Path Display
 
 **Date:** 2026-03-24 (updated 2026-03-29)
-**Status:** Ready to implement
+**Status:** Implemented
 **Branch:** `fix/file-attach-raw-paths`
 
 ---
