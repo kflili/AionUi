@@ -13,6 +13,7 @@ import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText, CopyFallbackShown } from '@/renderer/utils/ui/clipboard';
+import { shortenPath } from '@/renderer/utils/file/messageFiles';
 import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
@@ -35,30 +36,6 @@ const parseFileMarker = (content: string) => {
         .filter(Boolean)
     : [];
   return { text, files };
-};
-
-/**
- * Shorten a file path for display.
- * - Absolute path inside workspace → relative (e.g., "src/utils/parser.ts")
- * - Absolute path outside workspace → last 2 segments (e.g., ".../Documents/file.txt")
- * - Relative path (legacy) → as-is
- */
-const shortenPath = (filePath: string, workspace?: string): string => {
-  const isAbsolute = filePath.startsWith('/') || /^[A-Za-z]:/.test(filePath);
-  if (!isAbsolute) return filePath; // legacy relative path
-
-  if (workspace) {
-    const normalizedFile = filePath.replace(/\\/g, '/');
-    const normalizedWorkspace = workspace.replace(/[\\/]+$/, '').replace(/\\/g, '/');
-    if (normalizedFile.startsWith(normalizedWorkspace + '/')) {
-      return normalizedFile.slice(normalizedWorkspace.length + 1);
-    }
-  }
-
-  // External absolute path: show abbreviated with last 2 segments
-  const segments = filePath.replace(/\\/g, '/').split('/').filter(Boolean);
-  if (segments.length <= 3) return filePath;
-  return `.../${segments.slice(-2).join('/')}`;
 };
 
 const useFormatContent = (content: string) => {
