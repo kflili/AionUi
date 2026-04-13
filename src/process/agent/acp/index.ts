@@ -542,17 +542,41 @@ export class AcpAgent {
 
       // Add @ prefix to ALL uploaded files (including images) with FULL PATH
       // Claude CLI needs full path to read files
+      // For directories: list top-level contents and add each as individual @ reference,
+      // since Claude CLI's @ notation doesn't support directory paths.
       // 为所有上传的文件添加 @ 前缀（包括图片），使用完整路径让 Claude CLI 读取
+      // 对于目录：列出顶层内容并逐个添加 @ 引用，因为 Claude CLI 的 @ 不支持目录路径
+      let allUploadedPaths = data.files ?? [];
       if (data.files && data.files.length > 0) {
-        const fileRefs = data.files
-          .map((filePath) => {
-            // Use full path instead of just filename
+        const expandedPaths: string[] = [];
+        for (const filePath of data.files) {
+          try {
+            const stats = await fs.stat(filePath);
+            if (stats.isDirectory()) {
+              // Expand directory: list top-level files and add each
+              const entries = await fs.readdir(filePath, { withFileTypes: true });
+              for (const entry of entries) {
+                expandedPaths.push(path.join(filePath, entry.name));
+              }
+              // Also mention the directory path in plain text so the agent knows what was attached
+              processedContent = `[Attached folder: ${filePath}]\n${processedContent}`;
+            } else {
+              expandedPaths.push(filePath);
+            }
+          } catch {
+            // File may not exist or be inaccessible — pass through as-is
+            expandedPaths.push(filePath);
+          }
+        }
+        allUploadedPaths = expandedPaths;
+        const fileRefs = expandedPaths
+          .map((fp) => {
             // Escape paths with spaces using quotes for Claude CLI
             // 对含空格的路径使用引号包裹，确保 Claude CLI 正确解析
-            if (filePath.includes(' ')) {
-              return `@"${filePath}"`;
+            if (fp.includes(' ')) {
+              return `@"${fp}"`;
             }
-            return '@' + filePath;
+            return '@' + fp;
           })
           .join(' ');
         // Prepend file references to the content
@@ -562,7 +586,7 @@ export class AcpAgent {
       // Process @ file references in the message
       // 处理消息中的 @ 文件引用
       const atFileStart = Date.now();
-      processedContent = await this.processAtFileReferences(processedContent, data.files);
+      processedContent = await this.processAtFileReferences(processedContent, allUploadedPaths);
       const atFileDuration = Date.now() - atFileStart;
       if (atFileDuration > 10) {
         if (ACP_PERF_LOG) console.log(`[ACP-PERF] send: @file references processed ${atFileDuration}ms`);
