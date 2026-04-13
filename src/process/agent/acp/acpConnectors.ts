@@ -254,10 +254,7 @@ export function spawnNpxBackend(
  * No-op if any Anthropic env vars are already set or the gateway is unreachable.
  * @param enabled - Pass false to skip detection entirely (from settings toggle).
  */
-export async function injectCopilotGatewayEnv(
-  env: Record<string, string | undefined>,
-  enabled = true
-): Promise<void> {
+export async function injectCopilotGatewayEnv(env: Record<string, string | undefined>, enabled = true): Promise<void> {
   if (!enabled) return;
   if (env.ANTHROPIC_BASE_URL || env.ANTHROPIC_AUTH_TOKEN || env.ANTHROPIC_API_KEY) return;
   try {

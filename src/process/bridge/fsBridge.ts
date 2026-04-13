@@ -587,6 +587,7 @@ export function initFsBridge(): void {
         size: stats.size,
         type: '', // MIME type可以根据扩展名推断
         lastModified: stats.mtime.getTime(),
+        isDirectory: stats.isDirectory(),
       };
     } catch (error) {
       // Return empty metadata instead of throwing to avoid unhandled rejection

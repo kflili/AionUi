@@ -22,7 +22,7 @@ export function useOpenFileSelector(options: UseOpenFileSelectorOptions): UseOpe
 
   const openFileSelector = useCallback(() => {
     void ipcBridge.dialog.showOpen
-      .invoke({ properties: ['openFile', 'multiSelections'] })
+      .invoke({ properties: ['openFile', 'openDirectory', 'multiSelections'] })
       .then((files) => {
         if (!files || files.length === 0) {
           return;

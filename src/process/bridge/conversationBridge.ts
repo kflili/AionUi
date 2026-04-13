@@ -17,7 +17,7 @@ import type { GeminiAgentManager } from '../task/GeminiAgentManager';
 import type OpenClawAgentManager from '../task/OpenClawAgentManager';
 import { prepareFirstMessage } from '../task/agentUtils';
 import { refreshTrayMenu } from '@process/utils/tray';
-import { copyFilesToDirectory, readDirectoryRecursive } from '@process/utils';
+import { readDirectoryRecursive } from '@process/utils';
 import { mainWarn } from '@process/utils/mainLogger';
 import { isSessionIdle } from '@process/bridge/cliHistoryBridge';
 import { computeOpenClawIdentityHash } from '@process/utils/openclawUtils';
@@ -421,8 +421,20 @@ export function initConversationBridge(
       return { success: false, msg: 'conversation not found' };
     }
 
-    // Copy files to workspace (unified for all agents)
-    const workspaceFiles = await copyFilesToDirectory(task.workspace, files, false);
+    // Pass raw file paths directly to the agent — no copy step.
+    // The CLI/LLM receives absolute paths and uses its own read/list tools to access contents.
+    const rawFiles = files ?? [];
+
+    // Identify temp files for cleanup after agent processes them.
+    // Paste/drag-drop creates temp files in cache/temp/ that need cleanup,
+    // but only after the agent has read them.
+    let tempFiles: string[] = [];
+    if (rawFiles.length > 0) {
+      const { getSystemDir } = await import('@process/utils/initStorage');
+      const pathMod = await import('node:path');
+      const tempDir = pathMod.default.join(getSystemDir().cacheDir, 'temp');
+      tempFiles = rawFiles.filter((f) => f.startsWith(tempDir + pathMod.default.sep) || f.startsWith(tempDir + '/'));
+    }
 
     // Precompute agent content with optional skill injection.
     // OpenClaw uses full-content mode: inject full skill text rather than index paths,
@@ -448,7 +460,7 @@ export function initConversationBridge(
       const result: unknown = await task.sendMessage({
         ...other,
         content: other.input,
-        files: workspaceFiles,
+        files: rawFiles,
         agentContent,
       });
       // Propagate agent failure (e.g., ACP timeout returns { success: false } without throwing)
@@ -463,6 +475,18 @@ export function initConversationBridge(
       return { success: true };
     } catch (err: unknown) {
       return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    } finally {
+      // Clean up temp files after agent has processed them
+      if (tempFiles.length > 0) {
+        const fsMod = await import('node:fs');
+        await Promise.allSettled(
+          tempFiles.map((f) =>
+            fsMod.default.promises.unlink(f).catch((error: unknown) => {
+              mainWarn('[conversationBridge]', 'Failed to cleanup temp attachment', { path: f, error });
+            })
+          )
+        );
+      }
     }
   });
 

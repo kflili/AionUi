@@ -13,6 +13,7 @@ import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText, CopyFallbackShown } from '@/renderer/utils/ui/clipboard';
+import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
@@ -36,6 +37,30 @@ const parseFileMarker = (content: string) => {
   return { text, files };
 };
 
+/**
+ * Shorten a file path for display.
+ * - Absolute path inside workspace → relative (e.g., "src/utils/parser.ts")
+ * - Absolute path outside workspace → last 2 segments (e.g., ".../Documents/file.txt")
+ * - Relative path (legacy) → as-is
+ */
+const shortenPath = (filePath: string, workspace?: string): string => {
+  const isAbsolute = filePath.startsWith('/') || /^[A-Za-z]:/.test(filePath);
+  if (!isAbsolute) return filePath; // legacy relative path
+
+  if (workspace) {
+    const normalizedFile = filePath.replace(/\\/g, '/');
+    const normalizedWorkspace = workspace.replace(/[\\/]+$/, '').replace(/\\/g, '/');
+    if (normalizedFile.startsWith(normalizedWorkspace + '/')) {
+      return normalizedFile.slice(normalizedWorkspace.length + 1);
+    }
+  }
+
+  // External absolute path: show abbreviated with last 2 segments
+  const segments = filePath.replace(/\\/g, '/').split('/').filter(Boolean);
+  if (segments.length <= 3) return filePath;
+  return `.../${segments.slice(-2).join('/')}`;
+};
+
 const useFormatContent = (content: string) => {
   return useMemo(() => {
     try {
@@ -52,8 +77,10 @@ const useFormatContent = (content: string) => {
 };
 
 const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
+  const conversationContext = useConversationContextSafe();
+  const workspace = conversationContext?.workspace;
+
   // Filter think tags from content before rendering
-  // 在渲染前过滤 think 标签
   const contentToRender = useMemo(() => {
     const rawContent = message.content.content;
     if (typeof rawContent === 'string' && hasThinkTags(rawContent)) {
@@ -75,7 +102,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
 
   const handleCopy = () => {
     const baseText = json ? JSON.stringify(data, null, 2) : text;
-    const fileList = files.length ? `Files:\n${files.map((path) => `- ${path}`).join('\n')}\n\n` : '';
+    const fileList = files.length ? `Files:\n${files.map((p) => `- ${shortenPath(p, workspace)}`).join('\n')}\n\n` : '';
     const textToCopy = fileList + baseText;
     copyText(textToCopy)
       .then(() => {

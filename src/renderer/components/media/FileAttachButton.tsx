@@ -33,6 +33,7 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({ openFileSelector, o
   const { t } = useTranslation();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [uploading, setUploading] = useState(false);
+  const isElectron = isElectronDesktop();
 
   const handleLocalFileChange = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -62,9 +63,20 @@ const FileAttachButton: React.FC<FileAttachButtonProps> = ({ openFileSelector, o
 
   const plusIcon = <Plus theme='outline' size='14' strokeWidth={2} fill={iconColors.primary} />;
 
-  // Electron desktop: simple button, no dropdown needed
-  if (isElectronDesktop()) {
-    return <Button type='secondary' shape='circle' icon={plusIcon} onClick={openFileSelector} />;
+  // Electron: dropdown with single "Attach Files or Folders" option
+  // openFile + openDirectory combined gives mixed file-and-folder selection on Mac only.
+  // On Windows/Linux it becomes directory-only. This app is Mac-first, so acceptable.
+  if (isElectron) {
+    const electronMenu = (
+      <Menu onClickMenuItem={() => openFileSelector()}>
+        <Menu.Item key='attach'>{t('common.fileAttach.attachFilesOrFolders')}</Menu.Item>
+      </Menu>
+    );
+    return (
+      <Dropdown droplist={electronMenu} trigger='click' position='top'>
+        <Button type='secondary' shape='circle' icon={plusIcon} />
+      </Dropdown>
+    );
   }
 
   // WebUI: dropdown with two options

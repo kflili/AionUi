@@ -66,10 +66,12 @@
   "tray.checkUpdate": "檢查更新",
   "tray.recentChats": "最近對話",
   "tray.untitled": "未命名",
+  "fileAttach.attachFilesOrFolders": "附加檔案或資料夾",
   "fileAttach.hostFiles": "伺服器檔案",
   "fileAttach.myDevice": "我的裝置",
   "fileAttach.tooLarge": "檔案超過 {{max}}MB 限制",
   "fileAttach.failed": "上傳失敗",
   "fileAttach.uploading": "上傳中...",
-  "fileAttach.uploadSuccess": "上傳成功"
+  "fileAttach.uploadSuccess": "上傳成功",
+  "filePreview.missing": "已遺失"
 }
