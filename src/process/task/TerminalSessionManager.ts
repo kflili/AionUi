@@ -69,6 +69,11 @@ type TerminalSession = {
   exited: boolean;
 };
 
+/** Snapshot process.env as a Record<string, string> (strips undefined values). */
+export function sanitizeProcessEnv(): Record<string, string> {
+  return Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] != null));
+}
+
 /**
  * Manages PTY terminal sessions in the main process.
  * Separate from BaseAgentManager — PTY needs resize events, raw I/O,
@@ -143,7 +148,7 @@ export class TerminalSessionManager {
       cols,
       rows,
       cwd: cwd || os.homedir(),
-      env: env ?? Object.fromEntries(Object.entries(process.env).filter((e): e is [string, string] => e[1] != null)),
+      env: env ?? sanitizeProcessEnv(),
     });
 
     const transcriptDir = this.getTranscriptDir();

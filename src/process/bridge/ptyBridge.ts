@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import { getTerminalSessionManager } from '@process/task/TerminalSessionManager';
+import { getTerminalSessionManager, sanitizeProcessEnv } from '@process/task/TerminalSessionManager';
 import { ProcessConfig } from '@process/utils/initStorage';
 import { injectCopilotGatewayEnv } from '@process/agent/acp/acpConnectors';
 
@@ -39,9 +39,7 @@ export function initPtyBridge(): void {
       // Auto-detect copilot-gateway for Claude terminal sessions
       let env: Record<string, string> | undefined;
       if (command === 'claude') {
-        env = Object.fromEntries(
-          Object.entries(process.env).filter((e): e is [string, string] => e[1] != null)
-        );
+        env = sanitizeProcessEnv();
         const config = await ProcessConfig.get('agentCli.config');
         await injectCopilotGatewayEnv(env, config?.copilotGateway ?? true);
       }

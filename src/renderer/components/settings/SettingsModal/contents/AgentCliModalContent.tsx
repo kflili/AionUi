@@ -6,18 +6,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfigStorage } from '@/common/config/storage';
+import { ConfigStorage, type IConfigStorageRefer } from '@/common/config/storage';
 import { InputNumber, Switch } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
 
-type AgentCliConfig = {
-  defaultMode?: 'acp' | 'terminal';
-  fontSize?: number;
-  showThinking?: boolean;
-  maxTerminalSessions?: number;
-  copilotGateway?: boolean;
-};
+type AgentCliConfig = NonNullable<IConfigStorageRefer['agentCli.config']>;
 
 const PreferenceRow: React.FC<{
   label: string;

@@ -12,7 +12,7 @@ The detection runs on every Claude spawn with a 300ms timeout. It skips detectio
 
 1. Start the copilot-gateway (`cg` or `python3 gateway.py` in the gateway repo)
 2. Launch a Claude session in AionUi — it auto-detects and routes through the gateway
-3. Verify in the gateway logs: `"Copilot gateway detected at localhost:8787"`
+3. Verify in AionUi's main process log: `"Copilot gateway detected at localhost:8787 — routing Claude through gateway"`
 
 No AionUi configuration changes required.
 
