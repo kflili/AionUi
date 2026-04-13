@@ -29,7 +29,6 @@ import {
   resolveNpxPath,
 } from '@process/utils/shellEnv';
 import { mainLog, mainWarn } from '@process/utils/mainLogger';
-import { ProcessConfig } from '@process/utils/initStorage';
 
 const execFile = promisify(execFileCb);
 
@@ -282,6 +281,7 @@ export async function injectCopilotGatewayEnv(
 async function prepareClaude(): Promise<NpxPrepareResult> {
   const cleanEnv = prepareCleanEnv();
   ensureMinNodeVersion(cleanEnv, 20, 10, 'Claude ACP bridge');
+  const { ProcessConfig } = await import('@process/utils/initStorage');
   const cliConfig = await ProcessConfig.get('agentCli.config');
   await injectCopilotGatewayEnv(cleanEnv, cliConfig?.copilotGateway ?? true);
   return { cleanEnv, npxCommand: resolveNpxPath(cleanEnv) };
