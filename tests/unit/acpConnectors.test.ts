@@ -39,6 +39,7 @@ vi.mock('@process/utils/mainLogger', () => ({
 
 import { execFile as execFileCb, spawn } from 'child_process';
 import { connectCodex, createGenericSpawnConfig, spawnNpxBackend } from '../../src/process/agent/acp/acpConnectors';
+import { injectCopilotGatewayEnv } from '../../src/process/agent/acp/acpConnectors';
 
 const mockExecFile = vi.mocked(execFileCb);
 const mockSpawn = vi.mocked(spawn);
@@ -237,5 +238,81 @@ describe('connectCodex - Windows diagnostics', () => {
     );
     expect(setup).toHaveBeenCalledTimes(1);
     expect(cleanup).not.toHaveBeenCalled();
+  });
+});
+
+describe('injectCopilotGatewayEnv', () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.clearAllMocks();
+  });
+
+  it('injects env vars when gateway responds with status ok', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'ok' }),
+    });
+
+    const env: Record<string, string | undefined> = { PATH: '/usr/bin' };
+    await injectCopilotGatewayEnv(env);
+
+    expect(env.ANTHROPIC_BASE_URL).toBe('http://localhost:8787');
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBe('dummy');
+  });
+
+  it('skips injection when enabled is false', async () => {
+    globalThis.fetch = vi.fn();
+
+    const env: Record<string, string | undefined> = {};
+    await injectCopilotGatewayEnv(env, false);
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+  });
+
+  it('skips injection when ANTHROPIC_BASE_URL is already set', async () => {
+    globalThis.fetch = vi.fn();
+
+    const env: Record<string, string | undefined> = { ANTHROPIC_BASE_URL: 'https://api.anthropic.com' };
+    await injectCopilotGatewayEnv(env);
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('skips injection when ANTHROPIC_API_KEY is already set', async () => {
+    globalThis.fetch = vi.fn();
+
+    const env: Record<string, string | undefined> = { ANTHROPIC_API_KEY: 'sk-ant-...' };
+    await injectCopilotGatewayEnv(env);
+
+    expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it('does not inject when gateway is unreachable', async () => {
+    globalThis.fetch = vi.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const env: Record<string, string | undefined> = {};
+    await injectCopilotGatewayEnv(env);
+
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+  });
+
+  it('does not inject when health response is not ok status', async () => {
+    globalThis.fetch = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ status: 'error' }),
+    });
+
+    const env: Record<string, string | undefined> = {};
+    await injectCopilotGatewayEnv(env);
+
+    expect(env.ANTHROPIC_BASE_URL).toBeUndefined();
   });
 });

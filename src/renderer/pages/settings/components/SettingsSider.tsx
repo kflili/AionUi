@@ -133,7 +133,7 @@ const SettingsSider: React.FC<{ collapsed?: boolean; tooltipEnabled?: boolean }>
       tools: { id: 'tools', label: t('settings.tools'), icon: <Toolkit />, path: 'tools' },
       'agent-cli': {
         id: 'agent-cli',
-        label: t('settings.terminalWrapper.title', { defaultValue: 'Terminal' }),
+        label: t('settings.terminalWrapper.title', { defaultValue: 'Agent CLI' }),
         icon: <Terminal />,
         path: 'agent-cli',
       },

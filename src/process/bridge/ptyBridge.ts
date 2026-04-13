@@ -5,8 +5,9 @@
  */
 
 import { ipcBridge } from '@/common';
-import { getTerminalSessionManager } from '@process/task/TerminalSessionManager';
+import { getTerminalSessionManager, sanitizeProcessEnv } from '@process/task/TerminalSessionManager';
 import { ProcessConfig } from '@process/utils/initStorage';
+import { injectCopilotGatewayEnv } from '@process/agent/acp/acpConnectors';
 
 const TAG = '[ptyBridge]';
 
@@ -34,7 +35,16 @@ export function initPtyBridge(): void {
     try {
       // Read config before spawn (direct file read, safe to await)
       manager.setMaxSessions(await readMaxSessions());
-      const result = manager.spawn({ conversationId, command, args, cwd, cols, rows });
+
+      // Auto-detect copilot-gateway for Claude terminal sessions
+      let env: Record<string, string> | undefined;
+      if (command === 'claude') {
+        env = sanitizeProcessEnv();
+        const config = await ProcessConfig.get('agentCli.config');
+        await injectCopilotGatewayEnv(env, config?.copilotGateway ?? true);
+      }
+
+      const result = manager.spawn({ conversationId, command, args, cwd, cols, rows, env });
       console.log(`${TAG} spawn success: conv=${conversationId}, pid=${result.pid}`);
       return { success: true, data: { pid: result.pid } };
     } catch (err) {

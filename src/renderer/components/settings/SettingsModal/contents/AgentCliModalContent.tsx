@@ -6,17 +6,12 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfigStorage } from '@/common/config/storage';
+import { ConfigStorage, type IConfigStorageRefer } from '@/common/config/storage';
 import { InputNumber, Switch } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
 
-type AgentCliConfig = {
-  defaultMode?: 'acp' | 'terminal';
-  fontSize?: number;
-  showThinking?: boolean;
-  maxTerminalSessions?: number;
-};
+type AgentCliConfig = NonNullable<IConfigStorageRefer['agentCli.config']>;
 
 const PreferenceRow: React.FC<{
   label: string;
@@ -125,6 +120,17 @@ const AgentCliModalContent: React.FC = () => {
                   step={1}
                   value={config.fontSize || 14}
                   onChange={(val) => saveConfig({ fontSize: val || 14 })}
+                />
+              </PreferenceRow>
+
+              {/* Copilot Gateway */}
+              <PreferenceRow
+                label={t('settings.terminalWrapper.copilotGateway')}
+                description={t('settings.terminalWrapper.copilotGatewayDesc')}
+              >
+                <Switch
+                  checked={config.copilotGateway ?? true}
+                  onChange={(val) => saveConfig({ copilotGateway: val })}
                 />
               </PreferenceRow>
             </div>
