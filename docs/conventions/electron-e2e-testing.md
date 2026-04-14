@@ -273,15 +273,15 @@ test.afterAll(() => {
 
 ## Anti-Patterns (What Doesn't Work)
 
-| Approach                                          | Why it fails                                                                                                |
-| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------- |
-| **osascript/AppleScript** for Electron UI         | Electron's web content isn't exposed to macOS Accessibility API — can see the window but not buttons/inputs |
-| **`page.on('filechooser')`** for Electron dialogs | Only works for web `<input type="file">`, not Electron's native `dialog.showOpenDialog`                     |
-| **`bun run` for Playwright Electron tests**       | Electron launch requires the Playwright test runner's process management; `bun run script.ts` times out     |
-| **Fixed `sleep` for agent responses**             | Agent response time varies wildly — always poll with a check condition                                      |
-| **Checking element count for "nothing added"**    | Other UI elements may match — count before AND after, compare delta                                         |
+| Approach                                          | Why it fails                                                                                                                                                                                                            |
+| ------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **osascript/AppleScript** for Electron UI         | Electron's web content isn't exposed to macOS Accessibility API — can see the window but not buttons/inputs                                                                                                             |
+| **`page.on('filechooser')`** for Electron dialogs | Only works for web `<input type="file">`, not Electron's native `dialog.showOpenDialog`                                                                                                                                 |
+| **`bun run` for Playwright Electron tests**       | Electron launch requires the Playwright test runner's process management; `bun run script.ts` times out                                                                                                                 |
+| **Fixed `sleep` for agent responses**             | Agent response time varies wildly — always poll with a check condition                                                                                                                                                  |
+| **Checking element count for "nothing added"**    | Other UI elements may match — count before AND after, compare delta                                                                                                                                                     |
 | **Navigate away/back for state refresh**          | React preserves component instances — `useEffect` with same `[path]` dep won't re-fire. Must restart the app or reload the page for fresh component mounts. FilePreview's missing state only triggers on initial mount. |
-| **`page.on('console')` for renderer logs**        | Playwright's Electron integration doesn't reliably capture renderer `console.log`/`console.debug`. Use `electronApp.evaluate(({ clipboard }) => clipboard.readText())` to read clipboard instead of console capture. |
+| **`page.on('console')` for renderer logs**        | Playwright's Electron integration doesn't reliably capture renderer `console.log`/`console.debug`. Use `electronApp.evaluate(({ clipboard }) => clipboard.readText())` to read clipboard instead of console capture.    |
 
 ---
 

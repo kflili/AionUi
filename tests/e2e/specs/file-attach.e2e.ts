@@ -8,8 +8,7 @@
  * at the Electron module level, avoiding native OS file pickers.
  */
 import { test, expect } from '../fixtures';
-import { goToGuid, navigateTo, waitForSettle, takeScreenshot } from '../helpers';
-import { invokeBridge } from '../helpers/bridge';
+import { goToGuid, waitForSettle, takeScreenshot } from '../helpers';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

@@ -123,19 +123,19 @@ Relaunch the app (`bun start`) before testing. All tests assume the Electron des
 
 ## Test Results
 
-| #   | Test                     | Pass/Fail | Notes |
-| --- | ------------------------ | --------- | ----- |
-| 1   | Electron dropdown        |           |       |
-| 2   | Select multiple files    |           |       |
-| 3   | Folder with files        |           |       |
-| 4   | Empty folder             |           |       |
-| 5   | Mixed file + folder      |           |       |
-| 6   | Paste image              |           |       |
-| 7   | `/open` command          |           |       |
-| 8   | Relative path display    |           |       |
-| 9   | Abbreviated path display |           |       |
-| 10  | Folder icon + label      |           |       |
-| 11  | Missing file dimmed      |           |       |
-| 12  | Old messages compat      |           |       |
-| 13  | Path with spaces         |           |       |
-| 14  | Large folder             |           |       |
+| #   | Test                     | Pass/Fail        | Notes                                                  |
+| --- | ------------------------ | ---------------- | ------------------------------------------------------ |
+| 1   | Electron dropdown        | PASS (E2E)       | Automated: `file-attach.e2e.ts`                        |
+| 2   | Select multiple files    | PASS (E2E)       | Automated: dialog mock + chip verification             |
+| 3   | Folder with files        | PASS (E2E+agent) | Automated: agent listed all 3 files                    |
+| 4   | Empty folder             | PASS (agent)     | Agent: "folder is completely empty"                    |
+| 5   | Mixed file + folder      | Not tested       | Needs Mac native dialog multi-select                   |
+| 6   | Paste image              | Not tested       | Needs clipboard + agent round-trip                     |
+| 7   | `/open` command          | Not tested       | Only works in ACP sendbox, not guid page               |
+| 8   | Relative path display    | N/A for ACP      | ACP uses separate files array, not buildDisplayMessage |
+| 9   | Abbreviated path display | N/A for ACP      | shortenPath only in copy handler, unit-tested          |
+| 10  | Folder icon + label      | PASS (E2E)       | Automated: folder icon + "Folder" text verified        |
+| 11  | Missing file dimmed      | PASS (visual)    | Verified via screenshot: "PDF: missing" label rendered |
+| 12  | Old messages compat      | N/A              | No legacy ACP file attachments exist                   |
+| 13  | Path with spaces         | PASS (E2E+agent) | Automated: agent read "$1.2M" from spaced path         |
+| 14  | Large folder             | PASS (agent)     | Agent listed all 25 files correctly                    |

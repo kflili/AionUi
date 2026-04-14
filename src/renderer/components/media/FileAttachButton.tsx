@@ -24,7 +24,7 @@ interface FileAttachButtonProps {
 /**
  * Unified file-attach button for SendBox.
  *
- * - **Electron desktop**: Simple "+" button → opens native OS file dialog (same as before).
+ * - **Electron desktop**: "+" button with dropdown → "Attach Files or Folders" (opens native dialog with file+folder selection).
  * - **WebUI (desktop/mobile browser)**: "+" button with dropdown → choose between
  *   host machine files (server-side directory browser) or local device files (browser file picker).
  */

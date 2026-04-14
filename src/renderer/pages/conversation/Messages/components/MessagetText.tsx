@@ -79,13 +79,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
 
   const handleCopy = () => {
     const baseText = json ? JSON.stringify(data, null, 2) : text;
-    const shortenedPaths = files.map((p) => ({ original: p, shortened: shortenPath(p, workspace) }));
-    if (shortenedPaths.length > 0) {
-      console.log('[MessageText] copy paths:', JSON.stringify({ workspace, paths: shortenedPaths }));
-    }
-    const fileList = shortenedPaths.length
-      ? `Files:\n${shortenedPaths.map((p) => `- ${p.shortened}`).join('\n')}\n\n`
-      : '';
+    const fileList = files.length ? `Files:\n${files.map((p) => `- ${shortenPath(p, workspace)}`).join('\n')}\n\n` : '';
     const textToCopy = fileList + baseText;
     copyText(textToCopy)
       .then(() => {

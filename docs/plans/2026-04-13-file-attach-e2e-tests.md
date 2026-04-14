@@ -1,7 +1,7 @@
 # Plan: File Attach E2E & Unit Tests
 
 **Date:** 2026-04-13
-**Status:** Approved
+**Status:** Implemented
 
 ---
 
@@ -36,7 +36,7 @@ Two categories:
 1. **Vitest unit/dom tests** — for pure logic and React component rendering (fast, no app launch)
 2. **Manual test checklist** — for flows requiring native OS dialogs, real agent interaction, or visual verification
 
-No new Playwright E2E specs — although the app has a `/conversation/:id` route, the current E2E helpers/fixtures only provide stable, ready-made flows for `#/guid` and settings pages. There is no test helper to seed and open a deterministic conversation, file-attach components lack stable selectors, and `FilePreview` relies on live IPC calls in `useEffect` without an E2E provider-stubbing layer. The cost of adding that scaffolding exceeds the value for this feature. Component-level Vitest dom tests provide sufficient renderer coverage for this change.
+**Update:** Playwright E2E tests were added after the initial plan — dialog mocking via `electronApp.evaluate` proved feasible. See `tests/e2e/specs/file-attach.e2e.ts` (8 tests). Steps 3 (FilePreview dom) and 4 (FileAttachButton dom) were replaced by the E2E tests which cover the same UI behavior. Step 7 (fsBridge test) was removed as a false-positive test.
 
 ### Testing Strategy Notes
 

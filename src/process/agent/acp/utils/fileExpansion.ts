@@ -31,7 +31,10 @@ export async function expandFilePaths(files: string[]): Promise<ExpandResult> {
       if (stats.isDirectory()) {
         const entries = await fs.readdir(filePath, { withFileTypes: true });
         for (const entry of entries) {
-          expandedPaths.push(path.join(filePath, entry.name));
+          // Only include files — CLI's @ notation doesn't support directory paths
+          if (entry.isFile()) {
+            expandedPaths.push(path.join(filePath, entry.name));
+          }
         }
         folderAnnotations.push(`[Attached folder: ${filePath}]`);
       } else {

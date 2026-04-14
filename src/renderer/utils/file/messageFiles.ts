@@ -6,6 +6,7 @@ export const collectSelectedFiles = (uploadFile: string[], atPath: Array<string 
   return Array.from(new Set([...uploadFile, ...atPathFiles]));
 };
 
+// workspacePath kept for API compatibility — callers pass it but raw paths are now stored as-is
 export const buildDisplayMessage = (input: string, files: string[], _workspacePath: string): string => {
   if (!files.length) return input;
   // Store original paths as-is, only strip AionUI timestamp suffix
@@ -16,7 +17,8 @@ export const buildDisplayMessage = (input: string, files: string[], _workspacePa
 /**
  * Shorten a file path for display.
  * - Absolute path inside workspace → relative (e.g., "src/utils/parser.ts")
- * - Absolute path outside workspace → last 2 segments (e.g., ".../Documents/file.txt")
+ * - Absolute path outside workspace with >3 segments → last 2 segments (e.g., ".../Documents/file.txt")
+ * - Short absolute path (≤3 segments like "/tmp/file.txt") → returned as-is
  * - Relative path (legacy) → as-is
  */
 export const shortenPath = (filePath: string, workspace?: string): string => {

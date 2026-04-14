@@ -37,16 +37,16 @@ interface FilePreviewProps {
 }
 
 const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = false }) => {
-  // Defensive check: ensure path is a string
-  if (typeof path !== 'string') {
-    console.error('[FilePreview] Invalid path type:', typeof path, path);
-    return null;
-  }
-
   const { t } = useTranslation();
   const [metadata, setMetadata] = useState<IFileMetadata | null>(null);
   const [imageUrl, setImageUrl] = useState<string>('');
   const [missing, setMissing] = useState(false);
+
+  // Defensive check: ensure path is a string (must be after hooks per Rules of Hooks)
+  if (typeof path !== 'string') {
+    console.error('[FilePreview] Invalid path type:', typeof path, path);
+    return null;
+  }
 
   const isDir = metadata?.isDirectory ?? false;
   const isImage = !isDir && isImageFile(path);

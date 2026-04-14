@@ -544,7 +544,7 @@ export class AcpAgent {
       // Claude CLI's @ notation doesn't support directory paths.
       let allUploadedPaths = data.files ?? [];
       if (data.files && data.files.length > 0) {
-        const { expandFilePaths } = await import('./fileExpansion');
+        const { expandFilePaths } = await import('./utils/fileExpansion');
         const { expandedPaths, folderAnnotations } = await expandFilePaths(data.files);
         allUploadedPaths = expandedPaths;
 
@@ -563,7 +563,9 @@ export class AcpAgent {
           })
           .join(' ');
         // Prepend file references to the content
-        processedContent = fileRefs + ' ' + processedContent;
+        if (fileRefs) {
+          processedContent = fileRefs + ' ' + processedContent;
+        }
       }
 
       // Process @ file references in the message

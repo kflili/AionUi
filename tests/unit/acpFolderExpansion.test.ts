@@ -20,7 +20,7 @@ vi.mock('fs', async () => {
   };
 });
 
-import { expandFilePaths } from '@process/agent/acp/fileExpansion';
+import { expandFilePaths } from '@process/agent/acp/utils/fileExpansion';
 import { promises as fs } from 'fs';
 
 const mockStat = vi.mocked(fs.stat);
@@ -45,7 +45,7 @@ describe('expandFilePaths', () => {
     expect(result.folderAnnotations).toEqual([]);
   });
 
-  it('expands directory to individual entries', async () => {
+  it('expands directory to individual file entries (skips subdirectories)', async () => {
     mockStat.mockResolvedValue({ isDirectory: () => true } as ReturnType<typeof fs.stat> extends Promise<infer T>
       ? T
       : never);
@@ -56,10 +56,10 @@ describe('expandFilePaths', () => {
     ] as unknown as Awaited<ReturnType<typeof fs.readdir>>);
 
     const result = await expandFilePaths(['/Users/lili/project']);
+    // Subdirectories should be excluded — CLI's @ notation doesn't support directory paths
     expect(result.expandedPaths).toEqual([
       path.join('/Users/lili/project', 'a.txt'),
       path.join('/Users/lili/project', 'b.ts'),
-      path.join('/Users/lili/project', 'subdir'),
     ]);
     expect(result.folderAnnotations).toEqual(['[Attached folder: /Users/lili/project]']);
   });
