@@ -20,7 +20,7 @@ vi.mock('fs', async () => {
   };
 });
 
-import { expandFilePaths } from '@process/agent/acp/utils/fileExpansion';
+import { expandFilePaths } from '@process/agent/acp/utils';
 import { promises as fs } from 'fs';
 
 const mockStat = vi.mocked(fs.stat);

@@ -42,18 +42,14 @@ const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = fa
   const [imageUrl, setImageUrl] = useState<string>('');
   const [missing, setMissing] = useState(false);
 
-  // Defensive check: ensure path is a string (must be after hooks per Rules of Hooks)
-  if (typeof path !== 'string') {
-    console.error('[FilePreview] Invalid path type:', typeof path, path);
-    return null;
-  }
-
+  const isValidPath = typeof path === 'string';
   const isDir = metadata?.isDirectory ?? false;
-  const isImage = !isDir && isImageFile(path);
-  const fileName = path.split(/[\\/]/).pop() || '';
-  const fileExt = getFileExtension(path).toUpperCase().replace('.', '');
+  const isImage = isValidPath && !isDir && isImageFile(path);
+  const fileName = isValidPath ? path.split(/[\\/]/).pop() || '' : '';
+  const fileExt = isValidPath ? getFileExtension(path).toUpperCase().replace('.', '') : '';
 
   useEffect(() => {
+    if (!isValidPath) return;
     ipcBridge.fs.getFileMetadata
       .invoke({ path })
       .then((meta) => {
@@ -66,9 +62,10 @@ const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = fa
       .catch(() => {
         setMissing(true);
       });
-  }, [path]);
+  }, [path, isValidPath]);
 
   useEffect(() => {
+    if (!isValidPath) return;
     if (isImage && !missing) {
       ipcBridge.fs.getImageBase64
         .invoke({ path })
@@ -77,7 +74,13 @@ const FilePreview: React.FC<FilePreviewProps> = ({ path, onRemove, readonly = fa
           console.error('[FilePreview] Failed to load image:', { path, error });
         });
     }
-  }, [path, isImage, missing]);
+  }, [path, isValidPath, isImage, missing]);
+
+  // Defensive check: ensure path is a string (after all hooks per Rules of Hooks)
+  if (!isValidPath) {
+    console.error('[FilePreview] Invalid path type:', typeof path, path);
+    return null;
+  }
 
   const handleRemove = (e: React.MouseEvent) => {
     e.stopPropagation();
