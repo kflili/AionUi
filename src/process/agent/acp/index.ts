@@ -540,29 +540,38 @@ export class AcpAgent {
       this.adapter.resetMessageTracking();
       let processedContent = data.content;
 
-      // Add @ prefix to ALL uploaded files (including images) with FULL PATH
-      // Claude CLI needs full path to read files
-      // 为所有上传的文件添加 @ 前缀（包括图片），使用完整路径让 Claude CLI 读取
+      // Expand directories into individual file references for @ notation.
+      // Claude CLI's @ notation doesn't support directory paths.
+      let allUploadedPaths = data.files ?? [];
       if (data.files && data.files.length > 0) {
-        const fileRefs = data.files
-          .map((filePath) => {
-            // Use full path instead of just filename
+        const { expandFilePaths } = await import('./utils');
+        const { expandedPaths, folderAnnotations } = await expandFilePaths(data.files);
+        allUploadedPaths = expandedPaths;
+
+        // Prepend folder annotations so the agent knows what was attached
+        for (const annotation of folderAnnotations) {
+          processedContent = `${annotation}\n${processedContent}`;
+        }
+
+        const fileRefs = expandedPaths
+          .map((fp) => {
             // Escape paths with spaces using quotes for Claude CLI
-            // 对含空格的路径使用引号包裹，确保 Claude CLI 正确解析
-            if (filePath.includes(' ')) {
-              return `@"${filePath}"`;
+            if (fp.includes(' ')) {
+              return `@"${fp}"`;
             }
-            return '@' + filePath;
+            return '@' + fp;
           })
           .join(' ');
         // Prepend file references to the content
-        processedContent = fileRefs + ' ' + processedContent;
+        if (fileRefs) {
+          processedContent = fileRefs + ' ' + processedContent;
+        }
       }
 
       // Process @ file references in the message
       // 处理消息中的 @ 文件引用
       const atFileStart = Date.now();
-      processedContent = await this.processAtFileReferences(processedContent, data.files);
+      processedContent = await this.processAtFileReferences(processedContent, allUploadedPaths);
       const atFileDuration = Date.now() - atFileStart;
       if (atFileDuration > 10) {
         if (ACP_PERF_LOG) console.log(`[ACP-PERF] send: @file references processed ${atFileDuration}ms`);

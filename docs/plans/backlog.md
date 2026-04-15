@@ -51,3 +51,19 @@ Claude Code CLI's `--resume` reconstructs conversation context in memory and may
 **Impact:** When switching Rich UI → Terminal → Rich UI → Terminal, the terminal may not show all previous turns from earlier terminal sessions. Rich UI always shows the full history from SQLite.
 
 **Mitigation (implemented):** Mode toggle tooltip explains this behavioral difference to users.
+
+---
+
+## File Attach
+
+### Temp file cleanup for paste/drag attachments
+
+**Source:** GPT review of file-attach-raw-paths implementation
+**Status:** Deferred — no user-facing impact
+**Priority:** Low
+
+After removing `copyFilesToDirectory`, temp files created by paste/drag-drop (in `cacheDir/temp/`) are no longer cleaned up per-message. The old copy helper was the only cleanup path. Temp files now persist until app restart or manual cleanup.
+
+**Why deferred:** Temp files are small (individual paste/drag items), accumulate slowly, and live in the app cache directory. The race condition from eager cleanup was worse than the storage leak.
+
+**Next step:** Add periodic cleanup of `cacheDir/temp/` files older than 24h, either on app startup or via a timer.

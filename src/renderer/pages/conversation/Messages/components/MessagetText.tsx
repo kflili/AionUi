@@ -13,6 +13,8 @@ import classNames from 'classnames';
 import React, { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { copyText, CopyFallbackShown } from '@/renderer/utils/ui/clipboard';
+import { shortenPath } from '@/renderer/utils/file/messageFiles';
+import { useConversationContextSafe } from '@/renderer/hooks/context/ConversationContext';
 import CollapsibleContent from '@renderer/components/chat/CollapsibleContent';
 import FilePreview from '@renderer/components/media/FilePreview';
 import HorizontalFileList from '@renderer/components/media/HorizontalFileList';
@@ -52,8 +54,10 @@ const useFormatContent = (content: string) => {
 };
 
 const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
+  const conversationContext = useConversationContextSafe();
+  const workspace = conversationContext?.workspace;
+
   // Filter think tags from content before rendering
-  // 在渲染前过滤 think 标签
   const contentToRender = useMemo(() => {
     const rawContent = message.content.content;
     if (typeof rawContent === 'string' && hasThinkTags(rawContent)) {
@@ -75,7 +79,7 @@ const MessageText: React.FC<{ message: IMessageText }> = ({ message }) => {
 
   const handleCopy = () => {
     const baseText = json ? JSON.stringify(data, null, 2) : text;
-    const fileList = files.length ? `Files:\n${files.map((path) => `- ${path}`).join('\n')}\n\n` : '';
+    const fileList = files.length ? `Files:\n${files.map((p) => `- ${shortenPath(p, workspace)}`).join('\n')}\n\n` : '';
     const textToCopy = fileList + baseText;
     copyText(textToCopy)
       .then(() => {

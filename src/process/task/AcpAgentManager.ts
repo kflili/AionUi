@@ -567,6 +567,14 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
       // Emit/persist user message immediately so UI can refresh without waiting
       // for ACP connection/auth/session initialization.
       if (data.msg_id && data.content) {
+        // Embed file paths in the stored content so they persist in message history.
+        // ACP sends files separately via @ references, but the stored message needs
+        // the paths for FilePreview rendering when the conversation is reopened.
+        let storedContent = data.content;
+        if (data.files && data.files.length > 0) {
+          storedContent = `${data.content}\n\n${AIONUI_FILES_MARKER}\n${data.files.join('\n')}`;
+        }
+
         const userMessage: TMessage = {
           id: data.msg_id,
           msg_id: data.msg_id,
@@ -574,7 +582,7 @@ class AcpAgentManager extends BaseAgentManager<AcpAgentManagerData, AcpPermissio
           position: 'right',
           conversation_id: this.conversation_id,
           content: {
-            content: data.content,
+            content: storedContent,
             ...(data.cronMeta && { cronMeta: data.cronMeta }),
           },
           createdAt: Date.now(),

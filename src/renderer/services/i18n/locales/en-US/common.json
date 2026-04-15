@@ -66,10 +66,12 @@
   "tray.checkUpdate": "Check Update",
   "tray.recentChats": "Recent Chats",
   "tray.untitled": "Untitled",
+  "fileAttach.attachFilesOrFolders": "Attach Files or Folders",
   "fileAttach.hostFiles": "Host Machine Files",
   "fileAttach.myDevice": "My Device",
   "fileAttach.tooLarge": "File exceeds {{max}}MB limit",
   "fileAttach.failed": "Upload failed",
   "fileAttach.uploading": "Uploading...",
-  "fileAttach.uploadSuccess": "Upload successful"
+  "fileAttach.uploadSuccess": "Upload successful",
+  "filePreview.missing": "missing"
 }

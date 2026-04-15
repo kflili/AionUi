@@ -1,7 +1,7 @@
 # Plan: File Attach UX + Raw Path Display
 
 **Date:** 2026-03-24 (updated 2026-03-29)
-**Status:** Ready to implement
+**Status:** Implemented
 **Branch:** `fix/file-attach-raw-paths`
 
 ---
@@ -187,6 +187,7 @@ The test file has comprehensive coverage of `buildDisplayMessage` including work
 **Reviewed:** 2026-03-29 via GPT-5.4
 
 Key findings incorporated:
+
 - Confirmed `buildDisplayMessage()` fabricates fake workspace paths for external files
 - Confirmed `FilePreview.tsx` has no directory handling
 - Confirmed temp-file cleanup gap when removing `copyFilesToDirectory`

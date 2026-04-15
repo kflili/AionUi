@@ -164,3 +164,46 @@ export function getClaudeModel(): string | null {
 // Note: CodeBuddy settings (~/.codebuddy/settings.json) contains sandbox/trust config,
 // NOT model preferences. Model selection is handled by the CLI itself.
 // MCP servers are configured in ~/.codebuddy/mcp.json
+
+// ── File expansion for attachments ─────────────────────────────────
+
+type ExpandResult = {
+  /** Individual file paths (directories expanded to their top-level contents) */
+  expandedPaths: string[];
+  /** Plain-text annotations for attached folders (e.g., "[Attached folder: /path]") */
+  folderAnnotations: string[];
+};
+
+/**
+ * Expand file paths for ACP @ references.
+ * - Regular files are passed through as-is.
+ * - Directories are expanded to their top-level file entries (subdirs excluded).
+ * - Non-existent paths are passed through as-is (graceful degradation).
+ */
+export async function expandFilePaths(files: string[]): Promise<ExpandResult> {
+  const expandedPaths: string[] = [];
+  const folderAnnotations: string[] = [];
+
+  for (const filePath of files) {
+    try {
+      const stats = await fsAsync.stat(filePath);
+      if (stats.isDirectory()) {
+        const entries = await fsAsync.readdir(filePath, { withFileTypes: true });
+        for (const entry of entries) {
+          // Only include files — CLI's @ notation doesn't support directory paths
+          if (entry.isFile()) {
+            expandedPaths.push(path.join(filePath, entry.name));
+          }
+        }
+        folderAnnotations.push(`[Attached folder: ${filePath}]`);
+      } else {
+        expandedPaths.push(filePath);
+      }
+    } catch {
+      // File may not exist or be inaccessible — pass through as-is
+      expandedPaths.push(filePath);
+    }
+  }
+
+  return { expandedPaths, folderAnnotations };
+}

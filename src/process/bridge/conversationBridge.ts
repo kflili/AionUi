@@ -17,7 +17,7 @@ import type { GeminiAgentManager } from '../task/GeminiAgentManager';
 import type OpenClawAgentManager from '../task/OpenClawAgentManager';
 import { prepareFirstMessage } from '../task/agentUtils';
 import { refreshTrayMenu } from '@process/utils/tray';
-import { copyFilesToDirectory, readDirectoryRecursive } from '@process/utils';
+import { readDirectoryRecursive } from '@process/utils';
 import { mainWarn } from '@process/utils/mainLogger';
 import { isSessionIdle } from '@process/bridge/cliHistoryBridge';
 import { computeOpenClawIdentityHash } from '@process/utils/openclawUtils';
@@ -421,8 +421,12 @@ export function initConversationBridge(
       return { success: false, msg: 'conversation not found' };
     }
 
-    // Copy files to workspace (unified for all agents)
-    const workspaceFiles = await copyFilesToDirectory(task.workspace, files, false);
+    // Pass raw file paths directly to the agent — no copy step.
+    // The CLI/LLM receives absolute paths and uses its own read/list tools to access contents.
+    // Note: temp files from paste/drag-drop (in cache/temp/) are NOT deleted here because
+    // sendMessage() returns before the agent finishes reading. Temp files are cleaned up
+    // on app restart or by the OS. This avoids a race where files are deleted mid-read.
+    const rawFiles = files ?? [];
 
     // Precompute agent content with optional skill injection.
     // OpenClaw uses full-content mode: inject full skill text rather than index paths,
@@ -448,7 +452,7 @@ export function initConversationBridge(
       const result: unknown = await task.sendMessage({
         ...other,
         content: other.input,
-        files: workspaceFiles,
+        files: rawFiles,
         agentContent,
       });
       // Propagate agent failure (e.g., ACP timeout returns { success: false } without throwing)
