@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import { renderHook, act, waitFor } from '@testing-library/react';
 
 // Mock window.matchMedia for Arco Design responsive observer
 Object.defineProperty(window, 'matchMedia', {
@@ -93,7 +93,9 @@ describe('useOpenFileSelector', () => {
       result.current.openFileSelector();
     });
 
-    expect(onFilesSelected).toHaveBeenCalledWith(['/path/a.txt', '/path/b.txt']);
+    await waitFor(() => {
+      expect(onFilesSelected).toHaveBeenCalledWith(['/path/a.txt', '/path/b.txt']);
+    });
   });
 
   it('does NOT call onFilesSelected when dialog returns empty', async () => {
@@ -107,6 +109,9 @@ describe('useOpenFileSelector', () => {
       result.current.openFileSelector();
     });
 
+    await waitFor(() => {
+      expect(mockShowOpen).toHaveBeenCalled();
+    });
     expect(onFilesSelected).not.toHaveBeenCalled();
   });
 
@@ -121,6 +126,9 @@ describe('useOpenFileSelector', () => {
       result.current.openFileSelector();
     });
 
+    await waitFor(() => {
+      expect(mockShowOpen).toHaveBeenCalled();
+    });
     expect(onFilesSelected).not.toHaveBeenCalled();
   });
 
@@ -135,7 +143,8 @@ describe('useOpenFileSelector', () => {
       result.current.onSlashBuiltinCommand('open');
     });
 
-    expect(mockShowOpen).toHaveBeenCalled();
-    expect(onFilesSelected).toHaveBeenCalledWith(['/test/file.txt']);
+    await waitFor(() => {
+      expect(onFilesSelected).toHaveBeenCalledWith(['/test/file.txt']);
+    });
   });
 });
