@@ -146,9 +146,9 @@ async function initializeDefaultAdmin(): Promise<{ username: string; password: s
   const hasValidPassword = (user: typeof existingAdmin): boolean =>
     !!user && typeof user.password_hash === 'string' && user.password_hash.trim().length > 0;
 
-  // 如果已经有有效的管理员用户，直接跳过初始化
-  // Skip initialization if a valid admin already exists
-  if (hasValidPassword(existingAdmin)) {
+  // 如果已经有有效的管理员用户（或系统用户已改名且密码有效），直接跳过初始化
+  // Skip initialization if a valid admin or renamed system user already exists
+  if (hasValidPassword(existingAdmin) || hasValidPassword(systemUser)) {
     return null;
   }
 
