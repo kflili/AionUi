@@ -1,6 +1,6 @@
 # AionUI Enhancement Plans — Index
 
-**Date:** 2026-03-19 (updated 2026-03-29)
+**Date:** 2026-03-19 (updated 2026-04-14)
 **Context:** Research and planning session covering AionUI architecture, CLI agent ecosystem, knowledge management, and personal AI workflow design.
 
 ---
@@ -9,14 +9,14 @@
 
 Each step has its own plan. Multi-file plans live in a subfolder; standalone plans stay flat.
 
-### Step 0.5: Copy Chat Reference
+### Step 0.5: Copy Chat Reference — Done
 
 **Plan:** Inside [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (Feature 1)
 **Where:** AionUI project
 
 Add "Copy Chat Reference" to conversation `...` menu. Low-risk, high-leverage, independent of other steps. Copies a file path or session ID that any CLI agent can use to read the conversation via existing tools. Can be built standalone before or alongside Step 1.
 
-### Step 1: Terminal Wrapper Mode
+### Step 1: Terminal Wrapper Mode — Done
 
 **Plan:** [`2026-03-19-terminal-wrapper/plan.md`](./2026-03-19-terminal-wrapper/plan.md)
 **Where:** AionUI project
