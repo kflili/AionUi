@@ -46,7 +46,8 @@ const TerminalChat: React.FC<{
   backend: AcpBackend;
   acpSessionId?: string;
   cliPath?: string;
-}> = ({ conversationId, workspace, backend, acpSessionId: propSessionId, cliPath }) => {
+  sessionMode?: string;
+}> = ({ conversationId, workspace, backend, acpSessionId: propSessionId, cliPath, sessionMode: propSessionMode }) => {
   // Fetch the latest conversation from DB to get a fresh acpSessionId,
   // since the prop may come from stale SWR cache
   const [resolved, setResolved] = useState<{ command: string; args: string[] } | null>(null);
@@ -62,7 +63,7 @@ const TerminalChat: React.FC<{
       const freshExtra = fresh?.type === 'acp' ? fresh.extra : undefined;
       const sessionId = freshExtra?.acpSessionId || propSessionId;
       const resolvedCliPath = freshExtra?.cliPath || cliPath;
-      const sessionMode = freshExtra?.sessionMode as string | undefined;
+      const sessionMode = (freshExtra?.sessionMode as string | undefined) ?? propSessionMode;
 
       setResolved(getTerminalResumeCommand(backend, sessionId, resolvedCliPath, sessionMode));
     };

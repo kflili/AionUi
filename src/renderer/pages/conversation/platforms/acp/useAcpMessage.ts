@@ -293,6 +293,12 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
         }
         if (lastContextLimit && lastContextLimit > 0) {
           setContextLimit(lastContextLimit);
+        } else {
+          // Derive from model ID when persisted context limit is absent
+          const modelId = (res.extra as Record<string, unknown>).currentModelId as string | undefined;
+          if (modelId) {
+            setContextLimit(getModelContextLimit(modelId));
+          }
         }
       }
     });
