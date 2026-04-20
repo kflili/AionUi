@@ -13,20 +13,30 @@ import TerminalComponent from './TerminalComponent';
 function getTerminalResumeCommand(
   backend: AcpBackend,
   sessionId: string | undefined,
-  cliPath: string | undefined
+  cliPath: string | undefined,
+  sessionMode: string | undefined
 ): { command: string; args: string[] } {
   const cmd = cliPath || backend;
+  const args: string[] = [];
+
+  // Add YOLO/auto-approve flag based on backend and session mode
+  if (backend === 'claude' && sessionMode === 'bypassPermissions') {
+    args.push('--dangerously-skip-permissions');
+  }
 
   switch (backend) {
     case 'claude':
-      return sessionId ? { command: cmd, args: ['--resume', sessionId] } : { command: cmd, args: [] };
+      if (sessionId) args.push('--resume', sessionId);
+      return { command: cmd, args };
     case 'copilot':
-      return sessionId ? { command: cmd, args: [`--resume=${sessionId}`] } : { command: cmd, args: [] };
+      if (sessionId) args.push(`--resume=${sessionId}`);
+      return { command: cmd, args };
     case 'codex':
-      return sessionId ? { command: cmd, args: ['resume', '--session-id', sessionId] } : { command: cmd, args: [] };
+      if (sessionId) args.push('resume', '--session-id', sessionId);
+      return { command: cmd, args };
     default:
-      // Generic fallback: try --resume flag
-      return sessionId ? { command: cmd, args: ['--resume', sessionId] } : { command: cmd, args: [] };
+      if (sessionId) args.push('--resume', sessionId);
+      return { command: cmd, args };
   }
 }
 
@@ -52,8 +62,9 @@ const TerminalChat: React.FC<{
       const freshExtra = fresh?.type === 'acp' ? fresh.extra : undefined;
       const sessionId = freshExtra?.acpSessionId || propSessionId;
       const resolvedCliPath = freshExtra?.cliPath || cliPath;
+      const sessionMode = freshExtra?.sessionMode as string | undefined;
 
-      setResolved(getTerminalResumeCommand(backend, sessionId, resolvedCliPath));
+      setResolved(getTerminalResumeCommand(backend, sessionId, resolvedCliPath, sessionMode));
     };
 
     resolve();
