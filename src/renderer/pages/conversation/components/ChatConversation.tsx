@@ -218,6 +218,31 @@ const ChatConversation: React.FC<{
     }
   }, [conversation?.id, conversation?.type, persistedMode]);
 
+  // Auto-sync JSONL → DB when loading an ACP conversation in Rich UI mode,
+  // or when switching back from terminal mode. Catches messages produced
+  // during terminal sessions that weren't converted to the DB.
+  const acpSessionId = conversation?.type === 'acp' ? conversation.extra?.acpSessionId : undefined;
+  useEffect(() => {
+    if (!conversation?.id || conversation.type !== 'acp' || currentMode === 'terminal') return;
+    const backend = conversation.extra?.backend || 'claude';
+    if (!acpSessionId) return;
+
+    void ipcBridge.cliHistory.convertSessionToMessages
+      .invoke({
+        conversationId: conversation.id,
+        sessionId: acpSessionId,
+        backend,
+        terminalSwitchedAt: conversation.extra?.terminalSwitchedAt ?? 0,
+        showThinking,
+      })
+      .then((result) => {
+        if (result?.success && result.data?.count > 0) {
+          emitter.emit('chat.history.refresh');
+        }
+      })
+      .catch(() => {});
+  }, [conversation?.id, currentMode, acpSessionId]);
+
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
 
