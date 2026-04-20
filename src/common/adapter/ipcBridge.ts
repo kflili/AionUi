@@ -1089,6 +1089,6 @@ export const cliHistory = {
   /** Convert a CLI session's JSONL to TMessages and insert into the conversation's message store */
   convertSessionToMessages: bridge.buildProvider<
     IBridgeResponse<{ count: number }>,
-    { conversationId: string; sessionId: string; backend: string; terminalSwitchedAt: number }
+    { conversationId: string; sessionId: string; backend: string; terminalSwitchedAt: number; showThinking?: boolean }
   >('cli-history.convert-session-to-messages'),
 };

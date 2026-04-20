@@ -192,10 +192,12 @@ const ChatConversation: React.FC<{
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
 
   // Show Thinking toggle — global setting, quick-access from header
+  const [showThinkingLoaded, setShowThinkingLoaded] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   useEffect(() => {
     ConfigStorage.get('agentCli.config').then((config) => {
       setShowThinking(config?.showThinking ?? false);
+      setShowThinkingLoaded(true);
     });
   }, []);
   const handleToggleThinking = useCallback(() => {
@@ -217,6 +219,36 @@ const ChatConversation: React.FC<{
       setCurrentMode('acp');
     }
   }, [conversation?.id, conversation?.type, persistedMode]);
+
+  // Auto-sync JSONL → DB when loading an ACP conversation in Rich UI mode,
+  // or when switching back from terminal mode. Catches messages produced
+  // during terminal sessions that weren't converted to the DB.
+  // Only runs for conversations that were previously in terminal mode (have terminalSwitchedAt).
+  const acpSessionId = conversation?.type === 'acp' ? conversation.extra?.acpSessionId : undefined;
+  const hadTerminalSession = Boolean(conversation?.type === 'acp' && conversation.extra?.terminalSwitchedAt);
+  useEffect(() => {
+    if (!showThinkingLoaded || !hadTerminalSession) return;
+    if (!conversation?.id || conversation.type !== 'acp' || currentMode === 'terminal') return;
+    const backend = conversation.extra?.backend || 'claude';
+    if (!acpSessionId) return;
+
+    void ipcBridge.cliHistory.convertSessionToMessages
+      .invoke({
+        conversationId: conversation.id,
+        sessionId: acpSessionId,
+        backend,
+        terminalSwitchedAt: conversation.extra?.terminalSwitchedAt ?? 0,
+        showThinking,
+      })
+      .then((result) => {
+        if (result?.success && result.data?.count > 0) {
+          emitter.emit('chat.history.refresh');
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn('[ChatConversation] JSONL sync failed:', err);
+      });
+  }, [conversation?.id, currentMode, acpSessionId, showThinkingLoaded, hadTerminalSession]);
 
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
@@ -369,7 +401,6 @@ const ChatConversation: React.FC<{
           <ModeToggle
             conversationId={conversation.id}
             currentMode={currentMode}
-            backend={conversation.extra?.backend || 'claude'}
             onModeChange={setCurrentMode}
           />
         </div>

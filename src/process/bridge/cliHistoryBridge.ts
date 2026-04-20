@@ -5,11 +5,11 @@
  */
 
 import * as fs from 'node:fs/promises';
+import * as fsSync from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
 import { ipcBridge } from '@/common';
-import { ConfigStorage } from '@/common/config/storage';
 import { getDataPath } from '@process/utils/utils';
 import { getDatabase } from '@process/services/database/export';
 import { convertClaudeJsonl } from '@process/cli-history/converters/claude';
@@ -17,22 +17,19 @@ import { convertCopilotJsonl } from '@process/cli-history/converters/copilot';
 
 /**
  * Resolve a Claude Code session ID to its JSONL file path.
- * Scans ~/.claude/projects/{hash}/{sessionId}.jsonl
+ * Scans ~/.claude/projects/{hash}/{sessionId}.jsonl (sync I/O).
  */
-async function resolveClaudeSessionPath(sessionId: string): Promise<string | null> {
+function resolveClaudeSessionPathSync(sessionId: string): string | null {
   const projectsDir = path.join(os.homedir(), '.claude', 'projects');
 
   try {
-    const entries = await fs.readdir(projectsDir, { withFileTypes: true });
-    const projectDirs = entries.filter((entry) => entry.isDirectory());
+    const entries = fsSync.readdirSync(projectsDir, { withFileTypes: true });
 
-    for (const dir of projectDirs) {
-      const candidate = path.join(projectsDir, dir.name, `${sessionId}.jsonl`);
-      try {
-        await fs.access(candidate);
+    for (const entry of entries) {
+      if (!entry.isDirectory()) continue;
+      const candidate = path.join(projectsDir, entry.name, `${sessionId}.jsonl`);
+      if (fsSync.existsSync(candidate)) {
         return candidate;
-      } catch {
-        // File doesn't exist in this project dir, continue scanning
       }
     }
   } catch {
@@ -55,6 +52,14 @@ async function resolveCopilotSessionPath(sessionId: string): Promise<string | nu
   } catch {
     return null;
   }
+}
+
+/**
+ * Resolve a Copilot CLI session ID to its JSONL file path (sync I/O).
+ */
+function resolveCopilotSessionPathSync(sessionId: string): string | null {
+  const candidate = path.join(os.homedir(), '.copilot', 'session-state', sessionId, 'events.jsonl');
+  return fsSync.existsSync(candidate) ? candidate : null;
 }
 
 /**
@@ -116,14 +121,13 @@ async function resolveCodexSessionPath(sessionId: string): Promise<string | null
 async function resolveSessionPath(sessionId: string, backend: string): Promise<string | null> {
   switch (backend) {
     case 'claude':
-      return resolveClaudeSessionPath(sessionId);
+      return resolveClaudeSessionPathSync(sessionId);
     case 'copilot':
       return resolveCopilotSessionPath(sessionId);
     case 'codex':
       return resolveCodexSessionPath(sessionId);
     default:
-      // Unknown backend — try Claude as default (most common ACP backend)
-      return resolveClaudeSessionPath(sessionId);
+      return resolveClaudeSessionPathSync(sessionId);
   }
 }
 
@@ -191,46 +195,44 @@ export function initCliHistoryBridge(): void {
   });
 
   ipcBridge.cliHistory.convertSessionToMessages.provider(
-    async ({ conversationId, sessionId, backend, terminalSwitchedAt }) => {
+    async ({ conversationId, sessionId, backend, terminalSwitchedAt, showThinking }) => {
       try {
         // Only claude and copilot converters are currently implemented
         if (backend !== 'claude' && backend !== 'copilot') {
           return { success: false, msg: `JSONL conversion not supported for backend: ${backend}` };
         }
 
-        // 1. Resolve JSONL file path
-        const filePath = await resolveSessionPath(sessionId, backend);
+        // 1. Resolve JSONL file path (sync to avoid Electron async I/O deadlock)
+        const filePath = backend === 'claude'
+          ? resolveClaudeSessionPathSync(sessionId)
+          : resolveCopilotSessionPathSync(sessionId);
+
         if (!filePath) {
           return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };
         }
 
-        // 2. Read JSONL file
-        const content = await fs.readFile(filePath, 'utf-8');
+        // 2. Read JSONL file (sync to avoid Electron async I/O deadlock)
+        const content = fsSync.readFileSync(filePath, 'utf-8');
         const lines = content.split('\n').filter(Boolean);
         if (lines.length === 0) {
           return { success: true, data: { count: 0 } };
         }
 
-        // 3. Read showThinking preference
-        const agentCliConfig = await ConfigStorage.get('agentCli.config');
-        const showThinking = agentCliConfig?.showThinking ?? false;
-        const converterOptions = { showThinking };
-
-        // 4. Convert to TMessages using the appropriate converter
+        // 3. Convert to TMessages
+        const converterOptions = { showThinking: showThinking ?? false };
         const allMessages =
           backend === 'copilot'
             ? convertCopilotJsonl(lines, conversationId, converterOptions)
             : convertClaudeJsonl(lines, conversationId, converterOptions);
 
-        // 5. Only insert messages from the terminal session period.
-        // terminalSwitchedAt marks when the user switched to terminal mode —
-        // only import messages newer than this boundary to avoid duplicating
-        // ACP-rendered messages.
+        // 4. Only insert messages newer than what's already in the DB.
         const db = getDatabase();
+        const lastPage = db.getConversationMessages(conversationId, 0, 1, 'DESC');
+        const lastDbTimestamp = lastPage.data[0]?.createdAt ?? terminalSwitchedAt;
 
         let inserted = 0;
         for (const msg of allMessages) {
-          if ((msg.createdAt ?? 0) > terminalSwitchedAt) {
+          if ((msg.createdAt ?? 0) > lastDbTimestamp) {
             const result = db.insertMessage(msg);
             if (result?.success !== false) {
               inserted++;
