@@ -399,7 +399,6 @@ const ChatConversation: React.FC<{
           <ModeToggle
             conversationId={conversation.id}
             currentMode={currentMode}
-            backend={conversation.extra?.backend || 'claude'}
             onModeChange={setCurrentMode}
           />
         </div>

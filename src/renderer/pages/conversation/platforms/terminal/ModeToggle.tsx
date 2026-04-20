@@ -15,9 +15,8 @@ import { mutate } from 'swr';
 const ModeToggle: React.FC<{
   conversationId: string;
   currentMode: ConversationMode;
-  backend: string;
   onModeChange: (mode: ConversationMode) => void;
-}> = ({ conversationId, currentMode, backend, onModeChange }) => {
+}> = ({ conversationId, currentMode, onModeChange }) => {
   const { t } = useTranslation();
   const layout = useLayoutContext();
   const isMobile = layout?.isMobile ?? false;
@@ -57,7 +56,7 @@ const ModeToggle: React.FC<{
         });
       }
     },
-    [conversationId, currentMode, backend, onModeChange]
+    [conversationId, currentMode, onModeChange]
   );
 
   return (
