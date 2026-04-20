@@ -22,6 +22,8 @@ function getTerminalResumeCommand(
   // Add YOLO/auto-approve flag based on backend and session mode
   if (backend === 'claude' && sessionMode === 'bypassPermissions') {
     args.push('--dangerously-skip-permissions');
+  } else if (backend === 'copilot' && sessionMode?.includes('autopilot')) {
+    args.push('--yolo');
   }
 
   switch (backend) {
