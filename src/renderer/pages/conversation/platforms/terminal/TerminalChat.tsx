@@ -13,20 +13,32 @@ import TerminalComponent from './TerminalComponent';
 function getTerminalResumeCommand(
   backend: AcpBackend,
   sessionId: string | undefined,
-  cliPath: string | undefined
+  cliPath: string | undefined,
+  sessionMode: string | undefined
 ): { command: string; args: string[] } {
   const cmd = cliPath || backend;
+  const args: string[] = [];
+
+  // Add YOLO/auto-approve flag based on backend and session mode
+  if (backend === 'claude' && sessionMode === 'bypassPermissions') {
+    args.push('--dangerously-skip-permissions');
+  } else if (backend === 'copilot' && sessionMode?.includes('autopilot')) {
+    args.push('--yolo');
+  }
 
   switch (backend) {
     case 'claude':
-      return sessionId ? { command: cmd, args: ['--resume', sessionId] } : { command: cmd, args: [] };
+      if (sessionId) args.push('--resume', sessionId);
+      return { command: cmd, args };
     case 'copilot':
-      return sessionId ? { command: cmd, args: [`--resume=${sessionId}`] } : { command: cmd, args: [] };
+      if (sessionId) args.push(`--resume=${sessionId}`);
+      return { command: cmd, args };
     case 'codex':
-      return sessionId ? { command: cmd, args: ['resume', '--session-id', sessionId] } : { command: cmd, args: [] };
+      if (sessionId) args.push('resume', '--session-id', sessionId);
+      return { command: cmd, args };
     default:
-      // Generic fallback: try --resume flag
-      return sessionId ? { command: cmd, args: ['--resume', sessionId] } : { command: cmd, args: [] };
+      if (sessionId) args.push('--resume', sessionId);
+      return { command: cmd, args };
   }
 }
 
@@ -36,7 +48,8 @@ const TerminalChat: React.FC<{
   backend: AcpBackend;
   acpSessionId?: string;
   cliPath?: string;
-}> = ({ conversationId, workspace, backend, acpSessionId: propSessionId, cliPath }) => {
+  sessionMode?: string;
+}> = ({ conversationId, workspace, backend, acpSessionId: propSessionId, cliPath, sessionMode: propSessionMode }) => {
   // Fetch the latest conversation from DB to get a fresh acpSessionId,
   // since the prop may come from stale SWR cache
   const [resolved, setResolved] = useState<{ command: string; args: string[] } | null>(null);
@@ -52,15 +65,16 @@ const TerminalChat: React.FC<{
       const freshExtra = fresh?.type === 'acp' ? fresh.extra : undefined;
       const sessionId = freshExtra?.acpSessionId || propSessionId;
       const resolvedCliPath = freshExtra?.cliPath || cliPath;
+      const sessionMode = (freshExtra?.sessionMode as string | undefined) ?? propSessionMode;
 
-      setResolved(getTerminalResumeCommand(backend, sessionId, resolvedCliPath));
+      setResolved(getTerminalResumeCommand(backend, sessionId, resolvedCliPath, sessionMode));
     };
 
     resolve();
     return () => {
       cancelled = true;
     };
-  }, [conversationId, backend, propSessionId, cliPath]);
+  }, [conversationId, backend, propSessionId, cliPath, propSessionMode]);
 
   if (!resolved) return null;
 

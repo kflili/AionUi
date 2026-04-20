@@ -263,6 +263,7 @@ const ChatConversation: React.FC<{
           backend={conversation.extra?.backend || 'claude'}
           acpSessionId={conversation.extra?.acpSessionId}
           cliPath={conversation.extra?.cliPath}
+          sessionMode={conversation.extra?.sessionMode}
         />
       );
     }

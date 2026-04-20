@@ -10,6 +10,7 @@ import type { IResponseMessage } from '@/common/adapter/ipcBridge';
 import type { TokenUsageData } from '@/common/config/storage';
 import { useAddOrUpdateMessage } from '@/renderer/pages/conversation/Messages/hooks';
 import type { ThoughtData } from '@/renderer/components/chat/ThoughtDisplay';
+import { getModelContextLimit } from '@/renderer/utils/model/modelContextLimits';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
@@ -204,6 +205,9 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
             setTokenUsage({ totalTokens: usageData.used });
             if (usageData.size > 0) {
               setContextLimit(usageData.size);
+            } else if (requestTraceRef.current?.modelId) {
+              // Backend didn't provide context size — derive from model ID
+              setContextLimit(getModelContextLimit(requestTraceRef.current.modelId));
             }
           }
           break;
@@ -289,6 +293,12 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
         }
         if (lastContextLimit && lastContextLimit > 0) {
           setContextLimit(lastContextLimit);
+        } else {
+          // Derive from model ID when persisted context limit is absent
+          const modelId = res.extra.currentModelId;
+          if (modelId) {
+            setContextLimit(getModelContextLimit(modelId));
+          }
         }
       }
     });
