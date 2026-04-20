@@ -49,39 +49,12 @@ const ModeToggle: React.FC<{
         return;
       }
 
-      // 3. Background cleanup (terminal → acp): kill PTY + convert JSONL
-      //    Failures are logged but don't block the UI
+      // 3. Background cleanup (terminal → acp): kill PTY.
+      //    JSONL → DB sync is handled by ChatConversation's auto-sync effect.
       if (currentMode === 'terminal' && mode === 'acp') {
-        void (async () => {
-          try {
-            await ipcBridge.pty.kill.invoke({ conversationId });
-          } catch {
-            // PTY may not exist — not an error
-          }
-
-          try {
-            const conversation = await ipcBridge.conversation.get.invoke({ id: conversationId });
-            const extra = conversation?.type === 'acp' ? conversation.extra : undefined;
-            const sessionId = extra?.acpSessionId;
-            const terminalSwitchedAt = extra?.terminalSwitchedAt ?? 0;
-
-            if (sessionId) {
-              const result = await ipcBridge.cliHistory.convertSessionToMessages.invoke({
-                conversationId,
-                sessionId,
-                backend,
-                terminalSwitchedAt,
-              });
-              if (result && !result.success) {
-                console.warn('[ModeToggle] JSONL conversion failed:', result.msg);
-              }
-              // Refresh messages after conversion
-              await mutate(`conversation/${conversationId}`);
-            }
-          } catch (err) {
-            console.warn('[ModeToggle] Background cleanup failed:', err);
-          }
-        })();
+        void ipcBridge.pty.kill.invoke({ conversationId }).catch(() => {
+          // PTY may not exist — not an error
+        });
       }
     },
     [conversationId, currentMode, backend, onModeChange]

@@ -55,6 +55,14 @@ async function resolveCopilotSessionPath(sessionId: string): Promise<string | nu
 }
 
 /**
+ * Resolve a Copilot CLI session ID to its JSONL file path (sync I/O).
+ */
+function resolveCopilotSessionPathSync(sessionId: string): string | null {
+  const candidate = path.join(os.homedir(), '.copilot', 'session-state', sessionId, 'events.jsonl');
+  return fsSync.existsSync(candidate) ? candidate : null;
+}
+
+/**
  * Resolve a Codex CLI session ID to its JSONL file path.
  * Scans ~/.codex/sessions/ recursively for rollout-*-{sessionId}.jsonl
  */
@@ -194,14 +202,10 @@ export function initCliHistoryBridge(): void {
           return { success: false, msg: `JSONL conversion not supported for backend: ${backend}` };
         }
 
-        // 1. Resolve JSONL file path (sync for Claude to avoid Electron async I/O deadlock)
-        let filePath: string | null = null;
-        if (backend === 'claude') {
-          filePath = resolveClaudeSessionPathSync(sessionId);
-        } else {
-          const candidate = path.join(os.homedir(), '.copilot', 'session-state', sessionId, 'events.jsonl');
-          if (fsSync.existsSync(candidate)) filePath = candidate;
-        }
+        // 1. Resolve JSONL file path (sync to avoid Electron async I/O deadlock)
+        const filePath = backend === 'claude'
+          ? resolveClaudeSessionPathSync(sessionId)
+          : resolveCopilotSessionPathSync(sessionId);
 
         if (!filePath) {
           return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };
