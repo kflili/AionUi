@@ -245,7 +245,9 @@ const ChatConversation: React.FC<{
           emitter.emit('chat.history.refresh');
         }
       })
-      .catch(() => {});
+      .catch((err: unknown) => {
+        console.warn('[ChatConversation] JSONL sync failed:', err);
+      });
   }, [conversation?.id, currentMode, acpSessionId, showThinkingLoaded, hadTerminalSession]);
 
   const conversationNode = useMemo(() => {
