@@ -72,7 +72,7 @@ const TerminalChat: React.FC<{
     return () => {
       cancelled = true;
     };
-  }, [conversationId, backend, propSessionId, cliPath]);
+  }, [conversationId, backend, propSessionId, cliPath, propSessionMode]);
 
   if (!resolved) return null;
 

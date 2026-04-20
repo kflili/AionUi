@@ -295,7 +295,7 @@ export const useAcpMessage = (conversation_id: string): UseAcpMessageReturn => {
           setContextLimit(lastContextLimit);
         } else {
           // Derive from model ID when persisted context limit is absent
-          const modelId = (res.extra as Record<string, unknown>).currentModelId as string | undefined;
+          const modelId = res.extra.currentModelId;
           if (modelId) {
             setContextLimit(getModelContextLimit(modelId));
           }
