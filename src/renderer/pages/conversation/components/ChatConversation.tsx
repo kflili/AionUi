@@ -192,10 +192,12 @@ const ChatConversation: React.FC<{
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
 
   // Show Thinking toggle — global setting, quick-access from header
+  const [showThinkingLoaded, setShowThinkingLoaded] = useState(false);
   const [showThinking, setShowThinking] = useState(false);
   useEffect(() => {
     ConfigStorage.get('agentCli.config').then((config) => {
       setShowThinking(config?.showThinking ?? false);
+      setShowThinkingLoaded(true);
     });
   }, []);
   const handleToggleThinking = useCallback(() => {
@@ -221,8 +223,10 @@ const ChatConversation: React.FC<{
   // Auto-sync JSONL → DB when loading an ACP conversation in Rich UI mode,
   // or when switching back from terminal mode. Catches messages produced
   // during terminal sessions that weren't converted to the DB.
+  // Waits for showThinking preference to load to avoid importing without thinking blocks.
   const acpSessionId = conversation?.type === 'acp' ? conversation.extra?.acpSessionId : undefined;
   useEffect(() => {
+    if (!showThinkingLoaded) return;
     if (!conversation?.id || conversation.type !== 'acp' || currentMode === 'terminal') return;
     const backend = conversation.extra?.backend || 'claude';
     if (!acpSessionId) return;
@@ -241,7 +245,7 @@ const ChatConversation: React.FC<{
         }
       })
       .catch(() => {});
-  }, [conversation?.id, currentMode, acpSessionId]);
+  }, [conversation?.id, currentMode, acpSessionId, showThinkingLoaded]);
 
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
