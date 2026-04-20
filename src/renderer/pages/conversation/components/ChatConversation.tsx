@@ -223,10 +223,11 @@ const ChatConversation: React.FC<{
   // Auto-sync JSONL → DB when loading an ACP conversation in Rich UI mode,
   // or when switching back from terminal mode. Catches messages produced
   // during terminal sessions that weren't converted to the DB.
-  // Waits for showThinking preference to load to avoid importing without thinking blocks.
+  // Only runs for conversations that were previously in terminal mode (have terminalSwitchedAt).
   const acpSessionId = conversation?.type === 'acp' ? conversation.extra?.acpSessionId : undefined;
+  const hadTerminalSession = Boolean(conversation?.type === 'acp' && conversation.extra?.terminalSwitchedAt);
   useEffect(() => {
-    if (!showThinkingLoaded) return;
+    if (!showThinkingLoaded || !hadTerminalSession) return;
     if (!conversation?.id || conversation.type !== 'acp' || currentMode === 'terminal') return;
     const backend = conversation.extra?.backend || 'claude';
     if (!acpSessionId) return;
@@ -245,7 +246,7 @@ const ChatConversation: React.FC<{
         }
       })
       .catch(() => {});
-  }, [conversation?.id, currentMode, acpSessionId, showThinkingLoaded]);
+  }, [conversation?.id, currentMode, acpSessionId, showThinkingLoaded, hadTerminalSession]);
 
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
