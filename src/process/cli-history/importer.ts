@@ -456,9 +456,12 @@ async function runDisableSource(
     const extra = (row.extra ?? {}) as Partial<AcpImportedExtra>;
     if (!extra.importMeta) continue; // Defensive: only touch rows that look imported.
     if (extra.importMeta.hidden === true) continue;
+    // Restate `modifyTime` from the spread to make the contract explicit: unlike
+    // `db.updateConversation` which force-stamps `Date.now()`, hide MUST keep the
+    // existing modifyTime so the sidebar timeline does not reorder.
     const updated: TChatConversation = {
       ...row,
-      modifyTime: row.modifyTime, // preserve order
+      modifyTime: row.modifyTime,
       extra: {
         ...extra,
         importMeta: { ...extra.importMeta, hidden: true },
@@ -478,9 +481,14 @@ async function runDisableSource(
 /**
  * Soft-re-enable a source: flip `extra.importMeta.hidden = false` on every
  * previously-hidden row (preserving customizations + `modifyTime`), then run an
- * incremental `discoverAndImport(source)` to pick up sessions created while
- * the source was disabled. Serialized with `discoverAndImport`/`disableSource`
- * via the per-source `operationChain`.
+ * incremental scan to pick up sessions created while the source was disabled.
+ * Serialized with `discoverAndImport`/`disableSource` via the per-source
+ * `operationChain`.
+ *
+ * Note: the inner scan calls `runDiscoverAndImport(source)` directly (NOT the
+ * public `discoverAndImport(source)`) — re-entering `enqueueOperation` while
+ * already running on the same chain entry would deadlock waiting on its own
+ * tail. See the call site below for the same warning.
  *
  * Unhide failures are accumulated into the returned `ImportResult.errors` so the
  * IPC caller can surface them in the UI (rather than silently swallowing them).
@@ -501,6 +509,9 @@ async function runReenableSource(source: SessionSourceId): Promise<ImportResult>
       const extra = (row.extra ?? {}) as Partial<AcpImportedExtra>;
       if (!extra.importMeta) continue;
       if (extra.importMeta.hidden !== true) continue;
+      // Restate `modifyTime` from the spread to make the contract explicit: unlike
+      // `db.updateConversation` which force-stamps `Date.now()`, unhide MUST keep
+      // the existing modifyTime so re-enable does not reorder the timeline.
       const updated: TChatConversation = {
         ...row,
         modifyTime: row.modifyTime,
