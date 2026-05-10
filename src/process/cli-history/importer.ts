@@ -71,7 +71,7 @@ export function dedupKey(
 }
 
 const UUID_LIKE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const RAW_FILENAME_LIKE = /^[a-z0-9]+_\d{4}[_-]?\d{2}[_-]?\d{2}[_-]?\d{2,6}/i;
+const RAW_FILENAME_LIKE = /^[a-z0-9_]+_\d{4}[_-]?\d{2}[_-]?\d{2}[_-]?\d{2,6}/i;
 
 /**
  * A "meaningful" title candidate is a non-empty trimmed string that is not the
@@ -263,8 +263,11 @@ function rowsEqualForImporter(a: TChatConversation, b: TChatConversation): boole
  * Scan a single source's native session index and upsert one row per discovered
  * session. Concurrent calls for the same source share the in-flight promise so
  * we never run two scans in parallel against the same provider.
+ *
+ * Returns the in-flight promise reference (not an async-wrapped copy) so that
+ * `discoverAndImport(s) === discoverAndImport(s)` while a scan is pending.
  */
-export async function discoverAndImport(source: SessionSourceId): Promise<ImportResult> {
+export function discoverAndImport(source: SessionSourceId): Promise<ImportResult> {
   const existing = inFlight.get(source);
   if (existing) return existing;
 
