@@ -192,12 +192,15 @@ const ChatConversation: React.FC<{
   const [currentMode, setCurrentMode] = useState<ConversationMode>('acp');
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
 
-  // Show Thinking toggle — global setting, quick-access from header
+  // Show Thinking toggle — global setting, quick-access from header.
+  // Header button is disabled until showThinkingLoaded is true so the toggle can never
+  // fire before the hook has resolved; the early-return below is defensive belt-and-suspenders.
   const agentCliConfig = useAgentCliConfig();
   const showThinkingLoaded = agentCliConfig !== undefined;
   const showThinking = agentCliConfig?.showThinking ?? false;
   const handleToggleThinking = useCallback(() => {
-    const next = !(agentCliConfig?.showThinking ?? false);
+    if (agentCliConfig === undefined) return;
+    const next = !agentCliConfig.showThinking;
     ConfigStorage.set('agentCli.config', { ...agentCliConfig, showThinking: next });
   }, [agentCliConfig]);
 
@@ -378,6 +381,7 @@ const ChatConversation: React.FC<{
               type='text'
               shape='circle'
               size='mini'
+              disabled={!showThinkingLoaded}
               aria-label={t('settings.terminalWrapper.showThinking')}
               aria-pressed={showThinking}
               icon={
