@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import { ConfigStorage } from '@/common/config/storage';
+import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import React, { useEffect, useRef, useCallback } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
@@ -36,6 +36,15 @@ const TerminalComponent: React.FC<{
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Read fontSize once at init via a ref so config changes after mount don't
+  // trigger expensive terminal recreation. The terminal lifecycle is driven by
+  // conversationId — re-mounting on conversation switch picks up the latest config.
+  const agentCliConfig = useAgentCliConfig();
+  const agentCliConfigRef = useRef(agentCliConfig);
+  useEffect(() => {
+    agentCliConfigRef.current = agentCliConfig;
+  }, [agentCliConfig]);
+
   const handleResize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
     const terminal = terminalRef.current;
@@ -61,7 +70,7 @@ const TerminalComponent: React.FC<{
     const initTerminal = async () => {
       try {
         // Load font size from settings
-        const config = await ConfigStorage.get('agentCli.config');
+        const config = agentCliConfigRef.current;
         if (disposed || !containerRef.current) return;
 
         const fontSize = config?.fontSize || 14;

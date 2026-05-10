@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfigStorage, type IConfigStorageRefer } from '@/common/config/storage';
+import { ConfigStorage } from '@/common/config/storage';
+import { useAgentCliConfig, type AgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { InputNumber, Switch } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
-
-type AgentCliConfig = NonNullable<IConfigStorageRefer['agentCli.config']>;
 
 const PreferenceRow: React.FC<{
   label: string;
@@ -31,25 +30,17 @@ const AgentCliModalContent: React.FC = () => {
   const { t } = useTranslation();
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
-  const [config, setConfig] = useState<AgentCliConfig>({});
-  const [loaded, setLoaded] = useState(false);
+  const config = useAgentCliConfig();
 
-  useEffect(() => {
-    ConfigStorage.get('agentCli.config').then((c) => {
-      setConfig(c || {});
-      setLoaded(true);
-    });
-  }, []);
-
-  const saveConfig = useCallback(async (updates: Partial<AgentCliConfig>) => {
-    setConfig((prev) => {
-      const next = { ...prev, ...updates };
+  const saveConfig = useCallback(
+    (updates: Partial<AgentCliConfig>) => {
+      const next = { ...config, ...updates };
       ConfigStorage.set('agentCli.config', next);
-      return next;
-    });
-  }, []);
+    },
+    [config]
+  );
 
-  if (!loaded) return null;
+  if (config === undefined) return null;
 
   return (
     <div className='flex flex-col h-full w-full'>

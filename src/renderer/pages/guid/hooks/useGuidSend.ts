@@ -5,13 +5,14 @@
  */
 
 import { ipcBridge } from '@/common';
-import { ConfigStorage, type TProviderWithModel } from '@/common/config/storage';
+import { type TProviderWithModel } from '@/common/config/storage';
+import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
 import { updateWorkspaceTime } from '@/renderer/utils/workspace/workspaceHistory';
 import { isAcpRoutedPresetType, type PresetAgentType } from '@/common/types/acpTypes';
 import { Message } from '@arco-design/web-react';
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { type TFunction } from 'i18next';
 import type { NavigateFunction } from 'react-router-dom';
 import type { AcpBackend, AvailableAgent, EffectiveAgentInfo } from '../types';
@@ -108,6 +109,14 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
     openTab,
     t,
   } = deps;
+
+  // Track latest agentCli.config via ref so the async send handler reads the
+  // current value without re-creating the callback on every config change.
+  const agentCliConfig = useAgentCliConfig();
+  const agentCliConfigRef = useRef(agentCliConfig);
+  useEffect(() => {
+    agentCliConfigRef.current = agentCliConfig;
+  }, [agentCliConfig]);
 
   const handleSend = useCallback(async () => {
     const isCustomWorkspace = !!dir;
@@ -328,7 +337,7 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
             ? terminalModeOverride
               ? 'terminal'
               : 'acp'
-            : ((await ConfigStorage.get('agentCli.config'))?.defaultMode ?? 'acp');
+            : (agentCliConfigRef.current?.defaultMode ?? 'acp');
 
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'acp',
