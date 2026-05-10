@@ -7,6 +7,7 @@
 /commands/auto-code-no-commit.md
 /commands/auto-code.md
 /commands/auto-plan.md
+/commands/auto-ship.md
 /commands/catchup.md
 /commands/discuss.md
 /commands/fix-pr-feedback.md
@@ -23,6 +24,8 @@
 /skills/github-explorer/SKILL.md
 /skills/gpt/SKILL.md
 /skills/image-prompt/SKILL.md
+/skills/mac-computer-use/SKILL.md
+/skills/post-merge-docs/SKILL.md
 /skills/pre-pr-review/SKILL.md
 /skills/repo-context/SKILL.md
 /skills/review-pr/SKILL.md
