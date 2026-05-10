@@ -111,17 +111,20 @@ describe('useAgentCliConfig', () => {
     expect(hookB.result.current).toEqual({ defaultMode: 'terminal', fontSize: 18 });
   });
 
-  it('handles missing config without throwing (returns undefined)', async () => {
+  it('normalizes missing config to {} after the initial fetch (loaded, empty) — first-run users can still see settings UI', async () => {
     // memoryStore is empty — get resolves to undefined.
     const { result } = renderHook(() => useAgentCliConfig());
 
-    await waitFor(() => {
-      // initialization has completed; snapshot is still undefined because nothing is stored
-      // (waitFor retries until the assertion holds without throwing)
-      expect(result.current).toBeUndefined();
-    });
+    // Initial render is undefined (still loading) — DIFFERENT from the loaded-empty {} below.
+    expect(result.current).toBeUndefined();
 
-    // A subsequent set should produce a defined snapshot without errors.
+    // After init resolves, snapshot is {} (loaded, empty) — NOT undefined.
+    // This is the key signal consumers use to advance past "loading" gates
+    // (AgentCliModalContent's `if (config === undefined) return null;`,
+    // ChatConversation's `showThinkingLoaded`, etc.) on a fresh install.
+    await waitFor(() => expect(result.current).toEqual({}));
+
+    // A subsequent set produces a defined snapshot without errors.
     await act(async () => {
       await ConfigStorage.set('agentCli.config', { defaultMode: 'acp' });
     });
