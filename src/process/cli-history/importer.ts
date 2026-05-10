@@ -138,6 +138,17 @@ function workspaceBasename(workspace: string | undefined): string {
 }
 
 /**
+ * `Date.parse` returns `NaN` for invalid input and a real number for valid input.
+ * Using `Date.parse(x) || fallback` would also incorrectly substitute on a legitimate
+ * epoch timestamp (`0`). Check for `NaN` explicitly so only invalid dates fall back.
+ */
+function parseDateOr(input: string | undefined, fallback: number): number {
+  if (typeof input !== 'string') return fallback;
+  const parsed = Date.parse(input);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+/**
  * Compute the auto-generated title for an imported session. Source-aware:
  *   - Claude Code: prefer `firstPrompt`, fall back to `title` (the provider's `summary`)
  *   - Copilot:     prefer `title` (the provider's `summary`)
@@ -176,7 +187,7 @@ export function buildAutoName(metadata: SessionMetadata, now: number = Date.now(
     return wsBase ? `${truncated} · ${wsBase}` : truncated;
   }
 
-  const updatedTs = Date.parse(metadata.updatedAt) || Date.parse(metadata.createdAt) || now;
+  const updatedTs = parseDateOr(metadata.updatedAt, parseDateOr(metadata.createdAt, now));
   const rel = relativeTime(updatedTs, now);
   return wsBase ? `${rel} · ${wsBase}` : rel;
 }
@@ -212,12 +223,12 @@ export function buildConversationRow(
   now: number = Date.now()
 ): TChatConversation {
   const generatedName = buildAutoName(metadata, now);
-  const createTs = Date.parse(metadata.createdAt) || now;
+  const createTs = parseDateOr(metadata.createdAt, now);
   // For existing rows, prefer the row's current modifyTime when the provider's
   // updatedAt is unparseable — that preserves the sidebar timeline order. For
   // brand-new rows, fall back to createTs (which itself falls back to `now`).
   const fallbackTs = existing?.modifyTime ?? createTs;
-  const updatedTs = Date.parse(metadata.updatedAt) || fallbackTs;
+  const updatedTs = parseDateOr(metadata.updatedAt, fallbackTs);
 
   if (!existing) {
     const extra: AcpImportedExtra = {
