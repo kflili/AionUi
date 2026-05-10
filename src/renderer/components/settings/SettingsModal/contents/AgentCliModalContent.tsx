@@ -111,9 +111,35 @@ const AgentCliModalContent: React.FC = () => {
           return;
         }
 
-        const ipcResult = enabled
-          ? await ipcBridge.cliHistory.reenableSource.invoke({ source })
-          : await ipcBridge.cliHistory.disableSource.invoke({ source });
+        let ipcResult: { success: boolean; data?: { errors?: Array<{ message: string }> }; msg?: string };
+        try {
+          ipcResult = enabled
+            ? await ipcBridge.cliHistory.reenableSource.invoke({ source })
+            : await ipcBridge.cliHistory.disableSource.invoke({ source });
+        } catch (transportError) {
+          console.error('[AgentCliModalContent] IPC call failed', transportError);
+          try {
+            await saveConfigAwaitable({ [configKey]: previousEnabled } as Partial<AgentCliConfig>);
+          } catch (rollbackError) {
+            console.error('[AgentCliModalContent] Failed to roll back import toggle', rollbackError);
+          }
+          Message.error(
+            t(
+              enabled
+                ? 'settings.terminalWrapper.cliHistoryEnableFailed'
+                : 'settings.terminalWrapper.cliHistoryDisableFailed'
+            )
+          );
+          return;
+        }
+
+        // Treat partial failures (success: true with non-empty errors[]) as a soft
+        // failure: keep the optimistic toggle (some rows were processed) but
+        // surface the first error to the user.
+        const partialErrorMessage =
+          ipcResult.success && ipcResult.data?.errors && ipcResult.data.errors.length > 0
+            ? ipcResult.data.errors[0]?.message
+            : undefined;
 
         if (!ipcResult.success) {
           try {
@@ -129,6 +155,8 @@ const AgentCliModalContent: React.FC = () => {
                   : 'settings.terminalWrapper.cliHistoryDisableFailed'
               )
           );
+        } else if (partialErrorMessage) {
+          Message.error(partialErrorMessage);
         }
       } finally {
         setPending((prev) => ({ ...prev, [source]: false }));

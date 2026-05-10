@@ -52,6 +52,31 @@ const providerRegistry: Map<SessionSourceId, SessionSourceProvider> = new Map([
 const inFlight: Map<SessionSourceId, Promise<ImportResult>> = new Map();
 
 /**
+ * Per-source operation chain. `discoverAndImport`, `disableSource`, and
+ * `reenableSource` all enqueue onto the same per-source promise so cross-operation
+ * races cannot interleave (e.g. a scan reading rows, a disable hiding them, then
+ * the scan writing back stale `hidden: false`). Same-operation concurrency (two
+ * simultaneous scans) is still coalesced via `inFlight`.
+ */
+const operationChain: Map<SessionSourceId, Promise<unknown>> = new Map();
+
+function enqueueOperation<T>(source: SessionSourceId, task: () => Promise<T>): Promise<T> {
+  const previous = operationChain.get(source) ?? Promise.resolve();
+  // Run the task whether the previous step resolved or rejected — a prior failure
+  // must not poison the chain.
+  const next = previous.then(task, task);
+  operationChain.set(source, next);
+  // Drop the chain entry once this task is no longer the latest, so the map does
+  // not grow unbounded across many runs.
+  next.finally(() => {
+    if (operationChain.get(source) === next) {
+      operationChain.delete(source);
+    }
+  });
+  return next;
+}
+
+/**
  * ---------- Pure helpers (unit-tested in isolation) ----------
  */
 
@@ -142,7 +167,10 @@ export function buildAutoName(metadata: SessionMetadata, now: number = Date.now(
 
   if (candidate) {
     const trimmed = candidate.trim();
-    const truncated = trimmed.length > TITLE_MAX ? `${trimmed.slice(0, TITLE_MAX).trimEnd()}…` : trimmed;
+    // Truncate by code-points (not UTF-16 code units) so the cap does not split
+    // a surrogate pair mid-emoji.
+    const chars = Array.from(trimmed);
+    const truncated = chars.length > TITLE_MAX ? `${chars.slice(0, TITLE_MAX).join('').trimEnd()}…` : trimmed;
     return wsBase ? `${truncated} · ${wsBase}` : truncated;
   }
 
@@ -183,7 +211,11 @@ export function buildConversationRow(
 ): TChatConversation {
   const generatedName = buildAutoName(metadata, now);
   const createTs = Date.parse(metadata.createdAt) || now;
-  const updatedTs = Date.parse(metadata.updatedAt) || createTs;
+  // For existing rows, prefer the row's current modifyTime when the provider's
+  // updatedAt is unparseable — that preserves the sidebar timeline order. For
+  // brand-new rows, fall back to createTs (which itself falls back to `now`).
+  const fallbackTs = existing?.modifyTime ?? createTs;
+  const updatedTs = Date.parse(metadata.updatedAt) || fallbackTs;
 
   if (!existing) {
     const extra: AcpImportedExtra = {
@@ -262,7 +294,9 @@ function rowsEqualForImporter(a: TChatConversation, b: TChatConversation): boole
 /**
  * Scan a single source's native session index and upsert one row per discovered
  * session. Concurrent calls for the same source share the in-flight promise so
- * we never run two scans in parallel against the same provider.
+ * we never run two scans in parallel against the same provider. Disable/re-enable
+ * operations are serialized via the per-source `operationChain` so a scan cannot
+ * race a hide/unhide pair.
  *
  * Returns the in-flight promise reference (not an async-wrapped copy) so that
  * `discoverAndImport(s) === discoverAndImport(s)` while a scan is pending.
@@ -271,7 +305,7 @@ export function discoverAndImport(source: SessionSourceId): Promise<ImportResult
   const existing = inFlight.get(source);
   if (existing) return existing;
 
-  const scan = runDiscoverAndImport(source).finally(() => {
+  const scan = enqueueOperation(source, () => runDiscoverAndImport(source)).finally(() => {
     // Clear in `finally` so the next caller starts a fresh scan.
     if (inFlight.get(source) === scan) {
       inFlight.delete(source);
@@ -396,9 +430,16 @@ export async function discoverAndImportAll(
  * Soft-disable a source: flip `extra.importMeta.hidden = true` on every imported
  * row whose `extra.importMeta.hidden !== true`. Preserves the existing `modifyTime`
  * (so the sidebar timeline does not reorder) and never touches user-owned fields
- * (`name`, `pinned`, `pinnedAt`).
+ * (`name`, `pinned`, `pinnedAt`). Serialized with `discoverAndImport`/`reenableSource`
+ * via the per-source `operationChain` so we cannot race an in-flight scan.
  */
-export async function disableSource(
+export function disableSource(
+  source: SessionSourceId
+): Promise<{ hidden: number; errors: Array<{ sessionId: string; message: string }> }> {
+  return enqueueOperation(source, () => runDisableSource(source));
+}
+
+async function runDisableSource(
   source: SessionSourceId
 ): Promise<{ hidden: number; errors: Array<{ sessionId: string; message: string }> }> {
   const db = getDatabase();
@@ -436,12 +477,23 @@ export async function disableSource(
  * Soft-re-enable a source: flip `extra.importMeta.hidden = false` on every
  * previously-hidden row (preserving customizations + `modifyTime`), then run an
  * incremental `discoverAndImport(source)` to pick up sessions created while
- * the source was disabled.
+ * the source was disabled. Serialized with `discoverAndImport`/`disableSource`
+ * via the per-source `operationChain`.
+ *
+ * Unhide failures are accumulated into the returned `ImportResult.errors` so the
+ * IPC caller can surface them in the UI (rather than silently swallowing them).
  */
-export async function reenableSource(source: SessionSourceId): Promise<ImportResult> {
+export function reenableSource(source: SessionSourceId): Promise<ImportResult> {
+  return enqueueOperation(source, () => runReenableSource(source));
+}
+
+async function runReenableSource(source: SessionSourceId): Promise<ImportResult> {
   const db = getDatabase();
+  const unhideErrors: Array<{ sessionId: string; message: string }> = [];
   const listResult = db.getImportedConversationsIncludingHidden([source]);
-  if (listResult.success) {
+  if (!listResult.success) {
+    unhideErrors.push({ sessionId: '', message: listResult.error ?? 'Failed to read imported rows for re-enable' });
+  } else {
     const rows = listResult.data ?? [];
     for (const row of rows) {
       const extra = (row.extra ?? {}) as Partial<AcpImportedExtra>;
@@ -458,10 +510,24 @@ export async function reenableSource(source: SessionSourceId): Promise<ImportRes
       const writeResult = db.updateImportedConversation(updated);
       if (writeResult.success) {
         emitConversationListChanged(updated, 'updated');
+      } else {
+        unhideErrors.push({
+          sessionId: extra.acpSessionId ?? row.id,
+          message: writeResult.error ?? 'Failed to unhide row',
+        });
       }
     }
   }
-  return discoverAndImport(source);
+  // Run the scan inline (it's already on this operation chain via runReenableSource
+  // being executed by enqueueOperation; calling discoverAndImport would re-enqueue
+  // and deadlock waiting on its own chain entry).
+  const scanResult = await runDiscoverAndImport(source);
+  return {
+    imported: scanResult.imported,
+    updated: scanResult.updated,
+    skipped: scanResult.skipped,
+    errors: [...unhideErrors, ...scanResult.errors],
+  };
 }
 
 /**
@@ -498,9 +564,11 @@ export function initCliHistoryImporter(): void {
 }
 
 /**
- * Test-only: clear in-flight scan cache. Avoids state leaking between Vitest tests
- * that exercise the coalescing path. Not part of the production API.
+ * Test-only: clear in-flight scan cache and per-source operation chain. Avoids
+ * state leaking between Vitest tests that exercise coalescing / serialization.
+ * Not part of the production API.
  */
 export function __resetInFlightForTests(): void {
   inFlight.clear();
+  operationChain.clear();
 }

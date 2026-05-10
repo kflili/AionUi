@@ -216,10 +216,7 @@ describe('buildAutoName', () => {
   });
 
   it('treats "(untitled)" as missing for Copilot and falls back to relative time', () => {
-    const name = buildAutoName(
-      meta({ source: 'copilot', firstPrompt: '', title: '(untitled)', updatedAt: ISO }),
-      NOW
-    );
+    const name = buildAutoName(meta({ source: 'copilot', firstPrompt: '', title: '(untitled)', updatedAt: ISO }), NOW);
     expect(name).toMatch(/ago · demo-project$/);
   });
 
