@@ -5,8 +5,8 @@
  */
 
 import { ipcBridge } from '@/common';
-import { ConfigStorage } from '@/common/config/storage';
-import React, { useEffect, useRef, useCallback } from 'react';
+import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { Terminal } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import { WebglAddon } from '@xterm/addon-webgl';
@@ -36,6 +36,19 @@ const TerminalComponent: React.FC<{
   const terminalRef = useRef<Terminal | null>(null);
   const fitAddonRef = useRef<FitAddon | null>(null);
 
+  // Capture fontSize ONCE when the hook first loads. The terminal cannot be
+  // constructed before we know the saved size (otherwise a cold mount with a
+  // saved fontSize would use 14 and never refresh). Once captured, later config
+  // changes don't recreate the terminal — fontSize edits take effect on the
+  // next conversation switch, which matches pre-refactor behavior.
+  const agentCliConfig = useAgentCliConfig();
+  const [initialFontSize, setInitialFontSize] = useState<number | null>(null);
+  useEffect(() => {
+    if (initialFontSize !== null) return;
+    if (agentCliConfig === undefined) return;
+    setInitialFontSize(agentCliConfig.fontSize ?? 14);
+  }, [agentCliConfig, initialFontSize]);
+
   const handleResize = useCallback(() => {
     const fitAddon = fitAddonRef.current;
     const terminal = terminalRef.current;
@@ -51,6 +64,7 @@ const TerminalComponent: React.FC<{
   }, [conversationId]);
 
   useEffect(() => {
+    if (initialFontSize === null) return;
     if (!containerRef.current) return;
     let disposed = false;
     let unsubOutput: (() => void) | undefined;
@@ -60,11 +74,8 @@ const TerminalComponent: React.FC<{
 
     const initTerminal = async () => {
       try {
-        // Load font size from settings
-        const config = await ConfigStorage.get('agentCli.config');
+        const fontSize = initialFontSize;
         if (disposed || !containerRef.current) return;
-
-        const fontSize = config?.fontSize || 14;
 
         terminal = new Terminal({
           fontSize,
@@ -196,7 +207,7 @@ const TerminalComponent: React.FC<{
       terminalRef.current = null;
       fitAddonRef.current = null;
     };
-  }, [conversationId, command, args, cwd, handleResize]);
+  }, [conversationId, command, args, cwd, handleResize, initialFontSize]);
 
   return <div ref={containerRef} className='size-full' />;
 };

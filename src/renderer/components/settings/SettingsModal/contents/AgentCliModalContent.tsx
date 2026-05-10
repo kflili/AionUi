@@ -4,14 +4,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ConfigStorage, type IConfigStorageRefer } from '@/common/config/storage';
+import { ConfigStorage } from '@/common/config/storage';
+import { useAgentCliConfig, type AgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { InputNumber, Switch } from '@arco-design/web-react';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
-
-type AgentCliConfig = NonNullable<IConfigStorageRefer['agentCli.config']>;
 
 const PreferenceRow: React.FC<{
   label: string;
@@ -31,25 +30,36 @@ const AgentCliModalContent: React.FC = () => {
   const { t } = useTranslation();
   const viewMode = useSettingsViewMode();
   const isPageMode = viewMode === 'page';
-  const [config, setConfig] = useState<AgentCliConfig>({});
-  const [loaded, setLoaded] = useState(false);
+  const config = useAgentCliConfig();
 
+  // Mirror the latest known config in a ref so two rapid handlers (e.g. user
+  // changes fontSize then immediately toggles Show Thinking before the hook
+  // has re-rendered) merge against the freshest snapshot synchronously rather
+  // than against the stale closure value. This restores the pre-refactor
+  // `setConfig(prev => ...)` semantic without re-introducing local state.
+  const configRef = useRef<AgentCliConfig | undefined>(config);
   useEffect(() => {
-    ConfigStorage.get('agentCli.config').then((c) => {
-      setConfig(c || {});
-      setLoaded(true);
+    configRef.current = config;
+  }, [config]);
+
+  const saveConfig = useCallback((updates: Partial<AgentCliConfig>) => {
+    const previous = configRef.current;
+    const next = { ...previous, ...updates };
+    configRef.current = next;
+    // Attach a .catch so a transient storage failure doesn't bubble up as an
+    // unhandled promise rejection. On failure, roll back the optimistic ref —
+    // but only if no newer save has updated it in the meantime — so future
+    // saves merge against the canonical persisted value rather than a stale
+    // optimistic delta.
+    ConfigStorage.set('agentCli.config', next).catch((error: unknown) => {
+      console.error('[AgentCliModalContent] Failed to persist agentCli.config', error);
+      if (configRef.current === next) {
+        configRef.current = previous;
+      }
     });
   }, []);
 
-  const saveConfig = useCallback(async (updates: Partial<AgentCliConfig>) => {
-    setConfig((prev) => {
-      const next = { ...prev, ...updates };
-      ConfigStorage.set('agentCli.config', next);
-      return next;
-    });
-  }, []);
-
-  if (!loaded) return null;
+  if (config === undefined) return null;
 
   return (
     <div className='flex flex-col h-full w-full'>

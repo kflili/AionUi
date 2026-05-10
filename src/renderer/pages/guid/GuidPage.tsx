@@ -5,7 +5,7 @@
  */
 
 import { resolveLocaleKey } from '@/common/utils';
-import { ConfigStorage } from '@/common/config/storage';
+import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { useInputFocusRing } from '@/renderer/hooks/chat/useInputFocusRing';
 import { openExternalUrl } from '@/renderer/utils/platform';
 import { useConversationTabs } from '@/renderer/pages/conversation/hooks/ConversationTabsContext';
@@ -48,13 +48,17 @@ const GuidPage: React.FC = () => {
     }
   }, []);
 
-  // Terminal mode toggle — undefined until config loads, then reflects global default
+  // Terminal mode toggle — seeded from agentCli.config once, then user-owned per session.
+  // The original behavior was: read config on mount, set local state, let user override.
+  // We preserve that with a one-shot seed from the hook so cross-component sync of the
+  // underlying config doesn't clobber the user's in-session toggle.
+  const agentCliConfig = useAgentCliConfig();
   const [terminalMode, setTerminalMode] = useState<boolean | undefined>(undefined);
   useEffect(() => {
-    ConfigStorage.get('agentCli.config').then((config) => {
-      setTerminalMode(config?.defaultMode === 'terminal');
-    });
-  }, []);
+    if (agentCliConfig !== undefined && terminalMode === undefined) {
+      setTerminalMode(agentCliConfig.defaultMode === 'terminal');
+    }
+  }, [agentCliConfig, terminalMode]);
 
   // --- Hooks ---
   const modelSelection = useGuidModelSelection();

@@ -10,6 +10,7 @@ import { ConfigStorage } from '@/common/config/storage';
 import { uuid } from '@/common/utils';
 import addChatIcon from '@/renderer/assets/icons/add-chat.svg';
 import { CronJobManager } from '@/renderer/pages/cron';
+import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
@@ -191,24 +192,19 @@ const ChatConversation: React.FC<{
   const [currentMode, setCurrentMode] = useState<ConversationMode>('acp');
   const isTerminalMode = conversation?.type === 'acp' && currentMode === 'terminal';
 
-  // Show Thinking toggle — global setting, quick-access from header
-  const [showThinkingLoaded, setShowThinkingLoaded] = useState(false);
-  const [showThinking, setShowThinking] = useState(false);
-  useEffect(() => {
-    ConfigStorage.get('agentCli.config').then((config) => {
-      setShowThinking(config?.showThinking ?? false);
-      setShowThinkingLoaded(true);
-    });
-  }, []);
+  // Show Thinking toggle — global setting, quick-access from header.
+  // Header button is disabled until showThinkingLoaded is true so the toggle can never
+  // fire before the hook has resolved; the early-return below is defensive belt-and-suspenders.
+  const agentCliConfig = useAgentCliConfig();
+  const showThinkingLoaded = agentCliConfig !== undefined;
+  const showThinking = agentCliConfig?.showThinking ?? false;
   const handleToggleThinking = useCallback(() => {
-    setShowThinking((prev) => {
-      const next = !prev;
-      ConfigStorage.get('agentCli.config').then((config) => {
-        ConfigStorage.set('agentCli.config', { ...config, showThinking: next });
-      });
-      return next;
+    if (agentCliConfig === undefined) return;
+    const next = !agentCliConfig.showThinking;
+    ConfigStorage.set('agentCli.config', { ...agentCliConfig, showThinking: next }).catch((error: unknown) => {
+      console.error('[ChatConversation] Failed to persist showThinking toggle', error);
     });
-  }, []);
+  }, [agentCliConfig]);
 
   // Sync mode state when conversation changes or SWR revalidates with fresh extra data
   const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
@@ -387,6 +383,7 @@ const ChatConversation: React.FC<{
               type='text'
               shape='circle'
               size='mini'
+              disabled={!showThinkingLoaded}
               aria-label={t('settings.terminalWrapper.showThinking')}
               aria-pressed={showThinking}
               icon={
@@ -399,11 +396,7 @@ const ChatConversation: React.FC<{
               onClick={handleToggleThinking}
             />
           </Tooltip>
-          <ModeToggle
-            conversationId={conversation.id}
-            currentMode={currentMode}
-            onModeChange={setCurrentMode}
-          />
+          <ModeToggle conversationId={conversation.id} currentMode={currentMode} onModeChange={setCurrentMode} />
         </div>
       )}
       {conversation?.type === 'openclaw-gateway' && (

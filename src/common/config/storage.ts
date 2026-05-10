@@ -6,6 +6,7 @@
 
 import type { AcpBackend, AcpBackendAll, AcpBackendConfig } from '@/common/types/acpTypes';
 import { storage } from '@office-ai/platform';
+import EventEmitter from 'eventemitter3';
 
 /** Transport mode for ACP conversations: Rich UI or terminal (xterm.js PTY) */
 export type ConversationMode = 'acp' | 'terminal';
@@ -19,7 +20,51 @@ export const ChatStorage = storage.buildStorage<IChatConversationRefer>('agent.c
 export const ChatMessageStorage = storage.buildStorage('agent.chat.message');
 
 // 系统配置存储
-export const ConfigStorage = storage.buildStorage<IConfigStorageRefer>('agent.config');
+const rawConfigStorage = storage.buildStorage<IConfigStorageRefer>('agent.config');
+
+// Local in-process change emitter. The underlying @office-ai/platform storage has no
+// public subscribe API, and its single interceptor slot is already claimed by the
+// process-side persistence layer (src/process/utils/initStorage.ts). To let renderer
+// components stay in sync when one component writes config while others are mounted,
+// we wrap ConfigStorage.set to fan-out a synchronous change event after delegating
+// to the underlying storage. Public get/set/clear/remove/debug/interceptor surface
+// is preserved so existing call sites need no change.
+const configChangeEmitter = new EventEmitter();
+const configChangeEvent = <K extends keyof IConfigStorageRefer>(key: K): string => `change:${String(key)}`;
+
+export const ConfigStorage = {
+  get: <K extends keyof IConfigStorageRefer>(key: K): Promise<IConfigStorageRefer[K]> => rawConfigStorage.get(key),
+  set: async <K extends keyof IConfigStorageRefer>(key: K, data: IConfigStorageRefer[K]): Promise<unknown> => {
+    // Emit AFTER the underlying storage write resolves so subscribers and durable
+    // state stay consistent. If the write rejects, the emit never fires and
+    // subscribers don't update to a value that wasn't persisted. The latency cost
+    // is the IPC round-trip (~1-2ms in Electron), imperceptible for UI feedback.
+    const result = await rawConfigStorage.set(key, data);
+    configChangeEmitter.emit(configChangeEvent(key), data);
+    return result;
+  },
+  clear: (): Promise<unknown> => rawConfigStorage.clear(),
+  remove: (key: keyof IConfigStorageRefer): Promise<void> => rawConfigStorage.remove(key),
+  debug: (debug: boolean): void => rawConfigStorage.debug(debug),
+  interceptor: rawConfigStorage.interceptor.bind(rawConfigStorage),
+  /**
+   * Subscribe to in-process changes for a specific key.
+   * Fires after ConfigStorage.set(key, ...) is invoked in the same process.
+   * Cross-process changes (other windows / process-side writes) are not delivered.
+   * Returns an unsubscribe function.
+   */
+  subscribe: <K extends keyof IConfigStorageRefer>(
+    key: K,
+    listener: (data: IConfigStorageRefer[K]) => void
+  ): (() => void) => {
+    const eventName = configChangeEvent(key);
+    const handler = listener as (...args: unknown[]) => void;
+    configChangeEmitter.on(eventName, handler);
+    return () => {
+      configChangeEmitter.off(eventName, handler);
+    };
+  },
+};
 
 // 系统环境变量存储
 export const EnvStorage = storage.buildStorage<IEnvStorageRefer>('agent.env');
