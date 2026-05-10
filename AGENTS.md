@@ -1,5 +1,18 @@
 # AionUi - Project Guide
 
+## Fork rules (READ BEFORE OPENING ANY PR)
+
+This is a fork: `origin` = `kflili/AionUi` (ours), `upstream` = `iOfficeAI/AionUi` (read-only).
+
+- **All PRs go to `kflili/AionUi`. NEVER to `iOfficeAI/AionUi`.**
+- `gh pr create` MUST resolve to `kflili/AionUi`. Verify with `gh repo view --json owner,name -q '.owner.login + "/" + .name'` — if it shows `iOfficeAI/AionUi`, run `gh repo set-default kflili/AionUi` and retry.
+- Never pass `--repo iOfficeAI/AionUi` to any `gh` command that creates issues, PRs, comments, or reviews. Read-only `gh` against upstream is fine.
+- Pulling upstream changes is fine: `git fetch upstream && git merge upstream/main`.
+- **Recovery if a PR was opened against `iOfficeAI/AionUi` by mistake**:
+  1. `gh pr close <PR#> --repo iOfficeAI/AionUi --comment "Opened against upstream by mistake; reopening on the fork."`
+  2. Push the branch to `kflili/AionUi` if not already (`git push origin <branch>`).
+  3. `gh pr create --repo kflili/AionUi --base main --head <branch>` (do NOT omit `--repo` during recovery — re-verify with the command above first).
+
 ## Development: Launch for Local + Remote Access
 
 ### Quick Start
