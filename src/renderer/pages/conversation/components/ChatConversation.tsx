@@ -98,6 +98,25 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
           // Fetch latest conversation from DB to ensure sessionMode is current
           const latest = await ipcBridge.conversation.get.invoke({ id: conversation.id }).catch((): null => null);
           const source = latest || conversation;
+          // When cloning an ACP row, strip CLI-history-import-only fields so the new
+          // user-owned conversation is not later hidden by `disableSource('claude_code')`
+          // or matched by the importer's `source + sourceFilePath` dedup. Native ACP
+          // rows never carry these fields, so this is a no-op for non-imported sources.
+          const nextExtra =
+            source.type === 'acp'
+              ? (() => {
+                  const {
+                    acpSessionId: _acpSessionId,
+                    acpSessionUpdatedAt: _acpSessionUpdatedAt,
+                    sourceFilePath: _sourceFilePath,
+                    messageCount: _messageCount,
+                    importMeta: _importMeta,
+                    ...rest
+                  } = source.extra as Record<string, unknown>;
+                  return rest;
+                })()
+              : source.extra;
+          const isImportedClone = source.type === 'acp' && source.source !== 'aionui';
           ipcBridge.conversation.createWithConversation
             .invoke({
               conversation: {
@@ -105,11 +124,11 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
                 id,
                 createTime: Date.now(),
                 modifyTime: Date.now(),
-                // Clear ACP session fields to prevent new conversation from inheriting old session context
-                extra:
-                  source.type === 'acp'
-                    ? { ...source.extra, acpSessionId: undefined, acpSessionUpdatedAt: undefined }
-                    : source.extra,
+                // Reset source to 'aionui' so the clone is treated as a native chat,
+                // not as an imported CLI session. This prevents disable/re-enable
+                // semantics from sweeping it up alongside the original imported rows.
+                source: isImportedClone ? 'aionui' : source.source,
+                extra: nextExtra,
               } as TChatConversation,
             })
             .then(() => {
