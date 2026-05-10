@@ -5,13 +5,14 @@
 This is a fork: `origin` = `kflili/AionUi` (ours), `upstream` = `iOfficeAI/AionUi` (read-only).
 
 - **All PRs go to `kflili/AionUi`. NEVER to `iOfficeAI/AionUi`.**
-- `gh pr create` MUST resolve to `kflili/AionUi`. Verify with `gh repo view --json owner,name -q '.owner.login + "/" + .name'` — if it shows `iOfficeAI/AionUi`, run `gh repo set-default kflili/AionUi` and retry.
+- **Always pass `--repo kflili/AionUi` to `gh pr create`.** Same goes for any `gh` command that creates issues, comments, or reviews. Do not rely on the resolved default — it can drift silently.
+- Sanity-check (diagnostic only — does NOT replace `--repo`): `gh repo view --json nameWithOwner -q .nameWithOwner`. If it prints `iOfficeAI/AionUi`, run `gh repo set-default kflili/AionUi` to fix the default.
 - Never pass `--repo iOfficeAI/AionUi` to any `gh` command that creates issues, PRs, comments, or reviews. Read-only `gh` against upstream is fine.
 - Pulling upstream changes is fine: `git fetch upstream && git merge upstream/main`.
 - **Recovery if a PR was opened against `iOfficeAI/AionUi` by mistake**:
   1. `gh pr close <PR#> --repo iOfficeAI/AionUi --comment "Opened against upstream by mistake; reopening on the fork."`
   2. Push the branch to `kflili/AionUi` if not already (`git push origin <branch>`).
-  3. `gh pr create --repo kflili/AionUi --base main --head <branch>` (do NOT omit `--repo` during recovery — re-verify with the command above first).
+  3. `gh pr create --repo kflili/AionUi --base main --head <branch>`.
 
 ## Development: Launch for Local + Remote Access
 
