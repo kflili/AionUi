@@ -5,7 +5,7 @@
 **Scope:** Phase 1 only (metadata indexing). Phase 2 (message hydration) is a separate item.
 **Parent design:** `docs/plans/2026-03-19-cli-history/plan.md`
 
-This plan is the *implementation* spec for Phase 1 of the parent design. It maps the design's Phase 1 requirements (parent §§ "Two-Phase Import Strategy" lines 80–116, "Done Means → CLI History Import" lines 437–451, "Test Plan §1 Phase 1 + §7 Dedup" lines 471–512 + 562–568) to specific files, function signatures, and test cases in the existing codebase.
+This plan is the _implementation_ spec for Phase 1 of the parent design. It maps the design's Phase 1 requirements (parent §§ "Two-Phase Import Strategy" lines 80–116, "Done Means → CLI History Import" lines 437–451, "Test Plan §1 Phase 1 + §7 Dedup" lines 471–512 + 562–568) to specific files, function signatures, and test cases in the existing codebase.
 
 ## Context
 
@@ -69,22 +69,22 @@ If a future iteration adds a "scan-in-flight" spinner (not in this PR), it MUST 
 
 For each `SessionMetadata` returned by a provider, the orchestrator builds an `acp`-variant `TChatConversation`:
 
-| `TChatConversation` field | Value |
-|---|---|
-| `id` | New UUID (NOT the session id — keeps native + imported namespaces separate) |
-| `type` | `'acp'` |
-| `source` | `metadata.source` (`'claude_code'` or `'copilot'`) |
-| `name` | `buildAutoName(metadata)` (see Auto-naming below) |
-| `createTime` | `Date.parse(metadata.createdAt) || Date.now()` |
-| `modifyTime` | `Date.parse(metadata.updatedAt) || Date.now()` |
-| `extra.backend` | `'claude'` for `claude_code`, `'copilot'` for `copilot` (the existing `AcpBackend` value) |
-| `extra.workspace` | `metadata.workspace` |
-| `extra.acpSessionId` | `metadata.id` |
-| `extra.acpSessionUpdatedAt` | `Date.parse(metadata.updatedAt)` |
-| `extra.sourceFilePath` | `metadata.filePath` |
-| `extra.messageCount` | `metadata.messageCount` (optional — present for Claude Code via `sessions-index.json`) |
-| `extra.importMeta` | `{ autoNamed: true, generatedName: <the auto-name we just produced>, hidden: false }` |
-| `extra.pinned` | `false` |
+| `TChatConversation` field   | Value                                                                                     |
+| --------------------------- | ----------------------------------------------------------------------------------------- | --- | ----------- |
+| `id`                        | New UUID (NOT the session id — keeps native + imported namespaces separate)               |
+| `type`                      | `'acp'`                                                                                   |
+| `source`                    | `metadata.source` (`'claude_code'` or `'copilot'`)                                        |
+| `name`                      | `buildAutoName(metadata)` (see Auto-naming below)                                         |
+| `createTime`                | `Date.parse(metadata.createdAt)                                                           |     | Date.now()` |
+| `modifyTime`                | `Date.parse(metadata.updatedAt)                                                           |     | Date.now()` |
+| `extra.backend`             | `'claude'` for `claude_code`, `'copilot'` for `copilot` (the existing `AcpBackend` value) |
+| `extra.workspace`           | `metadata.workspace`                                                                      |
+| `extra.acpSessionId`        | `metadata.id`                                                                             |
+| `extra.acpSessionUpdatedAt` | `Date.parse(metadata.updatedAt)`                                                          |
+| `extra.sourceFilePath`      | `metadata.filePath`                                                                       |
+| `extra.messageCount`        | `metadata.messageCount` (optional — present for Claude Code via `sessions-index.json`)    |
+| `extra.importMeta`          | `{ autoNamed: true, generatedName: <the auto-name we just produced>, hidden: false }`     |
+| `extra.pinned`              | `false`                                                                                   |
 
 `generatedName` is the source-of-truth for "was this name auto-generated?". On re-sync:
 
@@ -102,6 +102,7 @@ If `wasAutoNamed`, update both `name` and `importMeta.generatedName` to the fres
 ### Persistence semantics (extras merge — never replace; DB failures surfaced; preserve modifyTime)
 
 Importer write paths go directly through `getDatabase()` (`AionUIDatabase`) only, NOT through `ConversationServiceImpl` and NOT through `SqliteConversationRepository`. Inserts call `getDatabase().createConversation(...)`. **Updates / disable / re-enable do NOT call `getDatabase().updateConversation(...)`**, because that method force-stamps `modifyTime = Date.now()` (`src/process/services/database/index.ts:648`) — which would reorder imported rows on every startup scan or toggle. Add an importer-private method `AionUIDatabase.updateImportedConversation(conversation: TChatConversation): IQueryResult<TChatConversation>` (NOT on `IConversationRepository`) that serializes via `conversationToRow` and updates `name`, `extra`, `model`, `status`, `source`, `channel_chat_id`, `updated_at` using the caller-supplied `conversation.modifyTime`. Importer sets:
+
 - Sync updates: `modifyTime = Date.parse(metadata.updatedAt) || existing.modifyTime`
 - Disable / re-enable (hidden flag only): `modifyTime = existing.modifyTime` (preserves order)
 - Skip no-op updates (e.g., re-enable on a row whose `hidden` was already false).
@@ -129,6 +130,7 @@ Concurrent scan calls are serialized via a per-source in-flight `Promise` cache 
 If no meaningful candidate remains, fall back to `"<relative-time> · <workspace-basename>"`. Relative-time uses a small inline helper (e.g., `"just now"`, `"5 min ago"`, `"2 hours ago"`, `"3 days ago"`); no new dependency.
 
 When a candidate exists:
+
 1. Trim and truncate to 60 characters.
 2. Append ` · <workspace-basename>` for disambiguation (using `path.basename(metadata.workspace)`).
 3. The combined final string may exceed 60 chars by the workspace suffix — that's intentional and matches the parent design's `"fix auth bug · my-project"` example.
@@ -157,23 +159,24 @@ Re-enable: for every imported row whose `source` matches AND `extra.importMeta?.
    so it can be imported type-only from both `importer.ts` and `ipcBridge.ts`.
 
 1.5. **Export `emitConversationListChanged` via a dedicated shared module** — Do NOT export this helper from `conversationBridge.ts`: that file already imports `isSessionIdle` from `cliHistoryBridge.ts`, so importing back from `conversationBridge.ts` into `importer.ts` (which is loaded from `cliHistoryBridge.ts`) would create a real cycle. Instead:
-   - Create `src/process/bridge/conversationEvents.ts` with the single export:
-     ```ts
-     import { ipcBridge } from '@/common';
-     import type { TChatConversation } from '@/common/config/storage';
-     export function emitConversationListChanged(
-       conversation: Pick<TChatConversation, 'id' | 'source'>,
-       action: 'created' | 'updated' | 'deleted'
-     ): void {
-       ipcBridge.conversation.listChanged.emit({
-         conversationId: conversation.id,
-         action,
-         source: conversation.source || 'aionui',
-       });
-     }
-     ```
-   - Update `conversationBridge.ts:65-74` to import + use this helper instead of the local closure.
-   - Import the helper from `src/process/cli-history/importer.ts`.
+
+- Create `src/process/bridge/conversationEvents.ts` with the single export:
+  ```ts
+  import { ipcBridge } from '@/common';
+  import type { TChatConversation } from '@/common/config/storage';
+  export function emitConversationListChanged(
+    conversation: Pick<TChatConversation, 'id' | 'source'>,
+    action: 'created' | 'updated' | 'deleted'
+  ): void {
+    ipcBridge.conversation.listChanged.emit({
+      conversationId: conversation.id,
+      action,
+      source: conversation.source || 'aionui',
+    });
+  }
+  ```
+- Update `conversationBridge.ts:65-74` to import + use this helper instead of the local closure.
+- Import the helper from `src/process/cli-history/importer.ts`.
 
 2. **Add `hidden` filter, importer-private unfiltered read, importer-private mtime-preserving update** — edit `src/process/services/database/index.ts`:
    - In `getUserConversations()`, append the malformed-JSON-safe filter (`CASE WHEN json_valid(extra) THEN COALESCE(json_extract(extra, '$.importMeta.hidden'), 0) = 0 ELSE 1 END`) to both the SELECT (line ~617-625) and the COUNT (line ~611-615) for pagination consistency.

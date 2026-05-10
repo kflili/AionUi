@@ -56,7 +56,11 @@ const inFlight: Map<SessionSourceId, Promise<ImportResult>> = new Map();
  */
 
 /** Compute the dedup key used to match a discovered session against existing rows. */
-export function dedupKey(source: SessionSourceId, acpSessionId: string | undefined, sourceFilePath: string | undefined): string {
+export function dedupKey(
+  source: SessionSourceId,
+  acpSessionId: string | undefined,
+  sourceFilePath: string | undefined
+): string {
   if (acpSessionId && acpSessionId.length > 0) {
     return `${source}::id:${acpSessionId}`;
   }
@@ -287,7 +291,10 @@ async function runDiscoverAndImport(source: SessionSourceId): Promise<ImportResu
   try {
     discovered = await provider.discoverSessions();
   } catch (err) {
-    result.errors.push({ sessionId: '', message: `Provider ${source} failed: ${err instanceof Error ? err.message : String(err)}` });
+    result.errors.push({
+      sessionId: '',
+      message: `Provider ${source} failed: ${err instanceof Error ? err.message : String(err)}`,
+    });
     return result;
   }
 
@@ -388,7 +395,9 @@ export async function discoverAndImportAll(
  * (so the sidebar timeline does not reorder) and never touches user-owned fields
  * (`name`, `pinned`, `pinnedAt`).
  */
-export async function disableSource(source: SessionSourceId): Promise<{ hidden: number; errors: Array<{ sessionId: string; message: string }> }> {
+export async function disableSource(
+  source: SessionSourceId
+): Promise<{ hidden: number; errors: Array<{ sessionId: string; message: string }> }> {
   const db = getDatabase();
   const listResult = db.getImportedConversationsIncludingHidden([source]);
   if (!listResult.success) {

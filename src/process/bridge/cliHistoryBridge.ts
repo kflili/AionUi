@@ -209,9 +209,8 @@ export function initCliHistoryBridge(): void {
         }
 
         // 1. Resolve JSONL file path (sync to avoid Electron async I/O deadlock)
-        const filePath = backend === 'claude'
-          ? resolveClaudeSessionPathSync(sessionId)
-          : resolveCopilotSessionPathSync(sessionId);
+        const filePath =
+          backend === 'claude' ? resolveClaudeSessionPathSync(sessionId) : resolveCopilotSessionPathSync(sessionId);
 
         if (!filePath) {
           return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };

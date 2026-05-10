@@ -681,6 +681,12 @@
     "sessionEvicted": "유휴 터미널 세션을 닫았습니다 (한도: {{max}}). 터미널 설정에서 한도를 늘릴 수 있습니다.",
     "switchModeFailed": "모드 전환에 실패했습니다",
     "copilotGateway": "Copilot 게이트웨이",
-    "copilotGatewayDesc": "로컬 copilot-gateway가 실행 중일 때 자동 감지하여 Claude를 라우팅"
+    "copilotGatewayDesc": "로컬 copilot-gateway가 실행 중일 때 자동 감지하여 Claude를 라우팅",
+    "cliHistoryClaudeCodeLabel": "Claude Code 기록 가져오기",
+    "cliHistoryClaudeCodeDesc": "사이드바에 Claude Code CLI 세션을 표시 (열기 전까지 읽기 전용)",
+    "cliHistoryCopilotLabel": "Copilot 기록 가져오기",
+    "cliHistoryCopilotDesc": "사이드바에 Copilot CLI 세션을 표시 (열기 전까지 읽기 전용)",
+    "cliHistoryEnableFailed": "기록 가져오기를 활성화하지 못했습니다",
+    "cliHistoryDisableFailed": "기록 가져오기를 비활성화하지 못했습니다"
   }
 }

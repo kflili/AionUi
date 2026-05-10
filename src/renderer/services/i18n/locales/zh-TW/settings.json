@@ -681,6 +681,12 @@
     "sessionEvicted": "已關閉一個閒置終端會話（上限：{{max}}）。你可以在終端設定中增加上限。",
     "switchModeFailed": "切換模式失敗",
     "copilotGateway": "Copilot 閘道",
-    "copilotGatewayDesc": "自動偵測並透過本地 copilot-gateway 路由 Claude"
+    "copilotGatewayDesc": "自動偵測並透過本地 copilot-gateway 路由 Claude",
+    "cliHistoryClaudeCodeLabel": "匯入 Claude Code 歷史會話",
+    "cliHistoryClaudeCodeDesc": "在側欄中顯示您的 Claude Code CLI 會話（開啟前為唯讀）",
+    "cliHistoryCopilotLabel": "匯入 Copilot 歷史會話",
+    "cliHistoryCopilotDesc": "在側欄中顯示您的 Copilot CLI 會話（開啟前為唯讀）",
+    "cliHistoryEnableFailed": "啟用歷史匯入失敗",
+    "cliHistoryDisableFailed": "停用歷史匯入失敗"
   }
 }

@@ -680,6 +680,12 @@
     "sessionEvicted": "已关闭一个空闲终端会话（上限：{{max}}）。你可以在终端设置中增加上限。",
     "switchModeFailed": "切换模式失败",
     "copilotGateway": "Copilot 网关",
-    "copilotGatewayDesc": "自动检测并通过本地 copilot-gateway 路由 Claude"
+    "copilotGatewayDesc": "自动检测并通过本地 copilot-gateway 路由 Claude",
+    "cliHistoryClaudeCodeLabel": "导入 Claude Code 历史会话",
+    "cliHistoryClaudeCodeDesc": "在侧栏中显示您的 Claude Code CLI 会话（打开前为只读）",
+    "cliHistoryCopilotLabel": "导入 Copilot 历史会话",
+    "cliHistoryCopilotDesc": "在侧栏中显示您的 Copilot CLI 会话（打开前为只读）",
+    "cliHistoryEnableFailed": "启用历史导入失败",
+    "cliHistoryDisableFailed": "禁用历史导入失败"
   }
 }
