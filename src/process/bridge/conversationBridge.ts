@@ -11,6 +11,7 @@ import type { IAgentManager } from '@process/task/IAgentManager';
 import type { IConversationService } from '@process/services/IConversationService';
 import type { IWorkerTaskManager } from '@process/task/IWorkerTaskManager';
 import { ipcBridge } from '@/common';
+import { emitConversationListChanged } from './conversationEvents';
 import { getSkillsDir, ProcessChat } from '@process/utils/initStorage';
 import type AcpAgentManager from '../task/AcpAgentManager';
 import type { GeminiAgentManager } from '../task/GeminiAgentManager';
@@ -62,17 +63,6 @@ export function initConversationBridge(
   conversationService: IConversationService,
   workerTaskManager: IWorkerTaskManager
 ): void {
-  const emitConversationListChanged = (
-    conversation: Pick<TChatConversation, 'id' | 'source'>,
-    action: 'created' | 'updated' | 'deleted'
-  ) => {
-    ipcBridge.conversation.listChanged.emit({
-      conversationId: conversation.id,
-      action,
-      source: conversation.source || 'aionui',
-    });
-  };
-
   ipcBridge.openclawConversation.getRuntime.provider(async ({ conversation_id }) => {
     try {
       const conversation = await conversationService.getConversation(conversation_id);
