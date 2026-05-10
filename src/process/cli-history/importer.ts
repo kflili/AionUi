@@ -66,13 +66,15 @@ function enqueueOperation<T>(source: SessionSourceId, task: () => Promise<T>): P
   // must not poison the chain.
   const next = previous.then(task, task);
   operationChain.set(source, next);
-  // Drop the chain entry once this task is no longer the latest, so the map does
-  // not grow unbounded across many runs.
-  next.finally(() => {
+  // Observe both fulfillment and rejection without re-throwing on a discarded
+  // promise (which would surface as `unhandledRejection`). `void next.then(...)`
+  // is the safe sibling of `.finally(...)` here.
+  const cleanup = () => {
     if (operationChain.get(source) === next) {
       operationChain.delete(source);
     }
-  });
+  };
+  void next.then(cleanup, cleanup);
   return next;
 }
 
