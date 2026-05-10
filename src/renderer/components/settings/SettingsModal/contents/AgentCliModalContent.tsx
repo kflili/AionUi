@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfigStorage } from '@/common/config/storage';
 import { useAgentCliConfig, type AgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
@@ -32,13 +32,21 @@ const AgentCliModalContent: React.FC = () => {
   const isPageMode = viewMode === 'page';
   const config = useAgentCliConfig();
 
-  const saveConfig = useCallback(
-    (updates: Partial<AgentCliConfig>) => {
-      const next = { ...config, ...updates };
-      ConfigStorage.set('agentCli.config', next);
-    },
-    [config]
-  );
+  // Mirror the latest known config in a ref so two rapid handlers (e.g. user
+  // changes fontSize then immediately toggles Show Thinking before the hook
+  // has re-rendered) merge against the freshest snapshot synchronously rather
+  // than against the stale closure value. This restores the pre-refactor
+  // `setConfig(prev => ...)` semantic without re-introducing local state.
+  const configRef = useRef<AgentCliConfig | undefined>(config);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
+  const saveConfig = useCallback((updates: Partial<AgentCliConfig>) => {
+    const next = { ...configRef.current, ...updates };
+    configRef.current = next;
+    ConfigStorage.set('agentCli.config', next);
+  }, []);
 
   if (config === undefined) return null;
 
