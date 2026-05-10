@@ -5,7 +5,7 @@
  */
 
 import { ipcBridge } from '@/common';
-import { type TProviderWithModel } from '@/common/config/storage';
+import { ConfigStorage, type TProviderWithModel } from '@/common/config/storage';
 import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { emitter } from '@/renderer/utils/emitter';
 import { buildDisplayMessage } from '@/renderer/utils/file/messageFiles';
@@ -331,13 +331,19 @@ export const useGuidSend = (deps: GuidSendDeps): GuidSendResult => {
       }
 
       try {
-        // Use terminal mode override from guide page toggle, or fall back to global default
-        const defaultTransport =
-          terminalModeOverride !== undefined
-            ? terminalModeOverride
-              ? 'terminal'
-              : 'acp'
-            : (agentCliConfigRef.current?.defaultMode ?? 'acp');
+        // Use terminal mode override from guide page toggle, or fall back to global default.
+        // The hook's ref is almost always loaded by send time (initial fetch takes ~1ms,
+        // user typing takes seconds), but guard the cold-start race where send fires within
+        // milliseconds of mount: fall through to an awaited ConfigStorage.get so a stored
+        // 'terminal' default is still honored on the very first send.
+        let defaultTransport: 'acp' | 'terminal';
+        if (terminalModeOverride !== undefined) {
+          defaultTransport = terminalModeOverride ? 'terminal' : 'acp';
+        } else if (agentCliConfigRef.current !== undefined) {
+          defaultTransport = agentCliConfigRef.current.defaultMode ?? 'acp';
+        } else {
+          defaultTransport = (await ConfigStorage.get('agentCli.config'))?.defaultMode ?? 'acp';
+        }
 
         const conversation = await ipcBridge.conversation.create.invoke({
           type: 'acp',

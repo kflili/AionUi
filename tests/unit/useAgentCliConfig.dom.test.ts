@@ -130,4 +130,28 @@ describe('useAgentCliConfig', () => {
     });
     expect(result.current).toEqual({ defaultMode: 'acp' });
   });
+
+  it('falls back to an empty snapshot when ConfigStorage.get rejects on init (does not hang forever)', async () => {
+    // Spy on ConfigStorage.get so the very first call rejects, simulating a transient
+    // failure (corrupt config file, IPC error, etc.). The hook must still mark itself
+    // loaded so consumers' `config === undefined` gates don't stick at "loading".
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const getSpy = vi.spyOn(ConfigStorage, 'get').mockRejectedValueOnce(new Error('disk read failure'));
+
+    const { result } = renderHook(() => useAgentCliConfig());
+
+    expect(result.current).toBeUndefined();
+    await waitFor(() => expect(result.current).toEqual({}));
+
+    // Subsequent set still works — the failure was transient and the change emitter
+    // still publishes updates regardless of init outcome.
+    await act(async () => {
+      await ConfigStorage.set('agentCli.config', { defaultMode: 'terminal' });
+    });
+    expect(result.current).toEqual({ defaultMode: 'terminal' });
+
+    expect(consoleErrorSpy).toHaveBeenCalled();
+    consoleErrorSpy.mockRestore();
+    getSpy.mockRestore();
+  });
 });

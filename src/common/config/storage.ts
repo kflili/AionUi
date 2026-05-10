@@ -34,13 +34,14 @@ const configChangeEvent = <K extends keyof IConfigStorageRefer>(key: K): string 
 
 export const ConfigStorage = {
   get: <K extends keyof IConfigStorageRefer>(key: K): Promise<IConfigStorageRefer[K]> => rawConfigStorage.get(key),
-  set: <K extends keyof IConfigStorageRefer>(key: K, data: IConfigStorageRefer[K]): Promise<unknown> => {
-    // Emit synchronously before awaiting the IPC round-trip so subscribers update
-    // without lag. Persistence still happens asynchronously through the underlying
-    // storage; a rejection there is rare in local IPC and surfaces via the returned
-    // promise to callers that await it.
+  set: async <K extends keyof IConfigStorageRefer>(key: K, data: IConfigStorageRefer[K]): Promise<unknown> => {
+    // Emit AFTER the underlying storage write resolves so subscribers and durable
+    // state stay consistent. If the write rejects, the emit never fires and
+    // subscribers don't update to a value that wasn't persisted. The latency cost
+    // is the IPC round-trip (~1-2ms in Electron), imperceptible for UI feedback.
+    const result = await rawConfigStorage.set(key, data);
     configChangeEmitter.emit(configChangeEvent(key), data);
-    return rawConfigStorage.set(key, data);
+    return result;
   },
   clear: (): Promise<unknown> => rawConfigStorage.clear(),
   remove: (key: keyof IConfigStorageRefer): Promise<void> => rawConfigStorage.remove(key),

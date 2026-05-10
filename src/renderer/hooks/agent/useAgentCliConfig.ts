@@ -25,13 +25,24 @@ const ensureInitialized = (notify: () => void): void => {
   if (hasInitialized) return;
   pendingNotifiers.add(notify);
   if (initPromise) return;
-  initPromise = ConfigStorage.get(CONFIG_KEY).then((value) => {
-    cachedSnapshot = value ?? EMPTY_CONFIG;
-    hasInitialized = true;
-    const notifiers = Array.from(pendingNotifiers);
-    pendingNotifiers.clear();
-    notifiers.forEach((fn) => fn());
-  });
+  initPromise = (async () => {
+    try {
+      const value = await ConfigStorage.get(CONFIG_KEY);
+      cachedSnapshot = value ?? EMPTY_CONFIG;
+    } catch (error) {
+      // If the initial read fails, mark as loaded with an empty config so
+      // consumers don't hang forever in their loading gates. Future
+      // ConfigStorage.set calls will still update the snapshot via the
+      // change-emitter, so a transient failure recovers naturally.
+      console.error('[useAgentCliConfig] Failed to load agentCli.config; falling back to empty config', error);
+      cachedSnapshot = EMPTY_CONFIG;
+    } finally {
+      hasInitialized = true;
+      const notifiers = Array.from(pendingNotifiers);
+      pendingNotifiers.clear();
+      notifiers.forEach((fn) => fn());
+    }
+  })();
 };
 
 const subscribe = (listener: () => void): (() => void) => {
