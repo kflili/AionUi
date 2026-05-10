@@ -201,7 +201,9 @@ const ChatConversation: React.FC<{
   const handleToggleThinking = useCallback(() => {
     if (agentCliConfig === undefined) return;
     const next = !agentCliConfig.showThinking;
-    ConfigStorage.set('agentCli.config', { ...agentCliConfig, showThinking: next });
+    ConfigStorage.set('agentCli.config', { ...agentCliConfig, showThinking: next }).catch((error: unknown) => {
+      console.error('[ChatConversation] Failed to persist showThinking toggle', error);
+    });
   }, [agentCliConfig]);
 
   // Sync mode state when conversation changes or SWR revalidates with fresh extra data

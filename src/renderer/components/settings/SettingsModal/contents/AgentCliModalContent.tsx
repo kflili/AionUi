@@ -43,9 +43,20 @@ const AgentCliModalContent: React.FC = () => {
   }, [config]);
 
   const saveConfig = useCallback((updates: Partial<AgentCliConfig>) => {
-    const next = { ...configRef.current, ...updates };
+    const previous = configRef.current;
+    const next = { ...previous, ...updates };
     configRef.current = next;
-    ConfigStorage.set('agentCli.config', next);
+    // Attach a .catch so a transient storage failure doesn't bubble up as an
+    // unhandled promise rejection. On failure, roll back the optimistic ref —
+    // but only if no newer save has updated it in the meantime — so future
+    // saves merge against the canonical persisted value rather than a stale
+    // optimistic delta.
+    ConfigStorage.set('agentCli.config', next).catch((error: unknown) => {
+      console.error('[AgentCliModalContent] Failed to persist agentCli.config', error);
+      if (configRef.current === next) {
+        configRef.current = previous;
+      }
+    });
   }, []);
 
   if (config === undefined) return null;
