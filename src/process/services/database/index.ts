@@ -34,6 +34,7 @@ import type {
   PluginStatus,
 } from '@process/channels/types';
 import type { ConversationSource, TProviderWithModel } from '@/common/config/storage';
+import type { SessionSourceId } from '@process/cli-history/types';
 import { rowToChannelUser, rowToChannelSession, rowToPairingRequest } from '@process/channels/types';
 import { encryptCredentials, decryptCredentials } from '@process/channels/utils/credentialCrypto';
 
@@ -608,8 +609,14 @@ export class AionUIDatabase {
     try {
       const finalUserId = userId || this.defaultUserId;
 
+      // Hidden-row filter for imported CLI sessions (Phase 1: importer.ts).
+      // Guarded with json_valid() because some legacy rows may carry malformed JSON in extra;
+      // such rows are kept visible (assumption: they predate importMeta).
+      const hiddenFilter =
+        "AND (CASE WHEN json_valid(extra) THEN COALESCE(json_extract(extra, '$.importMeta.hidden'), 0) = 0 ELSE 1 END)";
+
       const countResult = this.db
-        .prepare('SELECT COUNT(*) as count FROM conversations WHERE user_id = ?')
+        .prepare(`SELECT COUNT(*) as count FROM conversations WHERE user_id = ? ${hiddenFilter}`)
         .get(finalUserId) as {
         count: number;
       };
@@ -619,7 +626,7 @@ export class AionUIDatabase {
           `
             SELECT *
             FROM conversations
-            WHERE user_id = ?
+            WHERE user_id = ? ${hiddenFilter}
             ORDER BY updated_at DESC LIMIT ?
             OFFSET ?
           `
@@ -641,6 +648,86 @@ export class AionUIDatabase {
         page,
         pageSize,
         hasMore: false,
+      };
+    }
+  }
+
+  /**
+   * Importer-private read path. Returns ALL imported conversations for the given sources
+   * including those marked `extra.importMeta.hidden = true`. Used by the Phase 1 importer
+   * to build its dedup index and to find rows during disable/re-enable.
+   *
+   * Do NOT expose this method on `IConversationRepository` — sidebar/timeline reads must
+   * continue to honour the hidden filter via `getUserConversations()`.
+   */
+  getImportedConversationsIncludingHidden(sources: SessionSourceId[]): IQueryResult<TChatConversation[]> {
+    try {
+      if (sources.length === 0) {
+        return { success: true, data: [] };
+      }
+      const placeholders = sources.map(() => '?').join(', ');
+      const rows = this.db
+        .prepare(
+          `
+            SELECT *
+            FROM conversations
+            WHERE user_id = ? AND source IN (${placeholders})
+            ORDER BY updated_at DESC
+          `
+        )
+        .all(this.defaultUserId, ...sources) as IConversationRow[];
+
+      return {
+        success: true,
+        data: rows.map(rowToConversation),
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Importer-private update path. Unlike `updateConversation()`, this method does NOT
+   * force `modifyTime = Date.now()` — it preserves the caller-supplied `conversation.modifyTime`.
+   * The importer relies on this so periodic scans and disable/re-enable do not reorder rows
+   * in the sidebar timeline.
+   */
+  updateImportedConversation(conversation: TChatConversation): IQueryResult<TChatConversation> {
+    try {
+      const existing = this.getConversation(conversation.id);
+      if (!existing.success || !existing.data) {
+        return {
+          success: false,
+          error: 'Conversation not found',
+        };
+      }
+
+      const row = conversationToRow(conversation, this.defaultUserId);
+
+      const stmt = this.db.prepare(`
+        UPDATE conversations
+        SET name       = ?,
+            extra      = ?,
+            model      = ?,
+            status     = ?,
+            source     = ?,
+            updated_at = ?
+        WHERE id = ?
+      `);
+
+      stmt.run(row.name, row.extra, row.model, row.status, row.source, row.updated_at, conversation.id);
+
+      return {
+        success: true,
+        data: conversation,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
       };
     }
   }
