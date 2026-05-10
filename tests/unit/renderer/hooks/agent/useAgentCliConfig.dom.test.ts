@@ -35,11 +35,11 @@ vi.mock('@office-ai/platform', () => ({
   },
 }));
 
-import { ConfigStorage } from '../../src/common/config/storage';
+import { ConfigStorage } from '../../../../../src/common/config/storage';
 import {
   useAgentCliConfig,
   __resetAgentCliConfigCacheForTests,
-} from '../../src/renderer/hooks/agent/useAgentCliConfig';
+} from '../../../../../src/renderer/hooks/agent/useAgentCliConfig';
 
 const seedConfig = (value: unknown): void => {
   memoryStore.set('agentCli.config', value);
