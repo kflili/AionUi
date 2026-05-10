@@ -35,6 +35,7 @@ import { initSystemSettingsBridge } from './systemSettingsBridge';
 import { initWindowControlsBridge } from './windowControlsBridge';
 import { initNotificationBridge } from './notificationBridge';
 import { initCliHistoryBridge } from './cliHistoryBridge';
+import { initCliHistoryImporter } from '@process/cli-history/importer';
 import { initExtensionsBridge } from './extensionsBridge';
 import { initPtyBridge } from './ptyBridge';
 
@@ -77,6 +78,7 @@ export function initAllBridges(deps: BridgeDependencies): void {
   initTaskBridge(deps.workerTaskManager);
   initStarOfficeBridge();
   initCliHistoryBridge();
+  initCliHistoryImporter();
   initPtyBridge();
 }
 
