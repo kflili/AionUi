@@ -320,13 +320,49 @@ describe('TranscriptView (transcript mode surface)', () => {
     expect(screen.getByTestId('mock-message-list')).toBeInTheDocument();
   });
 
-  it('forwards the current showThinking option to cliHistory.hydrate', async () => {
-    hydrateInvoke.mockResolvedValue(okCached());
-    render(<TranscriptView {...baseProps} isHydrated={true} showThinking={true} />);
+  it('does NOT call hydrate while showThinking is undefined (waits for config load)', async () => {
+    render(<TranscriptView {...baseProps} isHydrated={true} showThinking={undefined} />);
     await act(async () => {
       await Promise.resolve();
     });
-    expect(hydrateInvoke).toHaveBeenCalledWith({ conversationId: 'conv-abc', showThinking: true });
+    expect(hydrateInvoke).not.toHaveBeenCalled();
+  });
+
+  it('fires hydrate once showThinking transitions from undefined to defined (config loaded)', async () => {
+    hydrateInvoke.mockResolvedValue(okCached());
+    const { rerender } = render(<TranscriptView {...baseProps} isHydrated={false} showThinking={undefined} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).not.toHaveBeenCalled();
+
+    rerender(<TranscriptView {...baseProps} isHydrated={false} showThinking={true} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).toHaveBeenCalledTimes(1);
+    expect(hydrateInvoke).toHaveBeenLastCalledWith({ conversationId: 'conv-abc', showThinking: true });
+  });
+
+  it('keeps the cached MessageList visible when a background recheck fails (error becomes banner-only)', async () => {
+    hydrateInvoke.mockResolvedValue(fail('mock failure'));
+    render(<TranscriptView {...baseProps} isHydrated={true} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-error')).toBeInTheDocument();
+    });
+    // copilot round 5: a failed mtime/source-missing recheck on an already-hydrated
+    // mount must NOT blank the transcript — the cached messages are still in SQLite.
+    expect(screen.getByTestId('mock-message-list')).toBeInTheDocument();
+  });
+
+  it('hides the message list on error when the source was never hydrated (no cache to show)', async () => {
+    hydrateInvoke.mockResolvedValue(fail('first-open failure'));
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-error')).toBeInTheDocument();
+    });
+    // For an unhydrated row there's nothing in SQLite to render; the error stands alone.
+    expect(screen.queryByTestId('mock-message-list')).toBeNull();
   });
 
   it('re-hydrates when showThinking changes (cached cache key includes the option)', async () => {

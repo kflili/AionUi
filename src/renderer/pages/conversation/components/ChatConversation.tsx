@@ -315,6 +315,15 @@ const ChatConversation: React.FC<{
           // assertion is safe here. Threading it explicitly lets TranscriptView re-fire
           // hydration when an incremental scan refreshes the source pointer mid-mount.
           const sourceFilePath = (conversation.extra as { sourceFilePath: string }).sourceFilePath;
+          // Gate `showThinking` on `showThinkingLoaded`: while the config is still
+          // loading we pass `undefined`, which causes TranscriptView's hydrate effect
+          // to wait. Without this, a fast open right after app start could rewrite
+          // the SQLite cache with the fallback `false` variant before the user's saved
+          // preference (possibly `true`) has loaded. `isHydrated` is also gated so a
+          // stale freshness check computed against the fallback can't trick us into
+          // skipping the hydrate.
+          const showThinkingForTranscript = showThinkingLoaded ? showThinking : undefined;
+          const isHydrated = showThinkingLoaded && isHydrationFresh(conversation, showThinking);
           return (
             <TranscriptView
               key={conversation.id}
@@ -322,8 +331,8 @@ const ChatConversation: React.FC<{
               workspace={conversation.extra?.workspace}
               backend={conversation.extra?.backend || 'claude'}
               sourceFilePath={sourceFilePath}
-              isHydrated={isHydrationFresh(conversation, showThinking)}
-              showThinking={showThinking}
+              isHydrated={isHydrated}
+              showThinking={showThinkingForTranscript}
               onResume={handleResumeImported}
             />
           );
@@ -366,7 +375,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isGeminiConversation, isTerminalMode, showThinking, handleResumeImported]);
+  }, [conversation, isGeminiConversation, isTerminalMode, showThinking, showThinkingLoaded, handleResumeImported]);
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)

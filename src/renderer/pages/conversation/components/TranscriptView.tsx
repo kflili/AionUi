@@ -106,14 +106,17 @@ export type TranscriptViewProps = {
    */
   isHydrated: boolean;
   /**
-   * Current global "Show Thinking" toggle. Forwarded to `cliHistory.hydrate`
+   * Current global "Show Thinking" toggle, OR `undefined` while
+   * `useAgentCliConfig` is still loading. Forwarded to `cliHistory.hydrate`
    * so the importer can re-convert the transcript into the requested variant
    * (`hydrateSession` keys its cache on `(conversationId, normalizedShowThinking)`).
-   * Including this in the effect's deps means toggling Show Thinking while a
-   * transcript is open triggers a fresh hydrate, replacing the cached
-   * messages with the new variant.
+   * The hydrate effect waits for this to become defined before invoking the
+   * IPC — otherwise a fast-open right after app start could rewrite the
+   * SQLite cache with the default `false` variant while the user's saved
+   * preference is `true`, and a navigation away before the re-hydrate would
+   * leave the cache wrong until the next open.
    */
-  showThinking: boolean;
+  showThinking: boolean | undefined;
   /**
    * Item 8 will swap this stub for the live ACP / terminal launch. The button
    * stays visible + clickable regardless of hydration phase so the user can
@@ -150,6 +153,15 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({
   const updateMessageList = useUpdateMessageList();
 
   useEffect(() => {
+    // Wait for `useAgentCliConfig` to load before invoking hydrate. Without
+    // this gate, a fast open right after app start could call the IPC with
+    // the fallback `showThinking=false` while the user's saved preference is
+    // `true`, rewriting the cache with the wrong variant. The re-hydrate
+    // would normally land once config resolves, but a navigation away in
+    // between would leave SQLite in the wrong state until next open.
+    if (showThinking === undefined) {
+      return;
+    }
     const triggerKey = `${conversation_id}|${sourceFilePath}|${showThinking ? '1' : '0'}`;
     if (hydrateTriggeredRef.current === triggerKey) {
       return;
@@ -237,8 +249,14 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({
   const showCachedBanner = state.phase === 'cached_warning';
   const showUnavailable = state.phase === 'unavailable';
   const showError = state.phase === 'error';
-  // The cached-warning path still shows the transcript (cached messages remain in SQLite).
-  const showMessages = state.phase === 'ready' || state.phase === 'cached_warning';
+  // The cached-warning path still shows the transcript (cached messages remain in
+  // SQLite). Same treatment for the error path WHEN there was cached content to
+  // show: a failed mtime/source-missing recheck shouldn't blank a transcript the
+  // user could already see — it should be banner-only. We rely on `isHydrated` as
+  // a mount-time hint that the cache exists; the importer never deletes messages
+  // on a failed recheck, so falling back to "still render the list" is safe.
+  const showMessages =
+    state.phase === 'ready' || state.phase === 'cached_warning' || (state.phase === 'error' && isHydrated);
 
   return (
     <ConversationProvider value={{ conversationId: conversation_id, workspace, type: 'acp' }}>
