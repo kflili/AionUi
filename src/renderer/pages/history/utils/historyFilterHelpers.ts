@@ -212,41 +212,48 @@ export const hasNonHydratedImportedRows = (conversations: TChatConversation[]): 
 /**
  * Maps an item-5 `SectionTimelineKey` to the matching history-view initial filter.
  *
- * `today` / `yesterday` use `preset: 'custom'` with an inclusive day-boundary
- * range so the deep link from the sidebar's "Show all" lands on exactly the
- * conversations the user saw under that section header — not a broader 7-day
- * window. `recent7Days` maps to `'last7'` because the section semantics already
- * are "last 7 days". `earlier` maps to `'all'` because the section has no upper
- * bound the history view can usefully narrow to.
+ * Sidebar timeline bucketing (see `src/renderer/utils/chat/timeline.ts`
+ * `getTimelineLabel`) is by **local calendar-day diff**:
+ *
+ *   daysDiff === 0   → today
+ *   daysDiff === 1   → yesterday
+ *   2 ≤ daysDiff < 7 → recent7Days   (NOT today/yesterday)
+ *   daysDiff ≥ 7     → earlier
+ *
+ * To make "Show all" on a section show exactly that section's rows, we map
+ * each key to an inclusive day-boundary `customRange` in **local time** —
+ * `setHours(0,0,0,0)` / `setHours(23,59,59,999)` use local time, matching how
+ * the sidebar buckets. UTC-naive `new Date('YYYY-MM-DD')` would mis-bucket
+ * users in non-UTC timezones.
  */
 export const sectionKeyToInitialFilter = (
   sectionKey: string | null | undefined,
   now: number = Date.now()
 ): { preset: HistoryDatePreset; customRange: { from: number | null; to: number | null } } => {
+  const startOfDayAgo = (daysAgo: number): number => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const endOfDayAgo = (daysAgo: number): number => {
+    const d = new Date(now);
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  };
   switch (sectionKey) {
-    case 'conversation.history.today': {
-      const startOfToday = new Date(now);
-      startOfToday.setHours(0, 0, 0, 0);
-      const endOfToday = new Date(now);
-      endOfToday.setHours(23, 59, 59, 999);
-      return {
-        preset: 'custom',
-        customRange: { from: startOfToday.getTime(), to: endOfToday.getTime() },
-      };
-    }
-    case 'conversation.history.yesterday': {
-      const startOfYesterday = new Date(now - millisPerDay);
-      startOfYesterday.setHours(0, 0, 0, 0);
-      const endOfYesterday = new Date(now - millisPerDay);
-      endOfYesterday.setHours(23, 59, 59, 999);
-      return {
-        preset: 'custom',
-        customRange: { from: startOfYesterday.getTime(), to: endOfYesterday.getTime() },
-      };
-    }
+    case 'conversation.history.today':
+      return { preset: 'custom', customRange: { from: startOfDayAgo(0), to: endOfDayAgo(0) } };
+    case 'conversation.history.yesterday':
+      return { preset: 'custom', customRange: { from: startOfDayAgo(1), to: endOfDayAgo(1) } };
     case 'conversation.history.recent7Days':
-      return { preset: 'last7', customRange: { from: null, to: null } };
+      // 2-6 days ago inclusive (matches `2 <= daysDiff < 7` in getTimelineLabel).
+      return { preset: 'custom', customRange: { from: startOfDayAgo(6), to: endOfDayAgo(2) } };
     case 'conversation.history.earlier':
+      // ≥ 7 days ago. Anything whose calendar date is the 7-days-ago day
+      // or older — the inclusive upper bound is end-of-day of 7 days ago.
+      return { preset: 'custom', customRange: { from: null, to: endOfDayAgo(7) } };
     default:
       return { preset: 'all', customRange: { from: null, to: null } };
   }

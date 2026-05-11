@@ -372,40 +372,49 @@ describe('hasNonHydratedImportedRows', () => {
 
 describe('sectionKeyToInitialFilter', () => {
   // Use a fixed `now` so day-boundary math is deterministic across machines.
-  // 2026-05-11T14:30:00.000Z — mid-day, mid-week.
-  const fixedNow = new Date('2026-05-11T14:30:00.000Z').getTime();
+  // Note: setHours uses **local** time. We pick a noon-local moment via the
+  // Date constructor so day boundaries land cleanly regardless of host TZ.
+  const fixedNow = new Date(2026, 4, 11, 12, 0, 0, 0).getTime(); // 2026-05-11 12:00:00 local
 
-  it("'today' returns preset 'custom' with the start/end of today as the range", () => {
+  const startOfLocalDayAgo = (daysAgo: number): number => {
+    const d = new Date(fixedNow);
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  };
+  const endOfLocalDayAgo = (daysAgo: number): number => {
+    const d = new Date(fixedNow);
+    d.setDate(d.getDate() - daysAgo);
+    d.setHours(23, 59, 59, 999);
+    return d.getTime();
+  };
+
+  it("'today' returns preset 'custom' with the start/end of today (local) as the range", () => {
     const result = sectionKeyToInitialFilter('conversation.history.today', fixedNow);
     expect(result.preset).toBe('custom');
-    const start = new Date(fixedNow);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(fixedNow);
-    end.setHours(23, 59, 59, 999);
-    expect(result.customRange.from).toBe(start.getTime());
-    expect(result.customRange.to).toBe(end.getTime());
+    expect(result.customRange.from).toBe(startOfLocalDayAgo(0));
+    expect(result.customRange.to).toBe(endOfLocalDayAgo(0));
   });
 
-  it("'yesterday' returns preset 'custom' scoped to the previous day", () => {
+  it("'yesterday' returns preset 'custom' scoped to the previous local day", () => {
     const result = sectionKeyToInitialFilter('conversation.history.yesterday', fixedNow);
     expect(result.preset).toBe('custom');
-    const start = new Date(fixedNow - 24 * 60 * 60 * 1000);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(fixedNow - 24 * 60 * 60 * 1000);
-    end.setHours(23, 59, 59, 999);
-    expect(result.customRange.from).toBe(start.getTime());
-    expect(result.customRange.to).toBe(end.getTime());
+    expect(result.customRange.from).toBe(startOfLocalDayAgo(1));
+    expect(result.customRange.to).toBe(endOfLocalDayAgo(1));
   });
 
-  it("'recent7Days' returns preset 'last7' with no custom range", () => {
+  it("'recent7Days' returns preset 'custom' scoped to 2-6 days ago (excludes today/yesterday)", () => {
     const result = sectionKeyToInitialFilter('conversation.history.recent7Days', fixedNow);
-    expect(result.preset).toBe('last7');
-    expect(result.customRange).toEqual({ from: null, to: null });
+    expect(result.preset).toBe('custom');
+    expect(result.customRange.from).toBe(startOfLocalDayAgo(6));
+    expect(result.customRange.to).toBe(endOfLocalDayAgo(2));
   });
 
-  it("'earlier' returns preset 'all'", () => {
+  it("'earlier' returns preset 'custom' with no `from` and `to` at end of 7-days-ago", () => {
     const result = sectionKeyToInitialFilter('conversation.history.earlier', fixedNow);
-    expect(result.preset).toBe('all');
+    expect(result.preset).toBe('custom');
+    expect(result.customRange.from).toBeNull();
+    expect(result.customRange.to).toBe(endOfLocalDayAgo(7));
   });
 
   it("falls back to 'all' for unknown keys", () => {
@@ -434,5 +443,25 @@ describe('sectionKeyToInitialFilter', () => {
       fixedNow
     );
     expect(passed).toBe(false);
+  });
+
+  it("'recent7Days' excludes today AND yesterday (codex JuS regression)", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.recent7Days', fixedNow);
+    const todayRow = makeConv({ id: 'today', modifyTime: fixedNow });
+    const yesterdayRow = makeConv({ id: 'yesterday', modifyTime: fixedNow - 24 * 60 * 60 * 1000 });
+    const dayMinus3 = makeConv({ id: 'dayMinus3', modifyTime: startOfLocalDayAgo(3) + 12 * 60 * 60 * 1000 });
+    const c = criteria({ preset: result.preset, customRange: result.customRange });
+    expect(matchesDateRange(todayRow, c, fixedNow)).toBe(false);
+    expect(matchesDateRange(yesterdayRow, c, fixedNow)).toBe(false);
+    expect(matchesDateRange(dayMinus3, c, fixedNow)).toBe(true);
+  });
+
+  it("'earlier' excludes recent-7-days rows (codex JuS regression)", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.earlier', fixedNow);
+    const recent = makeConv({ id: 'recent', modifyTime: startOfLocalDayAgo(3) + 12 * 60 * 60 * 1000 });
+    const oldRow = makeConv({ id: 'oldRow', modifyTime: startOfLocalDayAgo(30) });
+    const c = criteria({ preset: result.preset, customRange: result.customRange });
+    expect(matchesDateRange(recent, c, fixedNow)).toBe(false);
+    expect(matchesDateRange(oldRow, c, fixedNow)).toBe(true);
   });
 });

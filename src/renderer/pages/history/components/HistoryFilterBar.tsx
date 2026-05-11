@@ -55,8 +55,6 @@ const PRESET_CHIPS: readonly PresetChip[] = [
   { value: 'custom', i18nKey: 'conversation.fullHistory.filter.datePreset.custom' },
 ] as const;
 
-const END_OF_DAY_OFFSET_MS = 24 * 60 * 60 * 1000 - 1;
-
 type SourceChipButtonProps = {
   value: Exclude<SidebarFilterSource, 'all'>;
   label: string;
@@ -159,18 +157,27 @@ const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
         onCustomRangeChange({ from: null, to: null });
         return;
       }
-      // Day-picker strings are ISO dates without a time component
-      // (e.g. "2026-05-11"). `new Date("2026-05-11").getTime()` yields midnight
-      // at the *start* of the day, which is the correct lower bound. For the
-      // upper bound push to 23:59:59.999 so a row modified later that same day
-      // still passes the inclusive `time <= to` check in `matchesDateRange`.
-      const fromMs = dateStrings[0] ? new Date(dateStrings[0]).getTime() : null;
-      const toRaw = dateStrings[1] ? new Date(dateStrings[1]).getTime() : null;
-      const toMs = toRaw !== null && !Number.isNaN(toRaw) ? toRaw + END_OF_DAY_OFFSET_MS : null;
-      onCustomRangeChange({
-        from: fromMs !== null && !Number.isNaN(fromMs) ? fromMs : null,
-        to: toMs,
-      });
+      // Parse "YYYY-MM-DD" strings in **local** time. `new Date('2026-05-11')`
+      // would parse as UTC midnight, which silently shifts the day by the
+      // user's tz offset (e.g. May 10 evening to May 11 evening in PDT).
+      // Manual y/m/d construction uses the local calendar instead.
+      const parseStartOfDay = (s: string): number | null => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+        if (!m) return null;
+        const [, y, mo, d] = m;
+        const dt = new Date(Number(y), Number(mo) - 1, Number(d), 0, 0, 0, 0);
+        return dt.getTime();
+      };
+      const parseEndOfDay = (s: string): number | null => {
+        const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
+        if (!m) return null;
+        const [, y, mo, d] = m;
+        const dt = new Date(Number(y), Number(mo) - 1, Number(d), 23, 59, 59, 999);
+        return dt.getTime();
+      };
+      const fromMs = dateStrings[0] ? parseStartOfDay(dateStrings[0]) : null;
+      const toMs = dateStrings[1] ? parseEndOfDay(dateStrings[1]) : null;
+      onCustomRangeChange({ from: fromMs, to: toMs });
     },
     [onCustomRangeChange]
   );

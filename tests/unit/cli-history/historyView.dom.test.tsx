@@ -555,17 +555,21 @@ describe('HistoryPage — deep-link section param', () => {
     expect(screen.getByTestId('history-date-preset-last7').getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('?section=conversation.history.recent7Days preselects last7 preset', () => {
+  it("?section=conversation.history.recent7Days preselects 'custom' preset excluding today/yesterday (codex JuS)", () => {
     renderPage('/history?section=conversation.history.recent7Days');
-    expect(getRowIds().toSorted()).toEqual(['cc-1', 'cp-1', 'na-1']);
-    const preset = screen.getByTestId('history-date-preset-last7');
-    expect(preset.getAttribute('aria-pressed')).toBe('true');
+    // Seed dates relative to NOW: cc-1 (1d → yesterday bucket, excluded),
+    // cp-1 (3d → recent7Days), na-1 (5d → recent7Days), cc-2 (20d → earlier),
+    // na-2 (40d → earlier). Expected admitted: cp-1, na-1.
+    expect(getRowIds().toSorted()).toEqual(['cp-1', 'na-1']);
+    const customChip = screen.getByTestId('history-date-preset-custom');
+    expect(customChip.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it("?section=conversation.history.earlier maps to 'all'", () => {
+  it("?section=conversation.history.earlier preselects 'custom' preset excluding recent rows (codex JuS)", () => {
     renderPage('/history?section=conversation.history.earlier');
-    expect(getRowIds().length).toBe(5);
-    const preset = screen.getByTestId('history-date-preset-all');
-    expect(preset.getAttribute('aria-pressed')).toBe('true');
+    // Expected admitted: cc-2 (20d), na-2 (40d). cc-1/cp-1/na-1 < 7d → excluded.
+    expect(getRowIds().toSorted()).toEqual(['cc-2', 'na-2']);
+    const customChip = screen.getByTestId('history-date-preset-custom');
+    expect(customChip.getAttribute('aria-pressed')).toBe('true');
   });
 });
