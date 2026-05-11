@@ -8,7 +8,7 @@ import type { TChatConversation } from '@/common/config/storage';
 import { getActivityTime, getTimelineLabel } from '@/renderer/utils/chat/timeline';
 import { getWorkspaceDisplayName } from '@/renderer/utils/workspace/workspace';
 
-import type { GroupedHistoryResult, TimelineItem, TimelineSection, WorkspaceGroup } from '../types';
+import type { GroupedHistoryResult, SectionTimelineKey, TimelineItem, TimelineSection, WorkspaceGroup } from '../types';
 import { getConversationSortOrder } from './sortOrderHelpers';
 
 export const getConversationTimelineLabel = (conversation: TChatConversation, t: (key: string) => string): string => {
@@ -92,7 +92,7 @@ export const groupConversationsByTimelineAndWorkspace = (
     withoutWorkspaceByTimeline.get(timeline)!.push(conv);
   });
 
-  const timelineOrder = [
+  const timelineOrder: SectionTimelineKey[] = [
     'conversation.history.today',
     'conversation.history.yesterday',
     'conversation.history.recent7Days',
@@ -130,6 +130,7 @@ export const groupConversationsByTimelineAndWorkspace = (
 
     sections.push({
       timeline,
+      timelineKey,
       items,
     });
   });
@@ -158,4 +159,131 @@ export const buildGroupedHistory = (
     pinnedConversations,
     timelineSections: groupConversationsByTimelineAndWorkspace(normalConversations, t),
   };
+};
+
+/**
+ * Per-section row-count budget defaults. Keyed by timeline key (not translated
+ * label) so locale changes don't desync. Exhaustive over SectionTimelineKey —
+ * adding a new key fails type-check until this record is updated.
+ */
+export const SECTION_DEFAULT_LIMIT: Record<SectionTimelineKey, number> = {
+  'conversation.history.today': 15,
+  'conversation.history.yesterday': 10,
+  'conversation.history.recent7Days': 20,
+  'conversation.history.earlier': 20,
+};
+
+export const getSectionDefaultLimit = (timelineKey: SectionTimelineKey): number => {
+  const limit = SECTION_DEFAULT_LIMIT[timelineKey];
+  if (limit === undefined) {
+    // Fail-fast: a runtime miss means a new SectionTimelineKey was added without
+    // a matching SECTION_DEFAULT_LIMIT entry. Surfaces immediately instead of
+    // silently propagating NaN through bumpBudget arithmetic.
+    throw new Error(`getSectionDefaultLimit: no default for timeline key ${String(timelineKey)}`);
+  }
+  return limit;
+};
+
+/**
+ * Row count contributed by a timeline item to its section's visible-row budget.
+ * A workspace group counts as `1 + children` when its workspace is treated as
+ * expanded by the caller's predicate; otherwise `1`. Standalone conversations
+ * are always `1`.
+ */
+export const getItemRowCount = (item: TimelineItem, isWorkspaceExpanded: (workspace: string) => boolean): number => {
+  if (item.type === 'workspace' && item.workspaceGroup) {
+    return isWorkspaceExpanded(item.workspaceGroup.workspace) ? 1 + item.workspaceGroup.conversations.length : 1;
+  }
+  return 1;
+};
+
+export type TruncateSectionResult = {
+  visibleItems: TimelineItem[];
+  visibleRowCount: number;
+  hiddenItemCount: number;
+  hiddenRowCount: number;
+  totalRowCount: number;
+  /** Smallest budget that would admit at least one currently-hidden item; null if nothing hidden. */
+  nextRevealBudget: number | null;
+};
+
+/**
+ * Apply a visible-row budget to a timeline section in time-descending order.
+ *
+ * Rules:
+ *   - Items are admitted in their original (time-descending) order.
+ *   - A workspace item is included whole (all-or-nothing) — never partially sliced.
+ *   - Admission stops at the first item whose row count would push past the budget.
+ *     A later smaller item is NOT pulled forward, preserving the timeline contract.
+ *   - The first item in a non-empty section is always admitted, even if it alone
+ *     exceeds the budget — guarantees at least one visible row per non-empty section.
+ *   - `nextRevealBudget` is the cumulative row count required to admit the first
+ *     hidden item; null when no items are hidden.
+ */
+export const truncateSection = (args: {
+  items: TimelineItem[];
+  isWorkspaceExpanded: (workspace: string) => boolean;
+  budget: number;
+}): TruncateSectionResult => {
+  const { items, isWorkspaceExpanded, budget } = args;
+  const visibleItems: TimelineItem[] = [];
+  let visibleRowCount = 0;
+  let hiddenItemCount = 0;
+  let hiddenRowCount = 0;
+  let nextRevealBudget: number | null = null;
+  let totalRowCount = 0;
+  let admissionClosed = false;
+
+  for (const item of items) {
+    const itemRows = getItemRowCount(item, isWorkspaceExpanded);
+    totalRowCount += itemRows;
+
+    if (admissionClosed) {
+      hiddenItemCount += 1;
+      hiddenRowCount += itemRows;
+      continue;
+    }
+
+    const fits = visibleRowCount + itemRows <= budget;
+    const isFirst = visibleItems.length === 0;
+
+    if (fits || isFirst) {
+      visibleItems.push(item);
+      visibleRowCount += itemRows;
+    } else {
+      admissionClosed = true;
+      if (nextRevealBudget === null) {
+        nextRevealBudget = visibleRowCount + itemRows;
+      }
+      hiddenItemCount += 1;
+      hiddenRowCount += itemRows;
+    }
+  }
+
+  return {
+    visibleItems,
+    visibleRowCount,
+    hiddenItemCount,
+    hiddenRowCount,
+    totalRowCount,
+    nextRevealBudget,
+  };
+};
+
+/**
+ * The budget that would be set by a single "Show N more" click given the
+ * current `currentBudget` and the section's `baseLimit`. Mirrors the math in
+ * `useSectionVisibleBudgets.bumpBudget` so the renderer can predict the click
+ * outcome (used for an accurate button label) without mutating state.
+ */
+export const computeBudgetAfterBump = (args: {
+  currentBudget: number;
+  baseLimit: number;
+  totalRowCount: number;
+  nextRevealBudget: number | null;
+}): number => {
+  const { currentBudget, baseLimit, totalRowCount, nextRevealBudget } = args;
+  const incremented = currentBudget + baseLimit;
+  const required = nextRevealBudget ?? 0;
+  return Math.min(totalRowCount, Math.max(incremented, required));
 };

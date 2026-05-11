@@ -26,7 +26,9 @@ import { useConversationActions } from './hooks/useConversationActions';
 import { useConversations } from './hooks/useConversations';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 import { useExport } from './hooks/useExport';
+import { useSectionVisibleBudgets } from './hooks/useSectionVisibleBudgets';
 import type { ConversationRowProps, WorkspaceGroupedHistoryProps } from './types';
+import { computeBudgetAfterBump, getSectionDefaultLimit, truncateSection } from './utils/groupingHelpers';
 
 const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   onSessionClick,
@@ -118,6 +120,43 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
       batchMode,
       collapsed,
     });
+
+  const sectionBudgets = useSectionVisibleBudgets();
+
+  const truncatedTimelineSections = useMemo(() => {
+    const expandedWorkspaceSet = new Set(expandedWorkspaces);
+    const isWorkspaceExpanded = (ws: string) => collapsed || expandedWorkspaceSet.has(ws);
+    return timelineSections.map((section) => {
+      const budget = sectionBudgets.getBudget(section.timelineKey);
+      const result = truncateSection({
+        items: section.items,
+        isWorkspaceExpanded,
+        budget,
+      });
+
+      // Predict per-click reveal count so the "Show N more" label matches the
+      // budget bump exactly. Without this the label would over-promise
+      // (e.g. "Show 25 more" when the click only reveals one baseLimit step).
+      let revealOnClick = 0;
+      if (result.hiddenRowCount > 0) {
+        const baseLimit = getSectionDefaultLimit(section.timelineKey);
+        const nextBudget = computeBudgetAfterBump({
+          currentBudget: budget,
+          baseLimit,
+          totalRowCount: result.totalRowCount,
+          nextRevealBudget: result.nextRevealBudget,
+        });
+        const after = truncateSection({
+          items: section.items,
+          isWorkspaceExpanded,
+          budget: nextBudget,
+        });
+        revealOnClick = after.visibleRowCount - result.visibleRowCount;
+      }
+
+      return { section, result, revealOnClick };
+    });
+  }, [timelineSections, expandedWorkspaces, sectionBudgets, collapsed]);
 
   const getConversationRowProps = useCallback(
     (conversation: TChatConversation): ConversationRowProps => ({
@@ -376,15 +415,15 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           </DragOverlay>
         </DndContext>
 
-        {timelineSections.map((section) => (
-          <div key={section.timeline} className='mb-8px min-w-0'>
+        {truncatedTimelineSections.map(({ section, result, revealOnClick }) => (
+          <div key={section.timelineKey} className='mb-8px min-w-0'>
             {!collapsed && (
               <div className='chat-history__section px-12px py-8px text-13px text-t-secondary font-bold'>
                 {section.timeline}
               </div>
             )}
 
-            {section.items.map((item) => {
+            {result.visibleItems.map((item) => {
               if (item.type === 'workspace' && item.workspaceGroup) {
                 const group = item.workspaceGroup;
                 return (
@@ -415,6 +454,21 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
 
               return null;
             })}
+
+            {!collapsed && result.hiddenRowCount > 0 && revealOnClick > 0 && (
+              <div className='px-12px pt-4px pb-2px'>
+                <Button
+                  type='text'
+                  size='mini'
+                  className='!h-24px !px-8px !text-12px !text-t-secondary hover:!text-t-primary'
+                  onClick={() =>
+                    sectionBudgets.bumpBudget(section.timelineKey, result.totalRowCount, result.nextRevealBudget)
+                  }
+                >
+                  {t('conversation.history.showMore', { count: revealOnClick })}
+                </Button>
+              </div>
+            )}
           </div>
         ))}
       </div>

@@ -72,7 +72,8 @@
     "source": {
       "claudeCode": "Claude Code에서 가져옴",
       "copilot": "Copilot에서 가져옴"
-    }
+    },
+    "showMore": "{{count}}개 더 보기"
   },
   "historySearch": {
     "tooltip": "메시지 검색",

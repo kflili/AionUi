@@ -445,8 +445,8 @@ Not started:
 
 ### Sidebar Volume Management
 
-- [ ] Per-section truncation with configurable limits per timeline group
-- [ ] "Show N more" expander per section
+- [x] Per-section truncation with configurable limits per timeline group
+- [x] "Show N more" expander per section
 - [ ] Source filter dropdown (All / Claude Code / Copilot / Native)
 - [ ] Search bar for filtering by title and workspace match
 - [ ] Mobile-responsive: filter + search collapse to icon button

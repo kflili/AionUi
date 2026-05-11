@@ -72,7 +72,8 @@
     "source": {
       "claudeCode": "Imported from Claude Code",
       "copilot": "Imported from Copilot"
-    }
+    },
+    "showMore": "Show {{count}} more"
   },
   "historySearch": {
     "tooltip": "Search messages",

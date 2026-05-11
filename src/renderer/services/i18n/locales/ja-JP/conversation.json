@@ -72,7 +72,8 @@
     "source": {
       "claudeCode": "Claude Code からインポート",
       "copilot": "Copilot からインポート"
-    }
+    },
+    "showMore": "さらに {{count}} 件を表示"
   },
   "historySearch": {
     "tooltip": "メッセージを検索",
