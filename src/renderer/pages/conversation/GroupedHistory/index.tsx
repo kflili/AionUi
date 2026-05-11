@@ -215,10 +215,11 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   const pinnedIds = useMemo(() => pinnedConversations.map((c) => c.id), [pinnedConversations]);
 
   const sidebarIsEmpty = timelineSections.length === 0 && pinnedConversations.length === 0;
-  // Render the filter bar above the list when the user has opted into CLI
-  // import. When the filter is active and narrows away every row, we still
-  // need the bar present so the user can clear filters — so empty-state
-  // handling moves inside the main render.
+  // Show the filter bar above the list whenever CLI history import is enabled
+  // and the sidebar is expanded. We keep it rendered through the empty-state
+  // branch so an active filter that narrowed everything out still has a Reset
+  // affordance. The collapsed-sidebar case suppresses the bar entirely because
+  // the sidebar in icon-only mode has no horizontal room for inputs.
   const filterBar = sidebarFilter.visible && !collapsed && (
     <SidebarFilterBar
       visible={sidebarFilter.visible}

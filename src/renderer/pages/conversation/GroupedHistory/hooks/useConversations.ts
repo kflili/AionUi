@@ -8,21 +8,27 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router-dom';
 
-import type { GroupedHistoryResult, TimelineSection } from '../types';
+import type { GroupedHistoryResult } from '../types';
 import { useConversationListSync } from './useConversationListSync';
 import { buildGroupedHistory } from '../utils/groupingHelpers';
 import { applySidebarFilter, type SidebarFilterCriteria } from '../utils/sidebarFilterHelpers';
 
 const EXPANSION_STORAGE_KEY = 'aionui_workspace_expansion';
 
-const collectWorkspaceNames = (sections: TimelineSection[]): Set<string> => {
+// Workspace names derived directly from raw conversations, mirroring
+// `groupConversationsByTimelineAndWorkspace`'s "workspace + customWorkspace"
+// admission rule. Used by the expansion-bookkeeping effects so that a
+// transiently filter-hidden workspace doesn't lose its expanded state — and
+// so we don't pay for a second `buildGroupedHistory` pass when the filter
+// is active.
+const collectRawWorkspaceNames = (conversations: ReadonlyArray<{ extra: unknown }>): Set<string> => {
   const names = new Set<string>();
-  sections.forEach((section) => {
-    section.items.forEach((item) => {
-      if (item.type === 'workspace' && item.workspaceGroup) {
-        names.add(item.workspaceGroup.workspace);
-      }
-    });
+  conversations.forEach((conv) => {
+    const extra = conv.extra as { workspace?: unknown; customWorkspace?: unknown } | null | undefined;
+    if (!extra) return;
+    if (extra.customWorkspace && typeof extra.workspace === 'string') {
+      names.add(extra.workspace);
+    }
   });
   return names;
 };
@@ -89,13 +95,10 @@ export const useConversations = (filter?: SidebarFilterCriteria) => {
 
   const { pinnedConversations, timelineSections } = groupedHistory;
 
-  // Unfiltered grouping drives workspace-expansion bookkeeping so that a
-  // transiently-hidden workspace (filter narrowed it out) doesn't lose its
-  // expanded/collapsed state when the filter clears.
-  const unfilteredTimelineSections: TimelineSection[] = useMemo(
-    () => (filter ? buildGroupedHistory(conversations, t).timelineSections : timelineSections),
-    [filter, conversations, t, timelineSections]
-  );
+  // Workspace bookkeeping always uses the UNFILTERED conversation set so that
+  // expansion state isn't lost when a filter transiently hides a workspace.
+  // Derive directly from raw conversations (no second `buildGroupedHistory`).
+  const unfilteredWorkspaceNames = useMemo(() => collectRawWorkspaceNames(conversations), [conversations]);
 
   // Auto-expand all workspaces on first load only (#1156)
   useEffect(() => {
@@ -104,22 +107,20 @@ export const useConversations = (filter?: SidebarFilterCriteria) => {
       hasAutoExpandedRef.current = true;
       return;
     }
-    const allWorkspaces = collectWorkspaceNames(unfilteredTimelineSections);
-    if (allWorkspaces.size > 0) {
-      setExpandedWorkspaces([...allWorkspaces]);
+    if (unfilteredWorkspaceNames.size > 0) {
+      setExpandedWorkspaces([...unfilteredWorkspaceNames]);
       hasAutoExpandedRef.current = true;
     }
-  }, [unfilteredTimelineSections]);
+  }, [unfilteredWorkspaceNames]);
 
   // Remove stale workspace entries that no longer exist in the data
   useEffect(() => {
-    const currentWorkspaces = collectWorkspaceNames(unfilteredTimelineSections);
-    if (currentWorkspaces.size === 0) return;
+    if (unfilteredWorkspaceNames.size === 0) return;
     setExpandedWorkspaces((prev) => {
-      const filtered = prev.filter((ws) => currentWorkspaces.has(ws));
+      const filtered = prev.filter((ws) => unfilteredWorkspaceNames.has(ws));
       return filtered.length === prev.length ? prev : filtered;
     });
-  }, [unfilteredTimelineSections]);
+  }, [unfilteredWorkspaceNames]);
 
   const handleToggleWorkspace = useCallback((workspace: string) => {
     setExpandedWorkspaces((prev) => {
