@@ -459,7 +459,7 @@ Not started:
 - [ ] Imported sessions appear in normal sidebar timeline (mixed with native)
 - [ ] Source badge visible on imported sessions (2-letter chips: CC, CP)
 - [ ] Auto-naming uses provider metadata first, upgrades from first user message when needed, and appends workspace for disambiguation
-- [ ] Full `...` menu works: rename, pin, delete, export (export auto-hydrates if messages not yet loaded)
+- [x] Full `...` menu works: rename, pin, delete, export (export auto-hydrates if messages not yet loaded)
 - [x] Incremental sync: new sessions imported on app launch
 - [ ] mtime staleness check: re-hydrate if source file changed
 - [x] Deduplication by source + session ID
