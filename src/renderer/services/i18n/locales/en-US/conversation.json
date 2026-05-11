@@ -209,5 +209,15 @@
     "request_sent": "Request sent to agent",
     "failed": "Failed to generate",
     "preset_registered": "Agent preset registered successfully!"
+  },
+  "transcript": {
+    "resumeSession": "Resume this session",
+    "resumeTooltip": "Start a live session from this transcript",
+    "skeleton": {
+      "loading": "Loading transcript…"
+    },
+    "unavailable": "Transcript unavailable — source file not found.",
+    "cachedWarning": "Source file not found — showing last imported transcript.",
+    "error": "Could not load transcript. Try reopening the session."
   }
 }

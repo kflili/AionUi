@@ -24,6 +24,7 @@ import { emitter } from '../../../utils/emitter';
 import AcpChat from '../platforms/acp/AcpChat';
 import ChatLayout from './ChatLayout';
 import ChatSider from './ChatSider';
+import TranscriptView, { isHydrationFresh, isImportedAcpConversation } from './TranscriptView';
 import CodexChat from '../platforms/codex/CodexChat';
 import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
@@ -230,6 +231,17 @@ const ChatConversation: React.FC<{
     });
   }, [agentCliConfig]);
 
+  // Stub click handler for the "Resume this session" button rendered by
+  // TranscriptView for CLI-history-imported sessions. Item 8 will replace
+  // this with the live ACP / terminal launch (the Step 1 default-mode toggle
+  // decides which surface starts). Until then the button stays a deliberate
+  // no-op so a user click cannot accidentally mount a live session.
+  const handleResumeImported = useCallback(() => {
+    // TODO(item 8): wire to live ACP session resume OR terminal `--resume <id>`
+    // based on conversation.extra.currentMode (defaulting per the Step 1 toggle).
+    console.warn('[ChatConversation] "Resume this session" clicked — live launch not implemented yet (item 8).');
+  }, []);
+
   // Sync mode state when conversation changes or SWR revalidates with fresh extra data
   const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
   useEffect(() => {
@@ -273,8 +285,16 @@ const ChatConversation: React.FC<{
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
 
-    // Terminal mode rendering for ACP conversations
-    if (conversation.type === 'acp' && isTerminalMode) {
+    // CLI-history-imported ACP sessions (extra.sourceFilePath set) open as a
+    // read-only transcript regardless of the mode toggle — the user must
+    // explicitly click "Resume this session" to start any live ACP / terminal
+    // surface (item 8 will wire that launch). Checking this BEFORE the
+    // terminal-mode early-return prevents a stale `extra.currentMode = 'terminal'`
+    // from accidentally launching a live PTY when the user just wants to read.
+    const isImportedAcp = isImportedAcpConversation(conversation);
+
+    // Terminal mode rendering for ACP conversations (live, native rows only).
+    if (conversation.type === 'acp' && isTerminalMode && !isImportedAcp) {
       return (
         <TerminalChat
           key={`terminal-${conversation.id}`}
@@ -289,7 +309,34 @@ const ChatConversation: React.FC<{
     }
 
     switch (conversation.type) {
-      case 'acp':
+      case 'acp': {
+        if (isImportedAcp) {
+          // `sourceFilePath` is guaranteed non-empty by `isImportedAcpConversation`;
+          // assertion is safe here. Threading it explicitly lets TranscriptView re-fire
+          // hydration when an incremental scan refreshes the source pointer mid-mount.
+          const sourceFilePath = (conversation.extra as { sourceFilePath: string }).sourceFilePath;
+          // Gate `showThinking` on `showThinkingLoaded`: while the config is still
+          // loading we pass `undefined`, which causes TranscriptView's hydrate effect
+          // to wait. Without this, a fast open right after app start could rewrite
+          // the SQLite cache with the fallback `false` variant before the user's saved
+          // preference (possibly `true`) has loaded. `isHydrated` is also gated so a
+          // stale freshness check computed against the fallback can't trick us into
+          // skipping the hydrate.
+          const showThinkingForTranscript = showThinkingLoaded ? showThinking : undefined;
+          const isHydrated = showThinkingLoaded && isHydrationFresh(conversation, showThinking);
+          return (
+            <TranscriptView
+              key={conversation.id}
+              conversation_id={conversation.id}
+              workspace={conversation.extra?.workspace}
+              backend={conversation.extra?.backend || 'claude'}
+              sourceFilePath={sourceFilePath}
+              isHydrated={isHydrated}
+              showThinking={showThinkingForTranscript}
+              onResume={handleResumeImported}
+            />
+          );
+        }
         return (
           <AcpChat
             key={conversation.id}
@@ -300,6 +347,7 @@ const ChatConversation: React.FC<{
             agentName={(conversation.extra as { agentName?: string })?.agentName}
           ></AcpChat>
         );
+      }
       case 'codex': // Legacy: new Codex conversations use ACP protocol. Kept for existing sessions.
         return (
           <CodexChat
@@ -327,7 +375,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isGeminiConversation, isTerminalMode]);
+  }, [conversation, isGeminiConversation, isTerminalMode, showThinking, showThinkingLoaded, handleResumeImported]);
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)
