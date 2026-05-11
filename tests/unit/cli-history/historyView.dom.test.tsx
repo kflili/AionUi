@@ -519,9 +519,20 @@ describe('HistoryPage — row click navigates to /conversation/:id', () => {
 });
 
 describe('HistoryPage — deep-link section param', () => {
-  it('?section=conversation.history.today preselects last7 preset', () => {
+  it("?section=conversation.history.today preselects 'custom' preset scoped to today (codex Ybq)", () => {
     renderPage('/history?section=conversation.history.today');
-    // Same as Last 7 days preset above.
+    // cc-1 is 1 day old in our seed and thus falls under yesterday, NOT today.
+    // The custom range scoped to today excludes everything from the seed
+    // because every seeded row was modified ≥ 1 day ago.
+    expect(getRowIds().length).toBe(0);
+    const customChip = screen.getByTestId('history-date-preset-custom');
+    expect(customChip.getAttribute('aria-pressed')).toBe('true');
+    // The All time chip should NOT be selected (was the bug — it was last7).
+    expect(screen.getByTestId('history-date-preset-last7').getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('?section=conversation.history.recent7Days preselects last7 preset', () => {
+    renderPage('/history?section=conversation.history.recent7Days');
     expect(getRowIds().toSorted()).toEqual(['cc-1', 'cp-1', 'na-1']);
     const preset = screen.getByTestId('history-date-preset-last7');
     expect(preset.getAttribute('aria-pressed')).toBe('true');

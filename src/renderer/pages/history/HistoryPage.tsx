@@ -23,6 +23,10 @@ import {
 
 const MESSAGE_SEARCH_DEBOUNCE_MS = 250;
 const MESSAGE_SEARCH_PAGE_SIZE = 200;
+// Hard cap on page traversal so a needle that matches a huge corpus can't pin
+// the IPC bridge or balloon memory. 50 pages × 200 = 10,000 matched messages,
+// which is far more than any realistic conversation count.
+const MESSAGE_SEARCH_MAX_PAGES = 50;
 
 const HistoryPage: React.FC = () => {
   const { t } = useTranslation();
@@ -45,6 +49,11 @@ const HistoryPage: React.FC = () => {
   const requestIdRef = useRef(0);
 
   // Async message-content search — debounced + race-safe via request ID.
+  // The DB search is paginated by matching *messages*, not by conversation,
+  // so a single hot keyword can return many pages even if only a handful of
+  // distinct conversations match. Walk pages until `hasMore === false` (or the
+  // cap), accumulating conversation IDs into the visible set so later matches
+  // aren't silently dropped.
   useEffect(() => {
     if (!criteria.includeMessageContent) {
       setMessageMatchIds(undefined);
@@ -59,13 +68,18 @@ const HistoryPage: React.FC = () => {
     const timer = setTimeout(() => {
       void (async () => {
         try {
-          const result = await ipcBridge.database.searchConversationMessages.invoke({
-            keyword: needle,
-            page: 0,
-            pageSize: MESSAGE_SEARCH_PAGE_SIZE,
-          });
+          const ids = new Set<string>();
+          for (let page = 0; page < MESSAGE_SEARCH_MAX_PAGES; page++) {
+            const result = await ipcBridge.database.searchConversationMessages.invoke({
+              keyword: needle,
+              page,
+              pageSize: MESSAGE_SEARCH_PAGE_SIZE,
+            });
+            if (requestIdRef.current !== myRequestId) return;
+            for (const item of result.items) ids.add(item.conversation.id);
+            if (!result.hasMore) break;
+          }
           if (requestIdRef.current !== myRequestId) return;
-          const ids = new Set(result.items.map((item) => item.conversation.id));
           setMessageMatchIds(ids);
         } catch (error) {
           if (requestIdRef.current !== myRequestId) return;

@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button } from '@arco-design/web-react';
 import { Virtuoso } from 'react-virtuoso';
@@ -18,8 +18,15 @@ export type HistoryListProps = {
   onReset: () => void;
 };
 
+const computeItemKey = (_index: number, item: TChatConversation): string => item.id;
+
 const HistoryList: React.FC<HistoryListProps> = ({ conversations, isFiltered, onRowClick, onReset }) => {
   const { t } = useTranslation();
+
+  const renderItem = useCallback(
+    (_index: number, item: TChatConversation) => <HistoryRow conversation={item} onClick={onRowClick} />,
+    [onRowClick]
+  );
 
   if (conversations.length === 0) {
     return (
@@ -42,8 +49,8 @@ const HistoryList: React.FC<HistoryListProps> = ({ conversations, isFiltered, on
       data-testid='history-virtuoso'
       data={conversations}
       style={{ height: '100%' }}
-      computeItemKey={(_, item) => item.id}
-      itemContent={(_, item) => <HistoryRow conversation={item} onClick={onRowClick} />}
+      computeItemKey={computeItemKey}
+      itemContent={renderItem}
     />
   );
 };

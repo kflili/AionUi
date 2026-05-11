@@ -12,7 +12,7 @@ import {
   type HistoryDatePreset,
   type HistoryFilterCriteria,
   type HistorySortKey,
-  sectionKeyToPreset,
+  sectionKeyToInitialFilter,
 } from '../utils/historyFilterHelpers';
 
 export type UseHistoryFilterResult = {
@@ -30,10 +30,8 @@ export type UseHistoryFilterResult = {
 
 const initFromSearchParam = (sectionParam: string | null): HistoryFilterCriteria => {
   if (!sectionParam) return DEFAULT_HISTORY_FILTER;
-  return {
-    ...DEFAULT_HISTORY_FILTER,
-    preset: sectionKeyToPreset(sectionParam),
-  };
+  const { preset, customRange } = sectionKeyToInitialFilter(sectionParam);
+  return { ...DEFAULT_HISTORY_FILTER, preset, customRange };
 };
 
 export const useHistoryFilter = (): UseHistoryFilterResult => {

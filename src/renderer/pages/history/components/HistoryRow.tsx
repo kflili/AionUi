@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { resolveLocaleKey } from '@/common/utils';
 import type { TChatConversation } from '@/common/config/storage';
@@ -46,19 +46,25 @@ const HistoryRow: React.FC<HistoryRowProps> = ({ conversation, onClick }) => {
       ? conversation.name
       : t('conversation.historySearch.untitled');
 
+  const handleClick = useCallback(() => onClick(conversation), [conversation, onClick]);
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLDivElement>) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        onClick(conversation);
+      }
+    },
+    [conversation, onClick]
+  );
+
   return (
     <div
       role='button'
       tabIndex={0}
       data-testid='history-row'
       data-conversation-id={conversation.id}
-      onClick={() => onClick(conversation)}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          onClick(conversation);
-        }
-      }}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
       className='flex items-center gap-12px px-16px py-10px rd-0.5rem cursor-pointer hover:bg-hover transition-colors'
     >
       <div className='flex-1 min-w-0 flex flex-col gap-2px'>

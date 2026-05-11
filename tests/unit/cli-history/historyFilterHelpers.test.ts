@@ -17,7 +17,7 @@ import {
   isHistoryFilterActive,
   matchesDateRange,
   NO_WORKSPACE_TOKEN,
-  sectionKeyToPreset,
+  sectionKeyToInitialFilter,
   sortConversations,
 } from '../../../src/renderer/pages/history/utils/historyFilterHelpers';
 
@@ -370,20 +370,69 @@ describe('hasNonHydratedImportedRows', () => {
   });
 });
 
-describe('sectionKeyToPreset', () => {
-  it('maps today/yesterday/recent7Days to last7', () => {
-    expect(sectionKeyToPreset('conversation.history.today')).toBe('last7');
-    expect(sectionKeyToPreset('conversation.history.yesterday')).toBe('last7');
-    expect(sectionKeyToPreset('conversation.history.recent7Days')).toBe('last7');
+describe('sectionKeyToInitialFilter', () => {
+  // Use a fixed `now` so day-boundary math is deterministic across machines.
+  // 2026-05-11T14:30:00.000Z — mid-day, mid-week.
+  const fixedNow = new Date('2026-05-11T14:30:00.000Z').getTime();
+
+  it("'today' returns preset 'custom' with the start/end of today as the range", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.today', fixedNow);
+    expect(result.preset).toBe('custom');
+    const start = new Date(fixedNow);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(fixedNow);
+    end.setHours(23, 59, 59, 999);
+    expect(result.customRange.from).toBe(start.getTime());
+    expect(result.customRange.to).toBe(end.getTime());
   });
 
-  it("maps earlier to 'all'", () => {
-    expect(sectionKeyToPreset('conversation.history.earlier')).toBe('all');
+  it("'yesterday' returns preset 'custom' scoped to the previous day", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.yesterday', fixedNow);
+    expect(result.preset).toBe('custom');
+    const start = new Date(fixedNow - 24 * 60 * 60 * 1000);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(fixedNow - 24 * 60 * 60 * 1000);
+    end.setHours(23, 59, 59, 999);
+    expect(result.customRange.from).toBe(start.getTime());
+    expect(result.customRange.to).toBe(end.getTime());
+  });
+
+  it("'recent7Days' returns preset 'last7' with no custom range", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.recent7Days', fixedNow);
+    expect(result.preset).toBe('last7');
+    expect(result.customRange).toEqual({ from: null, to: null });
+  });
+
+  it("'earlier' returns preset 'all'", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.earlier', fixedNow);
+    expect(result.preset).toBe('all');
   });
 
   it("falls back to 'all' for unknown keys", () => {
-    expect(sectionKeyToPreset('nope')).toBe('all');
-    expect(sectionKeyToPreset(null)).toBe('all');
-    expect(sectionKeyToPreset(undefined)).toBe('all');
+    expect(sectionKeyToInitialFilter('nope', fixedNow).preset).toBe('all');
+    expect(sectionKeyToInitialFilter(null, fixedNow).preset).toBe('all');
+    expect(sectionKeyToInitialFilter(undefined, fixedNow).preset).toBe('all');
+  });
+
+  it("'today' range admits a conversation modified later the same day (codex Ybq regression)", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.today', fixedNow);
+    const todayLater = makeConv({ id: 'today-later', modifyTime: fixedNow + 60 * 60 * 1000 });
+    const passed = matchesDateRange(
+      todayLater,
+      criteria({ preset: result.preset, customRange: result.customRange }),
+      fixedNow
+    );
+    expect(passed).toBe(true);
+  });
+
+  it("'today' range excludes yesterday's conversations (was the bug — last7 admitted them)", () => {
+    const result = sectionKeyToInitialFilter('conversation.history.today', fixedNow);
+    const yesterday = makeConv({ id: 'yesterday', modifyTime: fixedNow - 24 * 60 * 60 * 1000 });
+    const passed = matchesDateRange(
+      yesterday,
+      criteria({ preset: result.preset, customRange: result.customRange }),
+      fixedNow
+    );
+    expect(passed).toBe(false);
   });
 });

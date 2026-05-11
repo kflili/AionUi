@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Button, Checkbox, DatePicker, Input, Select } from '@arco-design/web-react';
 import { Search } from '@icon-park/react';
@@ -55,6 +55,54 @@ const PRESET_CHIPS: readonly PresetChip[] = [
   { value: 'custom', i18nKey: 'conversation.fullHistory.filter.datePreset.custom' },
 ] as const;
 
+const END_OF_DAY_OFFSET_MS = 24 * 60 * 60 * 1000 - 1;
+
+type SourceChipButtonProps = {
+  value: Exclude<SidebarFilterSource, 'all'>;
+  label: string;
+  selected: boolean;
+  onToggle: (value: SidebarFilterSource) => void;
+};
+
+const SourceChipButton: React.FC<SourceChipButtonProps> = ({ value, label, selected, onToggle }) => {
+  const handleClick = useCallback(() => onToggle(value), [onToggle, value]);
+  return (
+    <Button
+      size='small'
+      shape='round'
+      type={selected ? 'primary' : 'secondary'}
+      onClick={handleClick}
+      aria-pressed={selected}
+      data-testid={`history-source-chip-${value}`}
+    >
+      {label}
+    </Button>
+  );
+};
+
+type PresetChipButtonProps = {
+  value: HistoryDatePreset;
+  label: string;
+  selected: boolean;
+  onSelect: (preset: HistoryDatePreset) => void;
+};
+
+const PresetChipButton: React.FC<PresetChipButtonProps> = ({ value, label, selected, onSelect }) => {
+  const handleClick = useCallback(() => onSelect(value), [onSelect, value]);
+  return (
+    <Button
+      size='small'
+      shape='round'
+      type={selected ? 'primary' : 'secondary'}
+      onClick={handleClick}
+      aria-pressed={selected}
+      data-testid={`history-date-preset-${value}`}
+    >
+      {label}
+    </Button>
+  );
+};
+
 export type HistoryFilterBarProps = {
   criteria: HistoryFilterCriteria;
   isActive: boolean;
@@ -100,6 +148,33 @@ const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
     [workspaceOptions, t]
   );
 
+  const handleWorkspacesChange = useCallback(
+    (next: string[]) => onWorkspacesChange(new Set(next)),
+    [onWorkspacesChange]
+  );
+
+  const handleRangePickerChange = useCallback(
+    (dateStrings: string[]) => {
+      if (!dateStrings || dateStrings.length !== 2) {
+        onCustomRangeChange({ from: null, to: null });
+        return;
+      }
+      // Day-picker strings are ISO dates without a time component
+      // (e.g. "2026-05-11"). `new Date("2026-05-11").getTime()` yields midnight
+      // at the *start* of the day, which is the correct lower bound. For the
+      // upper bound push to 23:59:59.999 so a row modified later that same day
+      // still passes the inclusive `time <= to` check in `matchesDateRange`.
+      const fromMs = dateStrings[0] ? new Date(dateStrings[0]).getTime() : null;
+      const toRaw = dateStrings[1] ? new Date(dateStrings[1]).getTime() : null;
+      const toMs = toRaw !== null && !Number.isNaN(toRaw) ? toRaw + END_OF_DAY_OFFSET_MS : null;
+      onCustomRangeChange({
+        from: fromMs !== null && !Number.isNaN(fromMs) ? fromMs : null,
+        to: toMs,
+      });
+    },
+    [onCustomRangeChange]
+  );
+
   const customRangePickerValue: [number, number] | undefined =
     criteria.preset === 'custom' && criteria.customRange.from !== null && criteria.customRange.to !== null
       ? [criteria.customRange.from, criteria.customRange.to]
@@ -119,29 +194,22 @@ const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
           >
             {t('conversation.fullHistory.filter.allSources')}
           </Button>
-          {SOURCE_CHIPS.map((chip) => {
-            const selected = criteria.sources.has(chip.value);
-            return (
-              <Button
-                key={chip.value}
-                size='small'
-                shape='round'
-                type={selected ? 'primary' : 'secondary'}
-                onClick={() => onToggleSource(chip.value)}
-                aria-pressed={selected}
-                data-testid={`history-source-chip-${chip.value}`}
-              >
-                {t(chip.i18nKey)}
-              </Button>
-            );
-          })}
+          {SOURCE_CHIPS.map((chip) => (
+            <SourceChipButton
+              key={chip.value}
+              value={chip.value}
+              label={t(chip.i18nKey)}
+              selected={criteria.sources.has(chip.value)}
+              onToggle={onToggleSource}
+            />
+          ))}
         </div>
         <div className='flex items-center gap-8px'>
           <span className='text-t-secondary text-12px'>{t('conversation.fullHistory.filter.sortLabel')}</span>
           <Select
             size='small'
             value={criteria.sort}
-            onChange={(v: HistorySortKey) => onSortChange(v)}
+            onChange={onSortChange}
             style={{ minWidth: 160 }}
             data-testid='history-sort'
           >
@@ -159,7 +227,7 @@ const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
             allowClear
             placeholder={t('conversation.fullHistory.filter.workspacesPlaceholder')}
             value={workspaceSelectValue}
-            onChange={(next: string[]) => onWorkspacesChange(new Set(next))}
+            onChange={handleWorkspacesChange}
             style={{ flex: 1 }}
             maxTagCount={3}
             data-testid='history-workspace-select'
@@ -169,38 +237,20 @@ const HistoryFilterBar: React.FC<HistoryFilterBarProps> = ({
         </div>
         <div className='flex items-center gap-8px flex-wrap' data-testid='history-date-presets'>
           <span className='text-t-secondary text-12px'>{t('conversation.fullHistory.filter.dateLabel')}</span>
-          {PRESET_CHIPS.map((chip) => {
-            const selected = criteria.preset === chip.value;
-            return (
-              <Button
-                key={chip.value}
-                size='small'
-                shape='round'
-                type={selected ? 'primary' : 'secondary'}
-                onClick={() => onPresetChange(chip.value)}
-                aria-pressed={selected}
-                data-testid={`history-date-preset-${chip.value}`}
-              >
-                {t(chip.i18nKey)}
-              </Button>
-            );
-          })}
+          {PRESET_CHIPS.map((chip) => (
+            <PresetChipButton
+              key={chip.value}
+              value={chip.value}
+              label={t(chip.i18nKey)}
+              selected={criteria.preset === chip.value}
+              onSelect={onPresetChange}
+            />
+          ))}
           {criteria.preset === 'custom' && (
             <RangePicker
               size='small'
               value={customRangePickerValue}
-              onChange={(dateStrings) => {
-                if (!dateStrings || dateStrings.length !== 2) {
-                  onCustomRangeChange({ from: null, to: null });
-                  return;
-                }
-                const fromMs = dateStrings[0] ? new Date(dateStrings[0]).getTime() : null;
-                const toMs = dateStrings[1] ? new Date(dateStrings[1]).getTime() : null;
-                onCustomRangeChange({
-                  from: fromMs !== null && !Number.isNaN(fromMs) ? fromMs : null,
-                  to: toMs !== null && !Number.isNaN(toMs) ? toMs : null,
-                });
-              }}
+              onChange={handleRangePickerChange}
               data-testid='history-date-custom-range'
             />
           )}

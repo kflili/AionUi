@@ -72,11 +72,18 @@ test.describe('Full History View — interaction', () => {
 });
 
 test.describe('Full History View — sidebar deep-link', () => {
-  test('?section=conversation.history.today preselects Last 7 days preset', async ({ page }) => {
-    await navigateTo(page, `${HISTORY_HASH}?section=conversation.history.today`);
+  test('?section=conversation.history.recent7Days preselects Last 7 days preset', async ({ page }) => {
+    await navigateTo(page, `${HISTORY_HASH}?section=conversation.history.recent7Days`);
     const preset = page.locator('[data-testid="history-date-preset-last7"]').first();
     await expect(preset).toBeVisible({ timeout: 5000 });
     await expect(preset).toHaveAttribute('aria-pressed', 'true');
+  });
+
+  test('?section=conversation.history.today preselects custom preset scoped to today', async ({ page }) => {
+    await navigateTo(page, `${HISTORY_HASH}?section=conversation.history.today`);
+    const customChip = page.locator('[data-testid="history-date-preset-custom"]').first();
+    await expect(customChip).toBeVisible({ timeout: 5000 });
+    await expect(customChip).toHaveAttribute('aria-pressed', 'true');
   });
 });
 

@@ -209,16 +209,45 @@ export const hasNonHydratedImportedRows = (conversations: TChatConversation[]): 
   return false;
 };
 
-/** Maps an item-5 `SectionTimelineKey` to the matching history-view date preset. */
-export const sectionKeyToPreset = (sectionKey: string | null | undefined): HistoryDatePreset => {
+/**
+ * Maps an item-5 `SectionTimelineKey` to the matching history-view initial filter.
+ *
+ * `today` / `yesterday` use `preset: 'custom'` with an inclusive day-boundary
+ * range so the deep link from the sidebar's "Show all" lands on exactly the
+ * conversations the user saw under that section header — not a broader 7-day
+ * window. `recent7Days` maps to `'last7'` because the section semantics already
+ * are "last 7 days". `earlier` maps to `'all'` because the section has no upper
+ * bound the history view can usefully narrow to.
+ */
+export const sectionKeyToInitialFilter = (
+  sectionKey: string | null | undefined,
+  now: number = Date.now()
+): { preset: HistoryDatePreset; customRange: { from: number | null; to: number | null } } => {
   switch (sectionKey) {
-    case 'conversation.history.today':
-    case 'conversation.history.yesterday':
+    case 'conversation.history.today': {
+      const startOfToday = new Date(now);
+      startOfToday.setHours(0, 0, 0, 0);
+      const endOfToday = new Date(now);
+      endOfToday.setHours(23, 59, 59, 999);
+      return {
+        preset: 'custom',
+        customRange: { from: startOfToday.getTime(), to: endOfToday.getTime() },
+      };
+    }
+    case 'conversation.history.yesterday': {
+      const startOfYesterday = new Date(now - millisPerDay);
+      startOfYesterday.setHours(0, 0, 0, 0);
+      const endOfYesterday = new Date(now - millisPerDay);
+      endOfYesterday.setHours(23, 59, 59, 999);
+      return {
+        preset: 'custom',
+        customRange: { from: startOfYesterday.getTime(), to: endOfYesterday.getTime() },
+      };
+    }
     case 'conversation.history.recent7Days':
-      return 'last7';
+      return { preset: 'last7', customRange: { from: null, to: null } };
     case 'conversation.history.earlier':
-      return 'all';
     default:
-      return 'all';
+      return { preset: 'all', customRange: { from: null, to: null } };
   }
 };
