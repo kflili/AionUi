@@ -24,7 +24,7 @@ import { emitter } from '../../../utils/emitter';
 import AcpChat from '../platforms/acp/AcpChat';
 import ChatLayout from './ChatLayout';
 import ChatSider from './ChatSider';
-import TranscriptView, { hasHydratedAt, isImportedAcpConversation } from './TranscriptView';
+import TranscriptView, { isHydrationFresh, isImportedAcpConversation } from './TranscriptView';
 import CodexChat from '../platforms/codex/CodexChat';
 import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
@@ -306,7 +306,8 @@ const ChatConversation: React.FC<{
               conversation_id={conversation.id}
               workspace={conversation.extra?.workspace}
               backend={conversation.extra?.backend || 'claude'}
-              isHydrated={hasHydratedAt(conversation)}
+              isHydrated={isHydrationFresh(conversation, showThinking)}
+              showThinking={showThinking}
             />
           );
         }
@@ -348,7 +349,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isGeminiConversation, isTerminalMode]);
+  }, [conversation, isGeminiConversation, isTerminalMode, showThinking]);
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)

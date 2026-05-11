@@ -9,7 +9,7 @@ import type { AcpBackend } from '@/common/types/acpTypes';
 import type { TChatConversation } from '@/common/config/storage';
 import FlexFullContainer from '@renderer/components/layout/FlexFullContainer';
 import MessageList from '@renderer/pages/conversation/Messages/MessageList';
-import { MessageListProvider, useMessageLstCache } from '@renderer/pages/conversation/Messages/hooks';
+import { MessageListProvider, useUpdateMessageList } from '@renderer/pages/conversation/Messages/hooks';
 import { ConversationProvider } from '@/renderer/hooks/context/ConversationContext';
 import HOC from '@renderer/utils/ui/HOC';
 import { Alert, Button, Skeleton, Tooltip } from '@arco-design/web-react';
@@ -55,12 +55,51 @@ export const hasHydratedAt = (conversation: TChatConversation | undefined | null
   return typeof extra?.hydratedAt === 'number';
 };
 
+/**
+ * Returns `true` only when the row has a numeric `hydratedAt` AND the persisted
+ * `hydratedShowThinking` matches the current global `showThinking` option. The
+ * importer keys its hydration cache on `(conversationId, normalizedShowThinking)`
+ * — a row hydrated under "thinking hidden" must re-hydrate when the user enables
+ * "Show Thinking" from the header so SQLite reflects the requested variant
+ * (`hydrateSession` semantics in `importer.ts`). `undefined` / missing
+ * `hydratedShowThinking` is treated as `false` (the converter's default) to
+ * match the bridge's normalization rule.
+ */
+export const isHydrationFresh = (
+  conversation: TChatConversation | undefined | null,
+  showThinking: boolean
+): boolean => {
+  if (!conversation) return false;
+  const extra =
+    conversation.extra && typeof conversation.extra === 'object'
+      ? (conversation.extra as Record<string, unknown>)
+      : null;
+  if (!extra) return false;
+  if (typeof extra.hydratedAt !== 'number') return false;
+  const cachedShowThinking = extra.hydratedShowThinking === true;
+  return cachedShowThinking === showThinking;
+};
+
 export type TranscriptViewProps = {
   conversation_id: string;
   workspace?: string;
   backend: AcpBackend;
-  /** Whether `extra.hydratedAt` is already set on the conversation row. */
+  /**
+   * `true` when `extra.hydratedAt` is set AND `extra.hydratedShowThinking`
+   * matches the current global `showThinking`. Parent computes this via
+   * `isHydrationFresh(conversation, showThinking)` so this surface is purely
+   * presentational — the source-of-truth for staleness lives on the row.
+   */
   isHydrated: boolean;
+  /**
+   * Current global "Show Thinking" toggle. Forwarded to `cliHistory.hydrate`
+   * so the importer can re-convert the transcript into the requested variant
+   * (`hydrateSession` keys its cache on `(conversationId, normalizedShowThinking)`).
+   * Including this in the effect's deps means toggling Show Thinking while a
+   * transcript is open triggers a fresh hydrate, replacing the cached
+   * messages with the new variant.
+   */
+  showThinking: boolean;
   /**
    * Item 8 will swap this stub for the live ACP / terminal launch. The button
    * stays visible + clickable regardless of hydration phase so the user can
@@ -71,39 +110,44 @@ export type TranscriptViewProps = {
 
 const initialPhase = (isHydrated: boolean): HydrationPhase => (isHydrated ? 'ready' : 'loading');
 
+const MAX_PAGE_SIZE = 10_000;
+
 const TranscriptView: React.FC<TranscriptViewProps> = ({
   conversation_id,
   workspace,
   backend,
   isHydrated,
+  showThinking,
   onResume,
 }) => {
   const { t } = useTranslation();
   const [state, setState] = useState<HydrationState>({ phase: initialPhase(isHydrated) });
-  // Track whether we've already triggered hydrate-on-mount for this conversation,
-  // so SWR re-renders that swap the same boolean back in don't re-fire it.
+  // Bumped after a fresh hydrate inserts new messages into SQLite (status === 'hydrated'
+  // post-mtime-advance). Drives the message-list re-fetch effect below — without
+  // this counter, an already-hydrated open whose source JSONL mtime moved forward
+  // would keep displaying the stale in-memory list because state.phase stays 'ready'.
+  const [messagesRev, setMessagesRev] = useState(0);
+  // Track the (conversation, showThinking) pair we've already requested hydration for,
+  // so React StrictMode double-mounts and SWR re-renders don't fire the IPC twice.
   const hydrateTriggeredRef = useRef<string | null>(null);
-
-  useMessageLstCache(conversation_id);
+  const updateMessageList = useUpdateMessageList();
 
   useEffect(() => {
-    if (isHydrated) {
-      // Source-already-hydrated path. Item 1's incremental sync may later mark the
-      // row stale via mtime, but the in-component check `mtime > hydratedAt` is the
-      // importer's job — we just render what SQLite has.
-      setState({ phase: 'ready' });
-      hydrateTriggeredRef.current = null;
-      return;
-    }
-    const triggerKey = conversation_id;
+    const triggerKey = `${conversation_id}:${showThinking ? '1' : '0'}`;
     if (hydrateTriggeredRef.current === triggerKey) {
       return;
     }
     hydrateTriggeredRef.current = triggerKey;
     let cancelled = false;
-    setState({ phase: 'loading' });
+    // Skeleton appears only when nothing is cached. For already-hydrated rows the
+    // cached transcript renders immediately; the hydrate IPC runs in the background
+    // to do the plan's "mtime check on open" / source-missing detection
+    // (importer.ts hydrateSession) without flashing a loading state.
+    if (!isHydrated) {
+      setState({ phase: 'loading' });
+    }
     ipcBridge.cliHistory.hydrate
-      .invoke({ conversationId: conversation_id })
+      .invoke({ conversationId: conversation_id, showThinking })
       .then((result) => {
         if (cancelled) return;
         if (!result?.success || !result.data) {
@@ -116,11 +160,16 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({
           return;
         }
         if (warning === 'source_missing') {
-          // status was 'cached' — show the cached transcript with a warning banner.
+          // status was 'cached' — show the cached transcript with the warning banner.
           setState({ phase: 'cached_warning' });
           return;
         }
         setState({ phase: 'ready' });
+        if (status === 'hydrated') {
+          // Either first-hydration OR mtime advanced past `hydratedAt` and the
+          // importer re-converted. Bump rev so the message-load effect re-fetches.
+          setMessagesRev((v) => v + 1);
+        }
       })
       .catch((err: unknown) => {
         if (cancelled) return;
@@ -130,7 +179,34 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [conversation_id, isHydrated]);
+  }, [conversation_id, isHydrated, showThinking]);
+
+  // Load DB messages once hydration has settled into a renderable phase, and
+  // again whenever `messagesRev` bumps (re-hydrate after mtime advance). This
+  // replaces a direct `useMessageLstCache` call so the mount-time race
+  // (codex P1 / copilot dup) where the DB read returns empty before the
+  // importer's insert lands cannot leave the transcript blank — `state.phase`
+  // is the gate.
+  useEffect(() => {
+    if (state.phase === 'loading') return;
+    let cancelled = false;
+    void ipcBridge.database.getConversationMessages
+      .invoke({ conversation_id, page: 0, pageSize: MAX_PAGE_SIZE })
+      .then((messages) => {
+        if (cancelled) return;
+        if (Array.isArray(messages)) {
+          updateMessageList(() => messages);
+        }
+      })
+      .catch((err: unknown) => {
+        console.warn('[TranscriptView] failed to load messages from database:', err);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // updateMessageList is a stable callback emitted by createContext factory in hooks.ts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversation_id, state.phase, messagesRev]);
 
   const handleResume = useCallback(() => {
     // TODO(item 8): wire this to the live ACP / terminal launch chosen by the

@@ -68,6 +68,7 @@ vi.mock('@arco-design/web-react', async () => {
 
 import TranscriptView, {
   hasHydratedAt,
+  isHydrationFresh,
   isImportedAcpConversation,
 } from '../../../src/renderer/pages/conversation/components/TranscriptView';
 
@@ -90,6 +91,7 @@ const baseProps = {
   conversation_id: 'conv-abc',
   workspace: '/some/ws',
   backend: 'claude' as const,
+  showThinking: false,
 };
 
 const noop = (): void => undefined;
@@ -174,6 +176,48 @@ describe('hasHydratedAt predicate', () => {
   });
 });
 
+describe('isHydrationFresh predicate (hydratedAt × hydratedShowThinking gate)', () => {
+  it('returns false when hydratedAt is missing', () => {
+    expect(isHydrationFresh(mkConv(), false)).toBe(false);
+  });
+
+  it('returns true when hydratedAt is set + hydratedShowThinking matches current showThinking', () => {
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', hydratedAt: 100, hydratedShowThinking: true },
+    } as unknown as Partial<TChatConversation>);
+    expect(isHydrationFresh(conv, true)).toBe(true);
+  });
+
+  it('returns false when persisted hydratedShowThinking differs from current showThinking', () => {
+    // Hydrated with thinking hidden; user enabled Show Thinking — must re-hydrate.
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', hydratedAt: 100, hydratedShowThinking: false },
+    } as unknown as Partial<TChatConversation>);
+    expect(isHydrationFresh(conv, true)).toBe(false);
+  });
+
+  it('treats undefined hydratedShowThinking as false (importer normalization)', () => {
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', hydratedAt: 100 },
+    } as unknown as Partial<TChatConversation>);
+    expect(isHydrationFresh(conv, false)).toBe(true);
+    expect(isHydrationFresh(conv, true)).toBe(false);
+  });
+
+  it('returns false for null / undefined inputs', () => {
+    expect(isHydrationFresh(undefined, false)).toBe(false);
+    expect(isHydrationFresh(null, false)).toBe(false);
+  });
+
+  it('returns false for non-ACP types even with hydratedAt set', () => {
+    // Note: parent (`isImportedAcpConversation`) gates ACP-only; `isHydrationFresh` is
+    // a freshness check only. But it should still tolerate non-ACP inputs without
+    // throwing, so test defensively.
+    const conv = mkConv({ type: 'gemini' } as unknown as Partial<TChatConversation>);
+    expect(isHydrationFresh(conv, false)).toBe(false);
+  });
+});
+
 // ---------------------------------------------------------------------------
 // TranscriptView DOM tests.
 // ---------------------------------------------------------------------------
@@ -181,6 +225,9 @@ describe('hasHydratedAt predicate', () => {
 describe('TranscriptView (transcript mode surface)', () => {
   beforeEach(() => {
     hydrateInvoke.mockReset();
+    // Default: a quiet `cached` response — no skeleton flash, no rev-bump.
+    // Tests that exercise specific hydration paths override this mock.
+    hydrateInvoke.mockResolvedValue(okCached());
     getConversationMessagesInvoke.mockReset();
     getConversationMessagesInvoke.mockResolvedValue([]);
   });
@@ -220,14 +267,88 @@ describe('TranscriptView (transcript mode surface)', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 
-  it('does NOT call hydrate when isHydrated is true (cached open — re-open is cheap)', async () => {
+  it('always calls hydrate on mount for the mtime / source-missing recheck (plan §Stale Data Handling)', async () => {
+    hydrateInvoke.mockResolvedValue(okCached());
     render(<TranscriptView {...baseProps} isHydrated={true} />);
-    // useEffect should run synchronously after render; give it a microtask flush.
     await act(async () => {
       await Promise.resolve();
     });
-    expect(hydrateInvoke).not.toHaveBeenCalled();
+    // For an already-hydrated row the hydrate IPC still runs — that's how the importer
+    // detects `mtime > hydratedAt` and `warning: 'source_missing'`. Skeleton stays hidden
+    // because we have cached content to render.
+    expect(hydrateInvoke).toHaveBeenCalledTimes(1);
+    expect(hydrateInvoke).toHaveBeenCalledWith({ conversationId: 'conv-abc', showThinking: false });
+    expect(screen.queryByTestId('transcript-skeleton')).toBeNull();
     expect(screen.getByTestId('mock-message-list')).toBeInTheDocument();
+  });
+
+  it('forwards the current showThinking option to cliHistory.hydrate', async () => {
+    hydrateInvoke.mockResolvedValue(okCached());
+    render(<TranscriptView {...baseProps} isHydrated={true} showThinking={true} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).toHaveBeenCalledWith({ conversationId: 'conv-abc', showThinking: true });
+  });
+
+  it('re-hydrates when showThinking changes (cached cache key includes the option)', async () => {
+    hydrateInvoke.mockResolvedValue(okCached());
+    const { rerender } = render(<TranscriptView {...baseProps} isHydrated={true} showThinking={false} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).toHaveBeenCalledTimes(1);
+    expect(hydrateInvoke).toHaveBeenLastCalledWith({ conversationId: 'conv-abc', showThinking: false });
+
+    // User toggles "Show Thinking" — parent re-renders. Hydrate must run again so the
+    // importer can re-convert the transcript into the requested variant.
+    rerender(<TranscriptView {...baseProps} isHydrated={false} showThinking={true} />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).toHaveBeenCalledTimes(2);
+    expect(hydrateInvoke).toHaveBeenLastCalledWith({ conversationId: 'conv-abc', showThinking: true });
+  });
+
+  it('refreshes the in-memory message list after status=hydrated (mtime advance re-converts cached row)', async () => {
+    hydrateInvoke.mockResolvedValue(okHydrated());
+    render(<TranscriptView {...baseProps} isHydrated={true} />);
+    // Initial fetch fires when state.phase is already 'ready' from mount.
+    await waitFor(() => {
+      expect(getConversationMessagesInvoke).toHaveBeenCalled();
+    });
+    // After the mtime-recheck hydrate resolves with status='hydrated', the rev bump
+    // forces a second fetch so newly-inserted messages from the importer batch
+    // replace whatever the first fetch read.
+    await waitFor(() => {
+      expect(getConversationMessagesInvoke.mock.calls.length).toBeGreaterThanOrEqual(2);
+    });
+    expect(getConversationMessagesInvoke).toHaveBeenLastCalledWith(
+      expect.objectContaining({ conversation_id: 'conv-abc', page: 0 })
+    );
+  });
+
+  it('does NOT call getConversationMessages while the skeleton is showing (gates DB-read on phase)', async () => {
+    let resolveHydrate: (v: HydrateResultLike) => void = noop;
+    hydrateInvoke.mockImplementation(
+      () =>
+        new Promise<HydrateResultLike>((resolve) => {
+          resolveHydrate = resolve;
+        })
+    );
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    // Skeleton phase — DB read deferred to avoid caching an empty list before
+    // the importer's INSERT lands (codex P1 / copilot dup).
+    expect(getConversationMessagesInvoke).not.toHaveBeenCalled();
+    expect(screen.getByTestId('transcript-skeleton')).toBeInTheDocument();
+
+    await act(async () => {
+      resolveHydrate(okHydrated());
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(getConversationMessagesInvoke).toHaveBeenCalled();
+    });
   });
 
   it('shows the skeleton while hydration is in progress', async () => {
