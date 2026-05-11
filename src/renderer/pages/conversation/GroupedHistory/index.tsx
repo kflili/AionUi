@@ -52,16 +52,22 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   }, [id, setActiveConversation]);
 
   const sidebarFilter = useSidebarFilter();
+  // Suppress the filter when the sidebar is collapsed — the filter bar isn't
+  // rendered in icon-only mode (no horizontal room), so applying a narrowing
+  // filter there would leave the sidebar mysteriously empty with no visible
+  // affordance to clear it. Filter state is preserved in the hook so that
+  // expanding restores the previous narrowed view.
+  const filterActive = sidebarFilter.visible && !collapsed;
 
   const {
-    conversations,
+    visibleConversations,
     isConversationGenerating,
     hasCompletionUnread,
     expandedWorkspaces,
     pinnedConversations,
     timelineSections,
     handleToggleWorkspace,
-  } = useConversations(sidebarFilter.visible ? sidebarFilter.criteria : undefined);
+  } = useConversations(filterActive ? sidebarFilter.criteria : undefined);
 
   const {
     selectedConversationIds,
@@ -70,7 +76,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     allSelected,
     toggleSelectedConversation,
     handleToggleSelectAll,
-  } = useBatchSelection(batchMode, conversations);
+  } = useBatchSelection(batchMode, visibleConversations);
 
   const {
     renameModalVisible,
@@ -112,7 +118,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     handleBatchExport,
     handleConfirmExport,
   } = useExport({
-    conversations,
+    conversations: visibleConversations,
     selectedConversationIds,
     setSelectedConversationIds,
     onBatchModeChange,

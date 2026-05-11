@@ -12,7 +12,10 @@ import type { TChatConversation } from '@/common/config/storage';
  * - `'all'`        — pass-through; no source narrowing
  * - `'claude_code'` — only `conversation.source === 'claude_code'`
  * - `'copilot'`     — only `conversation.source === 'copilot'`
- * - `'native'`      — rows authored inside AionUi: `source === 'aionui'` OR `source === undefined`
+ * - `'native'`      — rows authored inside AionUi: `source === 'aionui'`,
+ *                     `undefined`, or `null` (SQLite `source` column is
+ *                     nullable; `rowToConversation` passes it through verbatim,
+ *                     so older rows reach the renderer with a literal `null`).
  *
  * Conversations carrying any other source string (legacy `'telegram'`, `'lark'`,
  * `'dingtalk'`, or future entries) are present under `'all'` only — they are
@@ -44,7 +47,12 @@ const getWorkspace = (conversation: TChatConversation): string | undefined => {
 };
 
 const matchesSource = (conversation: TChatConversation, source: SidebarFilterSource): boolean => {
-  const convSource = conversation.source;
+  // SQLite's `source` column is nullable and `rowToConversation` passes the
+  // value through verbatim, so at runtime `convSource` can be a `string`,
+  // `undefined`, OR a literal `null` — even though the TS type doesn't
+  // expose null. Widen for the comparison so the Native filter admits the
+  // legacy null shape.
+  const convSource = conversation.source as string | null | undefined;
   switch (source) {
     case 'all':
       return true;
@@ -53,7 +61,7 @@ const matchesSource = (conversation: TChatConversation, source: SidebarFilterSou
     case 'copilot':
       return convSource === 'copilot';
     case 'native':
-      return convSource === 'aionui' || convSource === undefined;
+      return convSource === 'aionui' || convSource == null;
     default:
       return true;
   }

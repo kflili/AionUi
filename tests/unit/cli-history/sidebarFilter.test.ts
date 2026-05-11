@@ -220,6 +220,15 @@ describe('applySidebarFilter — defensive guards', () => {
     expect(idsOf(applySidebarFilter([nativeUndefined], criteria({ source: 'native' })))).toEqual(['n-undef']);
   });
 
+  it('treats source: null as Native (SQLite nullable source column reaches the renderer verbatim)', () => {
+    // The TS type for `source` doesn't include `null`, but the SQLite column
+    // IS nullable and `rowToConversation` passes the value through unchanged,
+    // so legacy rows arrive with a literal `null`. Native must admit them.
+    const conv = makeConv({ id: 'n-null', name: 'Pre-source-field chat' });
+    (conv as unknown as { source: unknown }).source = null;
+    expect(idsOf(applySidebarFilter([conv], criteria({ source: 'native' })))).toEqual(['n-null']);
+  });
+
   it('excludes unknown source strings from Native (e.g., "telegram" falls through to All-only)', () => {
     // Pinned policy: outlier sources appear under "All" only — not under
     // Native — so the filter label remains literally true ("native" means
