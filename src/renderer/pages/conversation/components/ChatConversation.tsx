@@ -105,6 +105,8 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
           const nextExtra =
             source.type === 'acp'
               ? (() => {
+                  const baseExtra =
+                    source.extra && typeof source.extra === 'object' ? (source.extra as Record<string, unknown>) : {};
                   const {
                     acpSessionId: _acpSessionId,
                     acpSessionUpdatedAt: _acpSessionUpdatedAt,
@@ -112,7 +114,7 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
                     messageCount: _messageCount,
                     importMeta: _importMeta,
                     ...rest
-                  } = source.extra as Record<string, unknown>;
+                  } = baseExtra;
                   return rest;
                 })()
               : source.extra;
