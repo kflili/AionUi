@@ -60,6 +60,8 @@
     "exportSuccess": "Export succeeded",
     "exportCanceled": "Export canceled",
     "exportFailed": "Export failed",
+    "exportSourceMissingWarning": "Source file not found — exporting last imported transcript.",
+    "exportSourceUnavailable": "Cannot export: transcript not yet loaded and source file is missing.",
     "pin": "Pin",
     "unpin": "Unpin",
     "pinned": "Pinned",

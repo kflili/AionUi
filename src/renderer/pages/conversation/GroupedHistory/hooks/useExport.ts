@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
+import { useAgentCliConfig } from '@renderer/hooks/agent/useAgentCliConfig';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { Message } from '@arco-design/web-react';
 import { useCallback, useRef, useState } from 'react';
@@ -17,6 +18,7 @@ import {
   buildConversationJson,
   buildConversationMarkdown,
   buildTopicFolderName,
+  ensureHydratedForExport,
   EXPORT_IO_TIMEOUT_MS,
   formatTimestamp,
   joinFilePath,
@@ -45,6 +47,18 @@ export const useExport = ({
   const [currentExportRequestId, setCurrentExportRequestId] = useState<string | null>(null);
   const exportCanceledRef = useRef(false);
   const { t } = useTranslation();
+  // `useAgentCliConfig()` returns `undefined` while the initial ConfigStorage
+  // fetch is in flight, and `{}` (an empty config) once loaded with no stored
+  // preference. We only treat the in-flight `undefined` as "still loading"
+  // (helper bails to avoid clobbering the SQLite cache variant); an empty
+  // loaded config means the user has never toggled Show Thinking, in which
+  // case we use `false` — the converter's default and the value that
+  // matches the importer's `normalizedShowThinking` for unconfigured rows.
+  // Mirrors `ChatConversation`'s `agentCliConfig?.showThinking ?? false`
+  // pattern (which only resolves the loaded-vs-loading split implicitly
+  // because its caller already guards against `undefined`).
+  const agentCli = useAgentCliConfig();
+  const showThinkingForHydrate = agentCli === undefined ? undefined : (agentCli.showThinking ?? false);
 
   const fileExists = useCallback(async (filePath: string): Promise<boolean> => {
     try {
@@ -162,6 +176,49 @@ export const useExport = ({
     }
   }, []);
 
+  // Imported (CLI-history) conversations may be Phase-1 metadata only at
+  // export time — no messages in SQLite yet, or the cached variant doesn't
+  // match the current Show Thinking preference / source file path. Auto-
+  // hydrate via the existing `cliHistory.hydrate` IPC contract from item 2
+  // (mtime check + coalescing are handled inside that primitive — we never
+  // add a parallel hydration code path). The helper itself decides whether
+  // the IPC actually fires by mirroring `TranscriptView.isHydrationFresh`.
+  // The invoke is wrapped in `withTimeout` (same primitive as the other
+  // export IPCs) so a stalled hydrate cannot pin the export modal open
+  // forever; we give it 8× the regular IO budget because large JSONLs can
+  // legitimately take several seconds to convert.
+  const ensureHydrationForExport = useCallback(
+    async (conversation: TChatConversation): Promise<boolean> => {
+      const outcome = await ensureHydratedForExport(conversation, showThinkingForHydrate, (args) =>
+        withTimeout(
+          ipcBridge.cliHistory.hydrate.invoke(args),
+          EXPORT_IO_TIMEOUT_MS * 8,
+          `cliHistory.hydrate:${args.conversationId}`
+        )
+      );
+      switch (outcome.status) {
+        case 'skipped':
+        case 'hydrated':
+          return true;
+        case 'cached_warning':
+          // Source JSONL missing but SQLite has a prior transcript — export
+          // the cached messages with a non-blocking warning per plan §"Missing
+          // source files" (line 257).
+          Message.warning(t('conversation.history.exportSourceMissingWarning'));
+          return true;
+        case 'unavailable':
+          // Never hydrated AND source file is gone — nothing to export.
+          Message.error(t('conversation.history.exportSourceUnavailable'));
+          return false;
+        case 'failed':
+        default:
+          Message.error(t('conversation.history.exportFailed'));
+          return false;
+      }
+    },
+    [showThinkingForHydrate, t]
+  );
+
   const fetchConversationWorkspaceTree = useCallback(async (conversation: TChatConversation) => {
     const workspace = conversation.extra?.workspace;
     if (!workspace) {
@@ -267,6 +324,10 @@ export const useExport = ({
       if (exportTask.mode === 'single') {
         throwIfCanceled();
         const conversation = exportTask.conversation;
+        if (!(await ensureHydrationForExport(conversation))) {
+          return;
+        }
+        throwIfCanceled();
         const shortTopicName = sanitizeFileName(conversation.name || conversation.id).slice(0, 40) || 'topic';
         const zipFileName = `${shortTopicName}-${formatTimestamp()}`;
         const exportPath = await createUniqueFilePath(directory, zipFileName, 'zip');
@@ -299,6 +360,10 @@ export const useExport = ({
 
       const files: ExportZipFile[] = [];
       for (const conversation of selectedConversations) {
+        throwIfCanceled();
+        if (!(await ensureHydrationForExport(conversation))) {
+          return;
+        }
         throwIfCanceled();
         const topicFiles = await buildConversationExportFiles(conversation, buildTopicFolderName(conversation));
         throwIfCanceled();
@@ -336,6 +401,7 @@ export const useExport = ({
     buildConversationExportFiles,
     conversations,
     createUniqueFilePath,
+    ensureHydrationForExport,
     exportTargetPath,
     exportTask,
     onBatchModeChange,

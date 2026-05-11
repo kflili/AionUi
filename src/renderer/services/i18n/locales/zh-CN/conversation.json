@@ -60,6 +60,8 @@
     "exportSuccess": "导出成功",
     "exportCanceled": "已取消导出",
     "exportFailed": "导出失败",
+    "exportSourceMissingWarning": "未找到源文件 — 正在导出最后一次缓存的会话记录。",
+    "exportSourceUnavailable": "无法导出：会话记录尚未加载，且源文件已丢失。",
     "pin": "置顶",
     "unpin": "取消置顶",
     "pinned": "已置顶",
