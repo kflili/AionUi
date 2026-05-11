@@ -173,7 +173,16 @@ export const SECTION_DEFAULT_LIMIT: Record<SectionTimelineKey, number> = {
   'conversation.history.earlier': 20,
 };
 
-export const getSectionDefaultLimit = (timelineKey: SectionTimelineKey): number => SECTION_DEFAULT_LIMIT[timelineKey];
+export const getSectionDefaultLimit = (timelineKey: SectionTimelineKey): number => {
+  const limit = SECTION_DEFAULT_LIMIT[timelineKey];
+  if (limit === undefined) {
+    // Fail-fast: a runtime miss means a new SectionTimelineKey was added without
+    // a matching SECTION_DEFAULT_LIMIT entry. Surfaces immediately instead of
+    // silently propagating NaN through bumpBudget arithmetic.
+    throw new Error(`getSectionDefaultLimit: no default for timeline key ${String(timelineKey)}`);
+  }
+  return limit;
+};
 
 /**
  * Row count contributed by a timeline item to its section's visible-row budget.

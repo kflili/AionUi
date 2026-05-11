@@ -73,6 +73,7 @@ const STORAGE_KEY = 'aionui_workspace_expansion';
 const makeWorkspaceSection = (workspaces: string[]): TimelineSection[] => [
   {
     timeline: 'conversation.history.today',
+    timelineKey: 'conversation.history.today',
     items: workspaces.map((ws) => ({
       type: 'workspace' as const,
       time: Date.now(),
@@ -89,6 +90,7 @@ const makeWorkspaceSection = (workspaces: string[]): TimelineSection[] => [
 const makeMultiSectionWorkspace = (workspace: string): TimelineSection[] => [
   {
     timeline: 'conversation.history.today',
+    timelineKey: 'conversation.history.today',
     items: [
       {
         type: 'workspace' as const,
@@ -99,6 +101,7 @@ const makeMultiSectionWorkspace = (workspace: string): TimelineSection[] => [
   },
   {
     timeline: 'conversation.history.earlier',
+    timelineKey: 'conversation.history.earlier',
     items: [
       {
         type: 'workspace' as const,
