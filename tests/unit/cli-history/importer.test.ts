@@ -1112,6 +1112,62 @@ describe('hydrateSession (Phase 2)', () => {
     expect(texts2.some((t) => t.includes('reasoning step'))).toBe(false);
     expect(texts2.some((t) => t.includes('visible response'))).toBe(true);
   });
+
+  it('invalidates cache when showThinking flips between calls (even with unchanged mtime)', async () => {
+    // First hydration stores messages without thinking blocks.
+    seedImportedRow({ id: 'conv-1', sourceFilePath: '/tmp/s.jsonl' });
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-10T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'reasoning step', signature: 'sig' },
+            { type: 'text', text: 'visible response' },
+          ],
+        },
+      }),
+    ].join('\n');
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+
+    const first = await hydrateSession('conv-1', { showThinking: false });
+    expect(first.status).toBe('hydrated');
+    const extraAfterFirst = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extraAfterFirst.hydratedShowThinking).toBe(false);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+
+    // Second call with showThinking=true and unchanged mtime: must NOT serve cache.
+    insertMessagesSpy.mockClear();
+    const second = await hydrateSession('conv-1', { showThinking: true });
+    expect(second.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extraAfterSecond = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extraAfterSecond.hydratedShowThinking).toBe(true);
+
+    // Third call with the same showThinking=true and unchanged mtime: cache hit.
+    insertMessagesSpy.mockClear();
+    const third = await hydrateSession('conv-1', { showThinking: true });
+    expect(third.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+
+    // Fourth call with showThinking omitted (default): treated equivalent to false → invalidates again.
+    insertMessagesSpy.mockClear();
+    const fourth = await hydrateSession('conv-1');
+    expect(fourth.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extraAfterFourth = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extraAfterFourth.hydratedShowThinking).toBe(false);
+
+    // Fifth call with showThinking=false explicit: cache hit (equivalent to undefined).
+    insertMessagesSpy.mockClear();
+    const fifth = await hydrateSession('conv-1', { showThinking: false });
+    expect(fifth.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -8,12 +8,12 @@ Quick status of each step in the [plan index](./2026-03-19-plan-index.md).
 
 ## Overview
 
-| Step | Feature                 | Status         | PRs    |
-| ---- | ----------------------- | -------------- | ------ |
-| 0.5  | Copy Chat Reference     | Done           | #2     |
-| 1    | Terminal Wrapper Mode   | Done           | #5, #9 |
-| 2    | CLI History Integration | Partially done | #5     |
-| 3    | Knowledge Consolidation | Not started    | —      |
+| Step | Feature                 | Status                                           | PRs          |
+| ---- | ----------------------- | ------------------------------------------------ | ------------ |
+| 0.5  | Copy Chat Reference     | Done                                             | #2           |
+| 1    | Terminal Wrapper Mode   | Done                                             | #5, #9       |
+| 2    | CLI History Integration | Phase 1 + 2 done (transcript-mode UI + rest WIP) | #5, #18, #19 |
+| 3    | Knowledge Consolidation | Not started                                      | —            |
 
 ---
 

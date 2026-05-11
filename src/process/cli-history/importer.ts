@@ -209,6 +209,7 @@ type AcpImportedExtra = {
   messageCount?: number;
   hydratedAt?: number;
   hydratedSourceFilePath?: string;
+  hydratedShowThinking?: boolean;
   importMeta: {
     autoNamed: boolean;
     generatedName?: string;
@@ -770,10 +771,12 @@ const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
  * Concurrent callers for the same `conversationId` share one in-flight
  * promise via `inFlightHydrate`. The first caller's `options.showThinking`
  * value wins for the duration of the in-flight pass — subsequent callers
- * see the cached result regardless of their own option. A renderer that
- * needs to flip thinking visibility after hydration must force a fresh
- * call after the source `mtime` changes (or after item 3's transcript-mode
- * UI adds a render-time filter, which would be the cleaner long-term path).
+ * receive that result. After the in-flight pass settles, a new caller with
+ * a different `showThinking` value invalidates the cache (because the
+ * stored variant ≠ the request's variant) and re-hydrates so SQLite
+ * reflects the requested variant. Item 3's render-time filter remains
+ * the cleaner long-term path — at that point this cache key can drop the
+ * `showThinking` axis entirely.
  *
  * Hydration does NOT enqueue onto the per-source `operationChain` —
  * hydration is per-conversation, scan / disable / reenable are per-source.
@@ -832,12 +835,22 @@ async function runHydrate(conversationId: string, options: ConverterOptions): Pr
   const hydratedAt = parseTimestampOr(extra.hydratedAt, 0);
   const hydratedSourceFilePath =
     typeof extra.hydratedSourceFilePath === 'string' ? extra.hydratedSourceFilePath : undefined;
-  // Prior hydration counts only if it was against the CURRENT source path. A
-  // Phase-1 scan that refreshes `sourceFilePath` (file moved on disk) invalidates
-  // the cache regardless of mtime. A pre-Phase-2 row that has `existingCount > 0`
-  // but no `hydratedSourceFilePath` recorded does NOT match — we cannot prove the
-  // existing messages came from the current path, so we re-hydrate to be safe.
-  const hasPriorHydration = (hydratedAt > 0 || existingCount > 0) && hydratedSourceFilePath === sourceFilePath;
+  // Normalize `showThinking` so callers that omit the option don't spuriously
+  // invalidate the cache vs callers that pass `false` (the converter's default).
+  const requestedShowThinking = options.showThinking === true;
+  const storedShowThinking = extra.hydratedShowThinking === true;
+  // Prior hydration counts only if it was against the CURRENT source path AND
+  // produced messages under the CURRENT showThinking variant. A Phase-1 scan
+  // that refreshes `sourceFilePath` (file moved on disk) invalidates the cache
+  // regardless of mtime; toggling the renderer's "show thinking" setting
+  // similarly invalidates the cache so SQLite reflects the requested variant.
+  // A pre-Phase-2 row that has `existingCount > 0` but no `hydratedSourceFilePath`
+  // recorded does NOT match — we cannot prove the existing messages came from
+  // the current path, so we re-hydrate to be safe.
+  const hasPriorHydration =
+    (hydratedAt > 0 || existingCount > 0) &&
+    hydratedSourceFilePath === sourceFilePath &&
+    storedShowThinking === requestedShowThinking;
 
   if (mtimeMs === null) {
     if (hasPriorHydration) {
@@ -885,6 +898,7 @@ async function runHydrate(conversationId: string, options: ConverterOptions): Pr
     ...freshExtra,
     hydratedAt: mtimeMs,
     hydratedSourceFilePath: sourceFilePath,
+    hydratedShowThinking: requestedShowThinking,
   };
 
   let conv2: TChatConversation = {
