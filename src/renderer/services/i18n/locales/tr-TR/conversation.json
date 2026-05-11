@@ -241,6 +241,13 @@
     },
     "unavailable": "Geçmiş görüntülenemiyor — kaynak dosya bulunamadı.",
     "cachedWarning": "Kaynak dosya bulunamadı — son içe aktarılan geçmiş gösteriliyor.",
-    "error": "Geçmiş yüklenemedi. Oturumu yeniden açmayı deneyin."
+    "error": "Geçmiş yüklenemedi. Oturumu yeniden açmayı deneyin.",
+    "resumeError": {
+      "title": "Oturum sürdürülemiyor",
+      "unsupportedBackend": "Sürdürme yalnızca Claude Code ve Copilot oturumları için desteklenir.",
+      "sessionMissing": "Sürdürülemiyor — özgün oturum kimliği eksik.",
+      "cwdMissing": "Sürdürülemiyor — çalışma klasörü bilinmiyor.",
+      "sourceMissing": "Sürdürülemiyor — geçmiş kaynak dosyası bulunamadı."
+    }
   }
 }

@@ -239,6 +239,13 @@
     },
     "unavailable": "无法显示会话记录 — 找不到源文件。",
     "cachedWarning": "找不到源文件 — 显示最后一次导入的会话记录。",
-    "error": "无法加载会话记录，请尝试重新打开会话。"
+    "error": "无法加载会话记录，请尝试重新打开会话。",
+    "resumeError": {
+      "title": "无法继续此会话",
+      "unsupportedBackend": "仅支持继续 Claude Code 和 Copilot 的会话。",
+      "sessionMissing": "无法继续 — 原始会话 ID 缺失。",
+      "cwdMissing": "无法继续 — 工作目录未知。",
+      "sourceMissing": "无法继续 — 找不到会话记录源文件。"
+    }
   }
 }

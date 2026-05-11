@@ -6,7 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { AcpBackend } from '@/common/types/acpTypes';
-import type { TChatConversation } from '@/common/config/storage';
+import type { ConversationMode, TChatConversation } from '@/common/config/storage';
 import FlexFullContainer from '@renderer/components/layout/FlexFullContainer';
 import MessageList from '@renderer/pages/conversation/Messages/MessageList';
 import { MessageListProvider, useUpdateMessageList } from '@renderer/pages/conversation/Messages/hooks';
@@ -17,7 +17,7 @@ import { Play } from '@icon-park/react';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
-type HydrationPhase = 'loading' | 'ready' | 'cached_warning' | 'unavailable' | 'error';
+export type HydrationPhase = 'loading' | 'ready' | 'cached_warning' | 'unavailable' | 'error';
 
 type HydrationState = {
   phase: HydrationPhase;
@@ -53,6 +53,75 @@ export const hasHydratedAt = (conversation: TChatConversation | undefined | null
       ? (conversation.extra as Record<string, unknown>)
       : null;
   return typeof extra?.hydratedAt === 'number';
+};
+
+/**
+ * Tracks whether an imported session has been resumed at least once. Item 8
+ * stamps `extra.resumedAt` (Date.now) when the user clicks "Resume this session"
+ * AND pre-flight validation passes — flipping the row from read-only transcript
+ * mode into the live ACP/terminal route on subsequent renders / opens.
+ *
+ * Keeping `extra.sourceFilePath` intact preserves the importer's dedup invariant
+ * (`${source}::id:${acpSessionId}`) and the CC/CP source badge, so the row is
+ * still recognized as imported from CLI history — it just no longer routes
+ * through TranscriptView.
+ */
+export const isResumedImportedSession = (conversation: TChatConversation | undefined | null): boolean => {
+  if (!conversation || conversation.type !== 'acp') return false;
+  const extra =
+    conversation.extra && typeof conversation.extra === 'object'
+      ? (conversation.extra as Record<string, unknown>)
+      : null;
+  if (!extra) return false;
+  return typeof extra.resumedAt === 'number';
+};
+
+/**
+ * Pre-flight validation for a "Resume this session" click on an imported CLI
+ * history row. Pure function so the parent component's `useCallback` handler
+ * stays small and the branches are unit-testable without rendering the DOM.
+ *
+ * On success returns the `extra` patch that `ipcBridge.conversation.update`
+ * should merge (callers pass `mergeExtra: true`). On failure returns the i18n
+ * key suffix the parent shows via `Message.error(t(...))` while leaving the
+ * transcript surface mounted and read-only (plan line 465).
+ */
+export type ResumeErrorKey = 'unsupportedBackend' | 'sessionMissing' | 'cwdMissing' | 'sourceMissing';
+
+export type ResumeValidationResult =
+  | { ok: true; updates: { extra: { resumedAt: number; currentMode: ConversationMode; terminalSwitchedAt?: number } } }
+  | { ok: false; errorKey: ResumeErrorKey };
+
+export const validateResumeRequest = (
+  conversation: TChatConversation | undefined | null,
+  defaultMode: ConversationMode | undefined,
+  phase: HydrationPhase,
+  now: number
+): ResumeValidationResult => {
+  // `phase === 'unavailable'` means the importer reported `status: 'unavailable'`
+  // — source JSONL is gone AND nothing is cached. Even if `acpSessionId` is
+  // present, the live backend cannot resume from a session whose record is
+  // missing on disk, so we surface the dedicated `sourceMissing` error rather
+  // than let the live launch fail opaquely after the gate flips.
+  if (phase === 'unavailable') return { ok: false, errorKey: 'sourceMissing' };
+  const extra =
+    conversation?.extra && typeof conversation.extra === 'object'
+      ? (conversation.extra as Record<string, unknown>)
+      : {};
+  const backend = typeof extra.backend === 'string' ? extra.backend : undefined;
+  // Codex resume is V2-deferred (plan line 357). `undefined` backend is also
+  // unsupported — a row without a backend tag can't be routed to AcpChat or
+  // TerminalChat. Both fail with the same user-visible message.
+  if (backend !== 'claude' && backend !== 'copilot') return { ok: false, errorKey: 'unsupportedBackend' };
+  const acpSessionId = typeof extra.acpSessionId === 'string' ? extra.acpSessionId : '';
+  if (!acpSessionId) return { ok: false, errorKey: 'sessionMissing' };
+  const workspace = typeof extra.workspace === 'string' ? extra.workspace : '';
+  if (!workspace) return { ok: false, errorKey: 'cwdMissing' };
+  const currentMode: ConversationMode = defaultMode === 'terminal' ? 'terminal' : 'acp';
+  if (currentMode === 'terminal') {
+    return { ok: true, updates: { extra: { resumedAt: now, currentMode, terminalSwitchedAt: now } } };
+  }
+  return { ok: true, updates: { extra: { resumedAt: now, currentMode } } };
 };
 
 /**
@@ -118,11 +187,15 @@ export type TranscriptViewProps = {
    */
   showThinking: boolean | undefined;
   /**
-   * Item 8 will swap this stub for the live ACP / terminal launch. The button
-   * stays visible + clickable regardless of hydration phase so the user can
-   * always retry; the handler decides what to do.
+   * Item 8 wires this to the live ACP / terminal launch. The button stays
+   * visible + clickable regardless of hydration phase so the user can always
+   * retry; the handler decides what to do. The current `phase` is threaded so
+   * the parent's pre-flight check can short-circuit on `phase === 'unavailable'`
+   * (source JSONL gone AND nothing cached) and show the dedicated
+   * `transcript.resumeError.sourceMissing` message rather than letting the live
+   * backend fail opaquely after the route gate flips.
    */
-  onResume?: () => void;
+  onResume?: (phase: HydrationPhase) => void;
 };
 
 const initialPhase = (isHydrated: boolean): HydrationPhase => (isHydrated ? 'ready' : 'loading');
@@ -238,12 +311,11 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({
   }, [conversation_id, state.phase, messagesRev]);
 
   const handleResume = useCallback(() => {
-    // TODO(item 8): wire this to the live ACP / terminal launch chosen by the
-    // Step 1 default-mode toggle. Until then the gate is intentionally
-    // user-driven — the button is visible + clickable, but no live surface
-    // mounts as a side-effect of opening a transcript.
-    onResume?.();
-  }, [onResume]);
+    // Pass the current hydration phase up so the parent can detect
+    // `phase === 'unavailable'` (source gone + no cache) and surface the
+    // dedicated `sourceMissing` error before mutating the route.
+    onResume?.(state.phase);
+  }, [onResume, state.phase]);
 
   const isLoading = state.phase === 'loading';
   const showCachedBanner = state.phase === 'cached_warning';
