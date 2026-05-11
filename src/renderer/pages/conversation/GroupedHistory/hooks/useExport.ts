@@ -6,6 +6,7 @@
 
 import { ipcBridge } from '@/common';
 import type { TChatConversation } from '@/common/config/storage';
+import { useAgentCliConfig } from '@renderer/hooks/agent/useAgentCliConfig';
 import { isElectronDesktop } from '@/renderer/utils/platform';
 import { Message } from '@arco-design/web-react';
 import { useCallback, useRef, useState } from 'react';
@@ -46,6 +47,14 @@ export const useExport = ({
   const [currentExportRequestId, setCurrentExportRequestId] = useState<string | null>(null);
   const exportCanceledRef = useRef(false);
   const { t } = useTranslation();
+  // `useAgentCliConfig()` returns `undefined` while the initial ConfigStorage
+  // fetch is in flight. We propagate that `undefined` into the hydration
+  // helper so it can refuse to call the IPC with a stale fallback —
+  // hydrate's cache key includes `showThinking` (importer.ts §hydrateSession)
+  // and calling with the wrong value would overwrite the SQLite cache
+  // variant. Mirrors `TranscriptView`'s `showThinking === undefined` gate.
+  const agentCli = useAgentCliConfig();
+  const showThinkingForHydrate = agentCli?.showThinking;
 
   const fileExists = useCallback(async (filePath: string): Promise<boolean> => {
     try {
@@ -163,14 +172,26 @@ export const useExport = ({
     }
   }, []);
 
-  // Imported (CLI-history) conversations may be Phase-1 metadata only at export
-  // time — no messages in SQLite yet. Auto-hydrate via the existing
-  // `cliHistory.hydrate` IPC contract from item 2 (mtime check + coalescing
-  // are handled inside that primitive — we never add a parallel hydration
-  // code path). Returns true if the export should proceed for this row.
+  // Imported (CLI-history) conversations may be Phase-1 metadata only at
+  // export time — no messages in SQLite yet, or the cached variant doesn't
+  // match the current Show Thinking preference / source file path. Auto-
+  // hydrate via the existing `cliHistory.hydrate` IPC contract from item 2
+  // (mtime check + coalescing are handled inside that primitive — we never
+  // add a parallel hydration code path). The helper itself decides whether
+  // the IPC actually fires by mirroring `TranscriptView.isHydrationFresh`.
+  // The invoke is wrapped in `withTimeout` (same primitive as the other
+  // export IPCs) so a stalled hydrate cannot pin the export modal open
+  // forever; we give it 8× the regular IO budget because large JSONLs can
+  // legitimately take several seconds to convert.
   const ensureHydrationForExport = useCallback(
     async (conversation: TChatConversation): Promise<boolean> => {
-      const outcome = await ensureHydratedForExport(conversation, (args) => ipcBridge.cliHistory.hydrate.invoke(args));
+      const outcome = await ensureHydratedForExport(conversation, showThinkingForHydrate, (args) =>
+        withTimeout(
+          ipcBridge.cliHistory.hydrate.invoke(args),
+          EXPORT_IO_TIMEOUT_MS * 8,
+          `cliHistory.hydrate:${args.conversationId}`
+        )
+      );
       switch (outcome.status) {
         case 'skipped':
         case 'hydrated':
@@ -191,7 +212,7 @@ export const useExport = ({
           return false;
       }
     },
-    [t]
+    [showThinkingForHydrate, t]
   );
 
   const fetchConversationWorkspaceTree = useCallback(async (conversation: TChatConversation) => {

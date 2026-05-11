@@ -158,10 +158,14 @@ export const buildConversationJson = (conversation: TChatConversation, messages:
 // `cliHistory.hydrate` IPC contract from item 2 — the importer's coalescing
 // + mtime-check primitive — never adds a parallel hydration code path.
 //
-// Cached-and-source-present conversations (`extra.hydratedAt` already set)
-// skip the IPC to avoid the JSONL re-read on the export hot path. The mtime
-// check / cached-but-source-missing detection only runs for rows that were
-// never hydrated.
+// Skip-the-IPC fast path: only when the row's cached hydration is current
+// along ALL three keys the importer uses to gate cache validity
+// (`importer.ts §hydrateSession`) — `hydratedAt`, `hydratedSourceFilePath`,
+// and `hydratedShowThinking`. This mirrors `TranscriptView.isHydrationFresh`
+// so the two surfaces stay consistent. Anything stale (importer moved the
+// source pointer via incremental scan, user toggled Show Thinking, JSONL
+// rewritten) goes through hydrate; the IPC's own mtime check then decides
+// whether a JSONL re-read is needed.
 
 type HydrateResponseData = {
   status: 'hydrated' | 'cached' | 'unavailable';
@@ -175,32 +179,68 @@ type HydrateResponse = {
   msg?: string;
 };
 
-export type HydrateInvoker = (args: { conversationId: string }) => Promise<HydrateResponse>;
+export type HydrateInvokerArgs = { conversationId: string; showThinking: boolean };
+export type HydrateInvoker = (args: HydrateInvokerArgs) => Promise<HydrateResponse>;
 
 export type EnsureHydratedOutcome =
-  | { status: 'skipped' } // native conversation, or already hydrated — IPC not called
+  | { status: 'skipped' } // native conversation, or hydration cache is fresh — IPC not called
   | { status: 'hydrated' } // freshly hydrated; export proceeds
   | { status: 'cached_warning' } // hydrate returned cached + source_missing; export proceeds with warning
-  | { status: 'unavailable'; message?: string } // never hydrated and source file missing; abort
-  | { status: 'failed'; message?: string }; // IPC error or success=false; abort
+  | { status: 'unavailable' } // never hydrated and source file missing; abort
+  | { status: 'failed'; message?: string }; // IPC error, success=false, missing data, or showThinking undefined; abort
+
+/**
+ * Mirrors `TranscriptView.isHydrationFresh` — kept in lock-step with that
+ * function so the export hot-path uses the same cache-validity rules as the
+ * transcript surface. The importer (`hydrateSession`) keys its cache on
+ * `(conversationId, normalizedShowThinking)` and gates validity on matching
+ * `hydratedSourceFilePath`, so all three fields must align before we can skip
+ * the IPC and trust the SQLite messages.
+ */
+const isHydrationFreshForExport = (conversation: TChatConversation, showThinking: boolean): boolean => {
+  const extra =
+    conversation.extra && typeof conversation.extra === 'object'
+      ? (conversation.extra as Record<string, unknown>)
+      : null;
+  if (!extra) return false;
+  if (typeof extra.hydratedAt !== 'number' || !Number.isFinite(extra.hydratedAt) || extra.hydratedAt <= 0) {
+    return false;
+  }
+  if (typeof extra.sourceFilePath !== 'string') return false;
+  if (extra.hydratedSourceFilePath !== extra.sourceFilePath) return false;
+  const cachedShowThinking = extra.hydratedShowThinking === true;
+  return cachedShowThinking === showThinking;
+};
 
 export const ensureHydratedForExport = async (
   conversation: TChatConversation,
+  showThinking: boolean | undefined,
   invokeHydrate: HydrateInvoker
 ): Promise<EnsureHydratedOutcome> => {
   const extra = conversation.extra as Record<string, unknown> | undefined;
   const sourceFilePath = typeof extra?.sourceFilePath === 'string' ? extra.sourceFilePath : '';
   if (!sourceFilePath) {
+    // Native ACP conversation — nothing to hydrate. `showThinking` is
+    // irrelevant since we never touch the importer.
     return { status: 'skipped' };
   }
-  const hydratedAt = typeof extra?.hydratedAt === 'number' ? extra.hydratedAt : 0;
-  if (hydratedAt > 0) {
+
+  if (showThinking === undefined) {
+    // `useAgentCliConfig` is still loading. Mirrors `TranscriptView`'s
+    // gate — calling hydrate with the fallback `false` could clobber the
+    // SQLite cache variant when the user's saved preference is `true`. Bail
+    // and let the user retry once the config snapshot resolves (sub-second
+    // after app start, so this is an unlikely-but-defensive branch).
+    return { status: 'failed', message: 'config_loading' };
+  }
+
+  if (isHydrationFreshForExport(conversation, showThinking)) {
     return { status: 'skipped' };
   }
 
   let response: HydrateResponse | undefined;
   try {
-    response = await invokeHydrate({ conversationId: conversation.id });
+    response = await invokeHydrate({ conversationId: conversation.id, showThinking });
   } catch (err) {
     return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
   }
@@ -210,7 +250,10 @@ export const ensureHydratedForExport = async (
 
   const { status, warning } = response.data;
   if (status === 'unavailable') {
-    return { status: 'unavailable', message: response.msg };
+    // `response.msg` is only populated on `success=false` paths; the
+    // importer signals the unavailable reason via `data.warning`, not `msg`.
+    // Surface the status; the caller maps it to a localized error toast.
+    return { status: 'unavailable' };
   }
   if (status === 'cached' && warning === 'source_missing') {
     return { status: 'cached_warning' };
