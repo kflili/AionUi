@@ -300,12 +300,17 @@ const ChatConversation: React.FC<{
     switch (conversation.type) {
       case 'acp': {
         if (isImportedAcp) {
+          // `sourceFilePath` is guaranteed non-empty by `isImportedAcpConversation`;
+          // assertion is safe here. Threading it explicitly lets TranscriptView re-fire
+          // hydration when an incremental scan refreshes the source pointer mid-mount.
+          const sourceFilePath = (conversation.extra as { sourceFilePath: string }).sourceFilePath;
           return (
             <TranscriptView
               key={conversation.id}
               conversation_id={conversation.id}
               workspace={conversation.extra?.workspace}
               backend={conversation.extra?.backend || 'claude'}
+              sourceFilePath={sourceFilePath}
               isHydrated={isHydrationFresh(conversation, showThinking)}
               showThinking={showThinking}
             />

@@ -91,6 +91,7 @@ const baseProps = {
   conversation_id: 'conv-abc',
   workspace: '/some/ws',
   backend: 'claude' as const,
+  sourceFilePath: '/Users/me/.claude/sessions/conv-abc.jsonl',
   showThinking: false,
 };
 
@@ -176,29 +177,74 @@ describe('hasHydratedAt predicate', () => {
   });
 });
 
-describe('isHydrationFresh predicate (hydratedAt × hydratedShowThinking gate)', () => {
+describe('isHydrationFresh predicate (hydratedAt × hydratedSourceFilePath × hydratedShowThinking gate)', () => {
   it('returns false when hydratedAt is missing', () => {
     expect(isHydrationFresh(mkConv(), false)).toBe(false);
   });
 
-  it('returns true when hydratedAt is set + hydratedShowThinking matches current showThinking', () => {
+  it('returns true when hydratedAt + hydratedSourceFilePath + hydratedShowThinking all match', () => {
     const conv = mkConv({
-      extra: { workspace: '/ws', backend: 'claude', hydratedAt: 100, hydratedShowThinking: true },
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        hydratedAt: 100,
+        sourceFilePath: '/sessions/a.jsonl',
+        hydratedSourceFilePath: '/sessions/a.jsonl',
+        hydratedShowThinking: true,
+      },
     } as unknown as Partial<TChatConversation>);
     expect(isHydrationFresh(conv, true)).toBe(true);
   });
 
   it('returns false when persisted hydratedShowThinking differs from current showThinking', () => {
-    // Hydrated with thinking hidden; user enabled Show Thinking — must re-hydrate.
     const conv = mkConv({
-      extra: { workspace: '/ws', backend: 'claude', hydratedAt: 100, hydratedShowThinking: false },
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        hydratedAt: 100,
+        sourceFilePath: '/sessions/a.jsonl',
+        hydratedSourceFilePath: '/sessions/a.jsonl',
+        hydratedShowThinking: false,
+      },
     } as unknown as Partial<TChatConversation>);
     expect(isHydrationFresh(conv, true)).toBe(false);
   });
 
+  it('returns false when hydratedSourceFilePath differs from current sourceFilePath (importer scan moved the source)', () => {
+    const conv = mkConv({
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        hydratedAt: 100,
+        sourceFilePath: '/sessions/renamed.jsonl',
+        hydratedSourceFilePath: '/sessions/old-name.jsonl',
+        hydratedShowThinking: false,
+      },
+    } as unknown as Partial<TChatConversation>);
+    expect(isHydrationFresh(conv, false)).toBe(false);
+  });
+
+  it('returns false when hydratedSourceFilePath is undefined (pre-Phase-2 row)', () => {
+    const conv = mkConv({
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        hydratedAt: 100,
+        sourceFilePath: '/sessions/a.jsonl',
+      },
+    } as unknown as Partial<TChatConversation>);
+    expect(isHydrationFresh(conv, false)).toBe(false);
+  });
+
   it('treats undefined hydratedShowThinking as false (importer normalization)', () => {
     const conv = mkConv({
-      extra: { workspace: '/ws', backend: 'claude', hydratedAt: 100 },
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        hydratedAt: 100,
+        sourceFilePath: '/sessions/a.jsonl',
+        hydratedSourceFilePath: '/sessions/a.jsonl',
+      },
     } as unknown as Partial<TChatConversation>);
     expect(isHydrationFresh(conv, false)).toBe(true);
     expect(isHydrationFresh(conv, true)).toBe(false);
@@ -207,14 +253,6 @@ describe('isHydrationFresh predicate (hydratedAt × hydratedShowThinking gate)',
   it('returns false for null / undefined inputs', () => {
     expect(isHydrationFresh(undefined, false)).toBe(false);
     expect(isHydrationFresh(null, false)).toBe(false);
-  });
-
-  it('returns false for non-ACP types even with hydratedAt set', () => {
-    // Note: parent (`isImportedAcpConversation`) gates ACP-only; `isHydrationFresh` is
-    // a freshness check only. But it should still tolerate non-ACP inputs without
-    // throwing, so test defensively.
-    const conv = mkConv({ type: 'gemini' } as unknown as Partial<TChatConversation>);
-    expect(isHydrationFresh(conv, false)).toBe(false);
   });
 });
 
@@ -308,6 +346,28 @@ describe('TranscriptView (transcript mode surface)', () => {
     });
     expect(hydrateInvoke).toHaveBeenCalledTimes(2);
     expect(hydrateInvoke).toHaveBeenLastCalledWith({ conversationId: 'conv-abc', showThinking: true });
+  });
+
+  it('re-hydrates when sourceFilePath changes (importer scan moved the row source mid-mount)', async () => {
+    hydrateInvoke.mockResolvedValue(okCached());
+    const { rerender } = render(
+      <TranscriptView {...baseProps} isHydrated={true} sourceFilePath='/sessions/old.jsonl' />
+    );
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).toHaveBeenCalledTimes(1);
+
+    // Incremental scan refreshes the source pointer. Parent re-renders with the new
+    // path + `isHydrated=false` (per `isHydrationFresh`'s path-match check). The
+    // hydrate effect must fire again — without `sourceFilePath` in the trigger key,
+    // the ref dedup would skip this and the transcript would keep showing messages
+    // from the old file.
+    rerender(<TranscriptView {...baseProps} isHydrated={false} sourceFilePath='/sessions/renamed.jsonl' />);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(hydrateInvoke).toHaveBeenCalledTimes(2);
   });
 
   it('refreshes the in-memory message list after status=hydrated (mtime advance re-converts cached row)', async () => {
