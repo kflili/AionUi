@@ -251,28 +251,28 @@ const mkRowProps = (
   ...overrides,
 });
 
-vi.mock('@renderer/hooks/agent/usePresetAssistantInfo', () => ({
+vi.mock('@/renderer/hooks/agent/usePresetAssistantInfo', () => ({
   usePresetAssistantInfo: () => ({ info: null }),
 }));
 
-vi.mock('@renderer/hooks/context/LayoutContext', () => ({
+vi.mock('@/renderer/hooks/context/LayoutContext', () => ({
   useLayoutContext: () => ({ isMobile: false }),
 }));
 
-vi.mock('@renderer/utils/ui/siderTooltip', () => ({
+vi.mock('@/renderer/utils/ui/siderTooltip', () => ({
   cleanupSiderTooltips: () => undefined,
   getSiderTooltipProps: () => ({}),
 }));
 
-vi.mock('@renderer/utils/model/agentLogo', () => ({
+vi.mock('@/renderer/utils/model/agentLogo', () => ({
   getAgentLogo: () => null,
 }));
 
-vi.mock('@renderer/pages/cron', () => ({
+vi.mock('@/renderer/pages/cron', () => ({
   CronJobIndicator: () => null,
 }));
 
-vi.mock('@renderer/components/layout/FlexFullContainer', () => ({
+vi.mock('@/renderer/components/layout/FlexFullContainer', () => ({
   default: ({ children }: { children: React.ReactNode }) => <div data-testid='flex-container'>{children}</div>,
 }));
 
