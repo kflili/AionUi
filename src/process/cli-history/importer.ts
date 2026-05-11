@@ -5,14 +5,24 @@
  */
 
 import path from 'path';
+import { promises as fsPromises } from 'fs';
 import { uuid } from '@/common/utils';
 import { getDatabase } from '@process/services/database/export';
 import { emitConversationListChanged } from '@process/bridge/conversationEvents';
 import { ProcessConfig } from '@process/utils/initStorage';
 import type { TChatConversation } from '@/common/config/storage';
+import type { TMessage } from '@/common/chat/chatLib';
+import { convertClaudeJsonl } from './converters/claude';
+import { convertCopilotJsonl } from './converters/copilot';
 import { ClaudeCodeProvider } from './providers/claude';
 import { CopilotProvider } from './providers/copilot';
-import type { ImportResult, SessionMetadata, SessionSourceId, SessionSourceProvider } from './types';
+import type {
+  HydrateResult,
+  ImportResult,
+  SessionMetadata,
+  SessionSourceId,
+  SessionSourceProvider,
+} from './types';
 
 /**
  * Phase 1 metadata-import orchestrator.
@@ -199,6 +209,8 @@ type AcpImportedExtra = {
   acpSessionUpdatedAt: number;
   sourceFilePath: string;
   messageCount?: number;
+  hydratedAt?: number;
+  hydratedSourceFilePath?: string;
   importMeta: {
     autoNamed: boolean;
     generatedName?: string;
@@ -555,10 +567,328 @@ async function runReenableSource(source: SessionSourceId): Promise<ImportResult>
 }
 
 /**
- * Phase 2 (item 2) integration surface. Throws in Phase 1 — callers must not invoke.
+ * ---------- Phase 2: On-demand message hydration ----------
  */
-export async function hydrateSession(_conversationId: string): Promise<never> {
-  throw new Error('hydrateSession not implemented in Phase 1');
+
+type JsonlConverter = (lines: string[], conversationId?: string) => TMessage[];
+
+/**
+ * Converter registry keyed by `SessionSourceId`. The plan deliberately keeps
+ * this list small (claude_code, copilot) — adding a new source means adding
+ * an entry here AND a provider in `providers/`. Lookup via
+ * `getConverterForSource` so an unknown `conv.source` surfaces as a coding
+ * bug (thrown) rather than silently defaulting to one of the existing
+ * converters.
+ */
+const CONVERTER_FOR_SOURCE = {
+  claude_code: convertClaudeJsonl,
+  copilot: convertCopilotJsonl,
+} satisfies Record<SessionSourceId, JsonlConverter>;
+
+function getConverterForSource(source: string | undefined): JsonlConverter | undefined {
+  if (!source) return undefined;
+  return (CONVERTER_FOR_SOURCE as Partial<Record<string, JsonlConverter>>)[source];
+}
+
+/**
+ * Number-aware sibling of Phase 1's `parseDateOr`. Phase 2 stores
+ * `extra.hydratedAt` as a number (the source JSONL `mtimeMs`), so reading
+ * it back through the string-only `parseDateOr` would always yield the
+ * fallback and trigger spurious re-hydration. Accepts `unknown` because
+ * older / future rows may carry a string.
+ */
+function parseTimestampOr(input: unknown, fallback: number): number {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input !== 'string') return fallback;
+  const parsed = Date.parse(input);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+/**
+ * Real-world file IO. Exposed as a single object so tests can swap in
+ * in-memory implementations via `__setFileIoForTests(...)` and avoid
+ * `vi.mock('fs')` and its bleed-through risks.
+ */
+async function realStatMtimeMs(filePath: string): Promise<number | null> {
+  try {
+    const st = await fsPromises.stat(filePath);
+    return st.mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+async function realReadJsonl(filePath: string): Promise<string | null> {
+  try {
+    return await fsPromises.readFile(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+type FileIo = {
+  statMtimeMs: (filePath: string) => Promise<number | null>;
+  readJsonl: (filePath: string) => Promise<string | null>;
+};
+
+const defaultFileIo: FileIo = {
+  statMtimeMs: realStatMtimeMs,
+  readJsonl: realReadJsonl,
+};
+
+let fileIo: FileIo = { ...defaultFileIo };
+
+/**
+ * Test-only: override the file-IO seam. Pass `{}` to reset to defaults
+ * (also done automatically by `__resetInFlightForTests()`).
+ */
+export function __setFileIoForTests(override: Partial<FileIo>): void {
+  fileIo = { ...fileIo, ...override };
+}
+
+/**
+ * Split JSONL `\n`-terminated lines into the subset that parses as valid
+ * JSON plus a warning count for the rest. Empty / whitespace-only lines
+ * are skipped silently (not counted as warnings). The converter's own
+ * `safeParseLine` would also log+drop malformed lines, but pre-filtering
+ * here means we can report `warningCount` to the renderer without
+ * modifying the converter contract.
+ */
+function splitJsonlByValidity(lines: string[]): { validLines: string[]; warningCount: number } {
+  const validLines: string[] = [];
+  let warningCount = 0;
+  for (const raw of lines) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) continue;
+    try {
+      JSON.parse(trimmed);
+      validLines.push(raw);
+    } catch {
+      warningCount++;
+    }
+  }
+  return { validLines, warningCount };
+}
+
+const RELATIVE_TIME_FALLBACK_RE =
+  /^(just now|\d+ min ago|\d+ hour(?:s)? ago|\d+ day(?:s)? ago|\d+ month(?:s)? ago|\d+ year(?:s)? ago)/;
+
+/**
+ * Phase-2-only "is this title safe to upgrade?" check. Returns true ONLY
+ * when the current name is one of the Phase-1 fallback / defensive
+ * patterns AND it still matches `generatedName` (so a user rename has
+ * not happened). Phase 1 also stores meaningful provider titles as
+ * `generatedName`, so `name === generatedName` is necessary but NOT
+ * sufficient — the additional fallback-shape check prevents this helper
+ * from declaring a meaningful provider title (e.g. "Fix the auth bug ·
+ * my-project") as "generic and safe to overwrite."
+ */
+function isFallbackOrGenericTitle(name: string | undefined, generatedName: string | undefined): boolean {
+  if (typeof name !== 'string' || typeof generatedName !== 'string') return false;
+  if (name !== generatedName) return false;
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return false;
+  if (RELATIVE_TIME_FALLBACK_RE.test(trimmed)) return true;
+  if (trimmed.startsWith('(untitled)')) return true;
+  if (UUID_LIKE.test(trimmed)) return true;
+  if (RAW_FILENAME_LIKE.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Phase-2 title upgrade: when a Phase-1 row was generic-named, pull the
+ * first user-role text message from the freshly-hydrated transcript and
+ * use it as the new title. Truncates to 60 codepoints and appends
+ * ` · <workspace-basename>` to match `buildAutoName`.
+ *
+ * Returns the conversation unchanged if no user-role text is present,
+ * if the candidate is empty, or if the title is not a fallback/generic
+ * one (preserves meaningful provider titles per parent design line 509).
+ */
+function upgradeTitleFromFirstUserMessage(
+  conv: TChatConversation,
+  messages: TMessage[]
+): TChatConversation {
+  const extra = (conv.extra ?? {}) as Partial<AcpImportedExtra>;
+  if (!isFallbackOrGenericTitle(conv.name, extra.importMeta?.generatedName)) {
+    return conv;
+  }
+
+  const firstUser = messages.find(
+    (m): m is Extract<TMessage, { type: 'text' }> => m.type === 'text' && m.position === 'right'
+  );
+  if (!firstUser) return conv;
+
+  const raw = firstUser.content.content;
+  if (typeof raw !== 'string') return conv;
+  const candidate = raw.trim();
+  if (candidate.length === 0) return conv;
+
+  const wsBase = workspaceBasename(extra.workspace);
+  const chars = Array.from(candidate);
+  const truncated = chars.length > TITLE_MAX ? `${chars.slice(0, TITLE_MAX).join('').trimEnd()}…` : candidate;
+  const newName = wsBase ? `${truncated} · ${wsBase}` : truncated;
+
+  const nextImportMeta = {
+    ...(extra.importMeta ?? { autoNamed: true }),
+    autoNamed: true,
+    generatedName: newName,
+  };
+
+  return {
+    ...conv,
+    name: newName,
+    extra: {
+      ...(extra as object),
+      importMeta: nextImportMeta,
+    },
+  } as TChatConversation;
+}
+
+/**
+ * In-flight hydration promises keyed by `conversationId`. Two concurrent
+ * callers (e.g. an open-triggered hydration + an export-triggered one)
+ * share a single read+parse+insert pass. Entry is cleared in `finally`
+ * so the next caller starts fresh.
+ */
+const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
+
+/**
+ * Hydrate an imported session's transcript on demand. Reads the conversation
+ * row, compares the source file `mtime` to `extra.hydratedAt`, and either
+ * returns the cached state or re-reads + re-converts + replaces the
+ * `messages` rows inside a single SQLite transaction. Phase-2 title
+ * upgrade runs when the row was Phase-1-imported with a generic name.
+ *
+ * Concurrent callers for the same `conversationId` share one in-flight
+ * promise via `inFlightHydrate`. Hydration does NOT enqueue onto the
+ * per-source `operationChain` — hydration is per-conversation, scan /
+ * disable / reenable are per-source. Step 6 re-reads the row immediately
+ * before writing so concurrent scan updates and concurrent manual renames
+ * are preserved.
+ *
+ * Throws for contract violations (unknown conversationId, non-imported row,
+ * hidden imported row, unsupported source, DB failures, row deleted
+ * mid-hydration). Missing / unreadable source files are NOT contract
+ * violations — they map to `{ status: 'unavailable' | 'cached', warning:
+ * 'source_missing' }`.
+ */
+export function hydrateSession(conversationId: string): Promise<HydrateResult> {
+  const existing = inFlightHydrate.get(conversationId);
+  if (existing) return existing;
+
+  const promise = runHydrate(conversationId).finally(() => {
+    if (inFlightHydrate.get(conversationId) === promise) {
+      inFlightHydrate.delete(conversationId);
+    }
+  });
+  inFlightHydrate.set(conversationId, promise);
+  return promise;
+}
+
+async function runHydrate(conversationId: string): Promise<HydrateResult> {
+  const db = getDatabase();
+  const rowResult = db.getConversation(conversationId);
+  if (!rowResult.success || !rowResult.data) {
+    throw new Error(rowResult.error ?? `Conversation not found: ${conversationId}`);
+  }
+  const conv = rowResult.data;
+  const extra = (conv.extra ?? {}) as Partial<AcpImportedExtra>;
+
+  if (!extra.sourceFilePath) {
+    throw new Error(`Conversation is not an imported CLI session: ${conversationId}`);
+  }
+  if (extra.importMeta?.hidden === true) {
+    throw new Error(`Cannot hydrate hidden imported session: ${conversationId}`);
+  }
+  const converter = getConverterForSource(conv.source);
+  if (!converter) {
+    throw new Error(`Unsupported CLI history source for hydration: ${String(conv.source)}`);
+  }
+
+  const sourceFilePath = extra.sourceFilePath;
+
+  const mtimeMs = await fileIo.statMtimeMs(sourceFilePath);
+
+  const countResult = db.getMessageCountForConversation(conversationId);
+  if (!countResult.success) {
+    throw new Error(countResult.error ?? 'Failed to count imported messages');
+  }
+  const existingCount = countResult.data ?? 0;
+
+  const hydratedAt = parseTimestampOr(extra.hydratedAt, 0);
+  const hydratedSourceFilePath =
+    typeof extra.hydratedSourceFilePath === 'string' ? extra.hydratedSourceFilePath : sourceFilePath;
+  // Prior hydration counts only if it was against the CURRENT source path.
+  // A Phase-1 scan that refreshes sourceFilePath (file moved on disk)
+  // invalidates the cache regardless of mtime.
+  const hasPriorHydration =
+    (hydratedAt > 0 || existingCount > 0) && hydratedSourceFilePath === sourceFilePath;
+
+  if (mtimeMs === null) {
+    if (hasPriorHydration) {
+      return { status: 'cached', warning: 'source_missing', warningCount: 0 };
+    }
+    return { status: 'unavailable', warning: 'source_missing' };
+  }
+
+  if (hasPriorHydration && mtimeMs <= hydratedAt) {
+    return { status: 'cached', warningCount: 0 };
+  }
+
+  // Read + parse. `safeReadJsonl` may return null if the file races out
+  // between stat and read (deleted, EACCES flipped, etc.).
+  const fileContent = await fileIo.readJsonl(sourceFilePath);
+  if (fileContent === null) {
+    if (hasPriorHydration) {
+      return { status: 'cached', warning: 'source_missing', warningCount: 0 };
+    }
+    return { status: 'unavailable', warning: 'source_missing' };
+  }
+
+  const lines = fileContent.split('\n');
+  const { validLines, warningCount } = splitJsonlByValidity(lines);
+  const messages = converter(validLines, conversationId);
+
+  const insertResult = db.insertImportedMessages(conversationId, messages);
+  if (!insertResult.success) {
+    throw new Error(insertResult.error ?? 'Failed to insert imported messages');
+  }
+
+  // Re-read the row immediately before the metadata write so a concurrent
+  // scan (refreshing acpSessionUpdatedAt / workspace / sourceFilePath /
+  // messageCount) and a concurrent manual rename (autoNamed → false)
+  // both survive this update.
+  const freshResult = db.getConversation(conversationId);
+  if (!freshResult.success || !freshResult.data) {
+    throw new Error(freshResult.error ?? `Conversation row vanished mid-hydration: ${conversationId}`);
+  }
+  const fresh = freshResult.data;
+  const freshExtra = (fresh.extra ?? {}) as Partial<AcpImportedExtra>;
+
+  const nextExtra: Partial<AcpImportedExtra> = {
+    ...freshExtra,
+    hydratedAt: mtimeMs,
+    hydratedSourceFilePath: sourceFilePath,
+  };
+
+  let conv2: TChatConversation = {
+    ...fresh,
+    extra: nextExtra,
+  } as TChatConversation;
+
+  if (freshExtra.importMeta?.autoNamed === true && messages.length > 0) {
+    conv2 = upgradeTitleFromFirstUserMessage(conv2, messages);
+  }
+
+  const updateResult = db.updateImportedConversation(conv2);
+  if (!updateResult.success) {
+    throw new Error(updateResult.error ?? 'Failed to update imported conversation after hydration');
+  }
+  emitConversationListChanged(conv2, 'updated');
+
+  return { status: 'hydrated', warningCount };
 }
 
 /**
@@ -588,11 +918,14 @@ export function initCliHistoryImporter(): void {
 }
 
 /**
- * Test-only: clear in-flight scan cache and per-source operation chain. Avoids
- * state leaking between Vitest tests that exercise coalescing / serialization.
- * Not part of the production API.
+ * Test-only: clear in-flight scan cache, per-source operation chain, the
+ * Phase-2 hydration in-flight map, and restore the default file-IO seam.
+ * Avoids state leaking between Vitest tests that exercise coalescing /
+ * serialization / hydration. Not part of the production API.
  */
 export function __resetInFlightForTests(): void {
   inFlight.clear();
   operationChain.clear();
+  inFlightHydrate.clear();
+  fileIo = { ...defaultFileIo };
 }
