@@ -147,3 +147,77 @@ export const buildConversationJson = (conversation: TChatConversation, messages:
     2
   );
 };
+
+// ---------------------------------------------------------------------------
+// Export auto-hydration
+// ---------------------------------------------------------------------------
+//
+// Imported CLI-history conversations defer message hydration until first use
+// (plan.md §"Two-Phase Import"). Export must transparently auto-hydrate so a
+// user can export a sidebar row that has only Phase-1 metadata. Wraps the
+// `cliHistory.hydrate` IPC contract from item 2 — the importer's coalescing
+// + mtime-check primitive — never adds a parallel hydration code path.
+//
+// Cached-and-source-present conversations (`extra.hydratedAt` already set)
+// skip the IPC to avoid the JSONL re-read on the export hot path. The mtime
+// check / cached-but-source-missing detection only runs for rows that were
+// never hydrated.
+
+type HydrateResponseData = {
+  status: 'hydrated' | 'cached' | 'unavailable';
+  warning?: 'source_missing';
+  warningCount?: number;
+};
+
+type HydrateResponse = {
+  success: boolean;
+  data?: HydrateResponseData;
+  msg?: string;
+};
+
+export type HydrateInvoker = (args: { conversationId: string }) => Promise<HydrateResponse>;
+
+export type EnsureHydratedOutcome =
+  | { status: 'skipped' } // native conversation, or already hydrated — IPC not called
+  | { status: 'hydrated' } // freshly hydrated; export proceeds
+  | { status: 'cached_warning' } // hydrate returned cached + source_missing; export proceeds with warning
+  | { status: 'unavailable'; message?: string } // never hydrated and source file missing; abort
+  | { status: 'failed'; message?: string }; // IPC error or success=false; abort
+
+export const ensureHydratedForExport = async (
+  conversation: TChatConversation,
+  invokeHydrate: HydrateInvoker
+): Promise<EnsureHydratedOutcome> => {
+  const extra = conversation.extra as Record<string, unknown> | undefined;
+  const sourceFilePath = typeof extra?.sourceFilePath === 'string' ? extra.sourceFilePath : '';
+  if (!sourceFilePath) {
+    return { status: 'skipped' };
+  }
+  const hydratedAt = typeof extra?.hydratedAt === 'number' ? extra.hydratedAt : 0;
+  if (hydratedAt > 0) {
+    return { status: 'skipped' };
+  }
+
+  let response: HydrateResponse | undefined;
+  try {
+    response = await invokeHydrate({ conversationId: conversation.id });
+  } catch (err) {
+    return { status: 'failed', message: err instanceof Error ? err.message : String(err) };
+  }
+  if (!response?.success || !response.data) {
+    return { status: 'failed', message: response?.msg };
+  }
+
+  const { status, warning } = response.data;
+  if (status === 'unavailable') {
+    return { status: 'unavailable', message: response.msg };
+  }
+  if (status === 'cached' && warning === 'source_missing') {
+    return { status: 'cached_warning' };
+  }
+  if (status === 'hydrated') {
+    return { status: 'hydrated' };
+  }
+  // status === 'cached' with no warning — source is fine, treat as already-cached.
+  return { status: 'skipped' };
+};

@@ -17,6 +17,7 @@ import {
   buildConversationJson,
   buildConversationMarkdown,
   buildTopicFolderName,
+  ensureHydratedForExport,
   EXPORT_IO_TIMEOUT_MS,
   formatTimestamp,
   joinFilePath,
@@ -162,6 +163,37 @@ export const useExport = ({
     }
   }, []);
 
+  // Imported (CLI-history) conversations may be Phase-1 metadata only at export
+  // time — no messages in SQLite yet. Auto-hydrate via the existing
+  // `cliHistory.hydrate` IPC contract from item 2 (mtime check + coalescing
+  // are handled inside that primitive — we never add a parallel hydration
+  // code path). Returns true if the export should proceed for this row.
+  const ensureHydrationForExport = useCallback(
+    async (conversation: TChatConversation): Promise<boolean> => {
+      const outcome = await ensureHydratedForExport(conversation, (args) => ipcBridge.cliHistory.hydrate.invoke(args));
+      switch (outcome.status) {
+        case 'skipped':
+        case 'hydrated':
+          return true;
+        case 'cached_warning':
+          // Source JSONL missing but SQLite has a prior transcript — export
+          // the cached messages with a non-blocking warning per plan §"Missing
+          // source files" (line 257).
+          Message.warning(t('conversation.history.exportSourceMissingWarning'));
+          return true;
+        case 'unavailable':
+          // Never hydrated AND source file is gone — nothing to export.
+          Message.error(t('conversation.history.exportSourceUnavailable'));
+          return false;
+        case 'failed':
+        default:
+          Message.error(t('conversation.history.exportFailed'));
+          return false;
+      }
+    },
+    [t]
+  );
+
   const fetchConversationWorkspaceTree = useCallback(async (conversation: TChatConversation) => {
     const workspace = conversation.extra?.workspace;
     if (!workspace) {
@@ -267,6 +299,10 @@ export const useExport = ({
       if (exportTask.mode === 'single') {
         throwIfCanceled();
         const conversation = exportTask.conversation;
+        if (!(await ensureHydrationForExport(conversation))) {
+          return;
+        }
+        throwIfCanceled();
         const shortTopicName = sanitizeFileName(conversation.name || conversation.id).slice(0, 40) || 'topic';
         const zipFileName = `${shortTopicName}-${formatTimestamp()}`;
         const exportPath = await createUniqueFilePath(directory, zipFileName, 'zip');
@@ -299,6 +335,10 @@ export const useExport = ({
 
       const files: ExportZipFile[] = [];
       for (const conversation of selectedConversations) {
+        throwIfCanceled();
+        if (!(await ensureHydrationForExport(conversation))) {
+          return;
+        }
         throwIfCanceled();
         const topicFiles = await buildConversationExportFiles(conversation, buildTopicFolderName(conversation));
         throwIfCanceled();
@@ -336,6 +376,7 @@ export const useExport = ({
     buildConversationExportFiles,
     conversations,
     createUniqueFilePath,
+    ensureHydrationForExport,
     exportTargetPath,
     exportTask,
     onBatchModeChange,

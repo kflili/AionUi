@@ -272,6 +272,8 @@ export type I18nKey =
   | 'conversation.history.exportDialogTitle'
   | 'conversation.history.exportFailed'
   | 'conversation.history.exportSelectFolder'
+  | 'conversation.history.exportSourceMissingWarning'
+  | 'conversation.history.exportSourceUnavailable'
   | 'conversation.history.exportSuccess'
   | 'conversation.history.exportTargetFolder'
   | 'conversation.history.exporting'
