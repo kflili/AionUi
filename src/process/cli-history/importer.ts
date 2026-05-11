@@ -19,11 +19,15 @@ import { CopilotProvider } from './providers/copilot';
 import type { HydrateResult, ImportResult, SessionMetadata, SessionSourceId, SessionSourceProvider } from './types';
 
 /**
- * Phase 1 metadata-import orchestrator.
+ * CLI history import orchestrator: Phase 1 (metadata index) + Phase 2 (on-demand hydration).
  *
- * Scans registered `SessionSourceProvider`s and upserts one `conversations` row per
- * discovered CLI session. Messages are NOT hydrated — `hydrateSession()` is a stub
- * that throws so item 2 (Phase 2 message hydration) has a clean integration surface.
+ * Phase 1 scans registered `SessionSourceProvider`s and upserts one `conversations` row
+ * per discovered CLI session — no messages yet, instant sidebar population.
+ *
+ * Phase 2 hydrates the `messages` table on demand (open or export) via `hydrateSession`:
+ * stat the source JSONL, compare mtime against `extra.hydratedAt`, read+parse+convert
+ * if stale, and batch-replace the conversation's messages inside a single SQLite
+ * transaction. Concurrent calls for the same conversation share one in-flight pass.
  *
  * Persistence goes directly through `getDatabase()` (`AionUIDatabase`) — NOT through
  * `ConversationServiceImpl` (which has ACP-agent and workspace side-effects) and NOT
@@ -564,7 +568,8 @@ async function runReenableSource(source: SessionSourceId): Promise<ImportResult>
  * ---------- Phase 2: On-demand message hydration ----------
  */
 
-type JsonlConverter = (lines: string[], conversationId?: string) => TMessage[];
+type ConverterOptions = { showThinking?: boolean };
+type JsonlConverter = (lines: string[], conversationId?: string, options?: ConverterOptions) => TMessage[];
 
 /**
  * Converter registry keyed by `SessionSourceId`. The plan deliberately keeps
@@ -602,6 +607,15 @@ function parseTimestampOr(input: unknown, fallback: number): number {
  * Real-world file IO. Exposed as a single object so tests can swap in
  * in-memory implementations via `__setFileIoForTests(...)` and avoid
  * `vi.mock('fs')` and its bleed-through risks.
+ *
+ * Note on sync-vs-async: `cliHistoryBridge.convertSessionToMessages`
+ * (the legacy terminal-switching path) uses synchronous `fsSync.readFileSync`
+ * "to avoid Electron async I/O deadlock". That comment is specific to the
+ * IPC hot path where the conversion runs synchronously inside the IPC reply.
+ * `hydrateSession` runs off the IPC reply path — the IPC handler awaits
+ * the entire algorithm and only returns when the messages have been written,
+ * so we can safely use `fsPromises` here without blocking the event loop
+ * the way `convertSessionToMessages` would have.
  */
 async function realStatMtimeMs(filePath: string): Promise<number | null> {
   try {
@@ -633,8 +647,9 @@ const defaultFileIo: FileIo = {
 let fileIo: FileIo = { ...defaultFileIo };
 
 /**
- * Test-only: override the file-IO seam. Pass `{}` to reset to defaults
- * (also done automatically by `__resetInFlightForTests()`).
+ * Test-only: layer overrides on top of the current file-IO seam. Does NOT
+ * restore defaults — call `__resetInFlightForTests()` between tests to
+ * reset both the in-flight maps AND the file-IO seam back to `defaultFileIo`.
  */
 export function __setFileIoForTests(override: Partial<FileIo>): void {
   fileIo = { ...fileIo, ...override };
@@ -753,11 +768,17 @@ const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
  * upgrade runs when the row was Phase-1-imported with a generic name.
  *
  * Concurrent callers for the same `conversationId` share one in-flight
- * promise via `inFlightHydrate`. Hydration does NOT enqueue onto the
- * per-source `operationChain` — hydration is per-conversation, scan /
- * disable / reenable are per-source. Step 6 re-reads the row immediately
- * before writing so concurrent scan updates and concurrent manual renames
- * are preserved.
+ * promise via `inFlightHydrate`. The first caller's `options.showThinking`
+ * value wins for the duration of the in-flight pass — subsequent callers
+ * see the cached result regardless of their own option. A renderer that
+ * needs to flip thinking visibility after hydration must force a fresh
+ * call after the source `mtime` changes (or after item 3's transcript-mode
+ * UI adds a render-time filter, which would be the cleaner long-term path).
+ *
+ * Hydration does NOT enqueue onto the per-source `operationChain` —
+ * hydration is per-conversation, scan / disable / reenable are per-source.
+ * Step 6 re-reads the row immediately before writing so concurrent scan
+ * updates and concurrent manual renames are preserved.
  *
  * Throws for contract violations (unknown conversationId, non-imported row,
  * hidden imported row, unsupported source, DB failures, row deleted
@@ -765,11 +786,11 @@ const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
  * violations — they map to `{ status: 'unavailable' | 'cached', warning:
  * 'source_missing' }`.
  */
-export function hydrateSession(conversationId: string): Promise<HydrateResult> {
+export function hydrateSession(conversationId: string, options?: ConverterOptions): Promise<HydrateResult> {
   const existing = inFlightHydrate.get(conversationId);
   if (existing) return existing;
 
-  const promise = runHydrate(conversationId).finally(() => {
+  const promise = runHydrate(conversationId, options ?? {}).finally(() => {
     if (inFlightHydrate.get(conversationId) === promise) {
       inFlightHydrate.delete(conversationId);
     }
@@ -778,7 +799,7 @@ export function hydrateSession(conversationId: string): Promise<HydrateResult> {
   return promise;
 }
 
-async function runHydrate(conversationId: string): Promise<HydrateResult> {
+async function runHydrate(conversationId: string, options: ConverterOptions): Promise<HydrateResult> {
   const db = getDatabase();
   const rowResult = db.getConversation(conversationId);
   if (!rowResult.success || !rowResult.data) {
@@ -810,10 +831,12 @@ async function runHydrate(conversationId: string): Promise<HydrateResult> {
 
   const hydratedAt = parseTimestampOr(extra.hydratedAt, 0);
   const hydratedSourceFilePath =
-    typeof extra.hydratedSourceFilePath === 'string' ? extra.hydratedSourceFilePath : sourceFilePath;
-  // Prior hydration counts only if it was against the CURRENT source path.
-  // A Phase-1 scan that refreshes sourceFilePath (file moved on disk)
-  // invalidates the cache regardless of mtime.
+    typeof extra.hydratedSourceFilePath === 'string' ? extra.hydratedSourceFilePath : undefined;
+  // Prior hydration counts only if it was against the CURRENT source path. A
+  // Phase-1 scan that refreshes `sourceFilePath` (file moved on disk) invalidates
+  // the cache regardless of mtime. A pre-Phase-2 row that has `existingCount > 0`
+  // but no `hydratedSourceFilePath` recorded does NOT match — we cannot prove the
+  // existing messages came from the current path, so we re-hydrate to be safe.
   const hasPriorHydration = (hydratedAt > 0 || existingCount > 0) && hydratedSourceFilePath === sourceFilePath;
 
   if (mtimeMs === null) {
@@ -827,8 +850,9 @@ async function runHydrate(conversationId: string): Promise<HydrateResult> {
     return { status: 'cached', warningCount: 0 };
   }
 
-  // Read + parse. `safeReadJsonl` may return null if the file races out
-  // between stat and read (deleted, EACCES flipped, etc.).
+  // Read + parse. `fileIo.readJsonl` (the production impl, `realReadJsonl`,
+  // catches all errors and returns null) handles the race where the file
+  // disappears or flips permissions between stat (step 3) and read (step 4).
   const fileContent = await fileIo.readJsonl(sourceFilePath);
   if (fileContent === null) {
     if (hasPriorHydration) {
@@ -839,7 +863,7 @@ async function runHydrate(conversationId: string): Promise<HydrateResult> {
 
   const lines = fileContent.split('\n');
   const { validLines, warningCount } = splitJsonlByValidity(lines);
-  const messages = converter(validLines, conversationId);
+  const messages = converter(validLines, conversationId, options);
 
   const insertResult = db.insertImportedMessages(conversationId, messages);
   if (!insertResult.success) {

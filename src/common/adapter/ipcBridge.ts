@@ -1114,5 +1114,7 @@ export const cliHistory = {
    * Idempotent — concurrent calls for the same `conversationId` share a
    * single in-flight read+parse+insert pass.
    */
-  hydrate: bridge.buildProvider<IBridgeResponse<HydrateResult>, { conversationId: string }>('cli-history.hydrate'),
+  hydrate: bridge.buildProvider<IBridgeResponse<HydrateResult>, { conversationId: string; showThinking?: boolean }>(
+    'cli-history.hydrate'
+  ),
 };

@@ -302,9 +302,9 @@ export function initCliHistoryBridge(): void {
   // hydrateSession() via an in-flight Map<conversationId, Promise>.
   // ---------------------------------------------------------------------------
 
-  ipcBridge.cliHistory.hydrate.provider(async ({ conversationId }) => {
+  ipcBridge.cliHistory.hydrate.provider(async ({ conversationId, showThinking }) => {
     try {
-      const data = await hydrateSession(conversationId);
+      const data = await hydrateSession(conversationId, { showThinking });
       return { success: true, data };
     } catch (err) {
       return { success: false, msg: err instanceof Error ? err.message : String(err) };

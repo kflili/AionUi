@@ -113,6 +113,8 @@ const _AddNewConversation: React.FC<{ conversation: TChatConversation }> = ({ co
                     sourceFilePath: _sourceFilePath,
                     messageCount: _messageCount,
                     importMeta: _importMeta,
+                    hydratedAt: _hydratedAt,
+                    hydratedSourceFilePath: _hydratedSourceFilePath,
                     ...rest
                   } = baseExtra;
                   return rest;

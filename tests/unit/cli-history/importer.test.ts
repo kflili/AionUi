@@ -1044,6 +1044,74 @@ describe('hydrateSession (Phase 2)', () => {
     const extra = dbStore.get('conv-1')!.extra as AcpExtra;
     expect(extra.hydratedSourceFilePath).toBe('/new/path.jsonl');
   });
+
+  it('pre-Phase-2 row with existing messages but no hydratedSourceFilePath: re-hydrates (cannot trust source)', async () => {
+    // A row imported by Phase 1 before this PR — `existingCount > 0` is possible
+    // if another code path inserted messages, but there's no `hydratedSourceFilePath`
+    // to confirm those messages came from the current `sourceFilePath`. The cache
+    // check must err on the side of re-hydration to avoid serving stale-from-a-
+    // different-file messages.
+    seedImportedRow({
+      id: 'conv-1',
+      sourceFilePath: '/tmp/s.jsonl',
+      hydratedAt: undefined,
+      hydratedSourceFilePath: undefined,
+    });
+    messageStore.set('conv-1', [{ id: 'm-old' }]);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('current content'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra;
+    expect(extra.hydratedSourceFilePath).toBe('/tmp/s.jsonl');
+  });
+
+  it('forwards showThinking to the converter so thinking blocks appear in the hydrated transcript', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-10T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'reasoning step', signature: 'sig' },
+            { type: 'text', text: 'visible response' },
+          ],
+        },
+      }),
+    ].join('\n');
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+
+    await hydrateSession('conv-1', { showThinking: true });
+    const [, msgsWithThinking] = insertMessagesSpy.mock.calls[0];
+    const texts = (msgsWithThinking as Array<{ type: string; content: { content: string } }>)
+      .filter((m) => m.type === 'text')
+      .map((m) => m.content.content);
+    expect(texts.some((t) => t.includes('reasoning step'))).toBe(true);
+    expect(texts.some((t) => t.includes('visible response'))).toBe(true);
+
+    // Default (no option) drops thinking blocks.
+    insertMessagesSpy.mockClear();
+    seedImportedRow({ id: 'conv-2', sourceFilePath: '/tmp/s2.jsonl' });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+    await hydrateSession('conv-2');
+    const [, msgsNoThinking] = insertMessagesSpy.mock.calls[0];
+    const texts2 = (msgsNoThinking as Array<{ type: string; content: { content: string } }>)
+      .filter((m) => m.type === 'text')
+      .map((m) => m.content.content);
+    expect(texts2.some((t) => t.includes('reasoning step'))).toBe(false);
+    expect(texts2.some((t) => t.includes('visible response'))).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
