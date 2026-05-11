@@ -828,6 +828,79 @@ export class AionUIDatabase {
     }
   }
 
+  /**
+   * Importer-private: count messages already persisted for a conversation.
+   * Used by Phase 2 hydration to decide "prior hydration?" cheaply without
+   * pulling rows. Not added to `IConversationRepository` (consumer surface).
+   */
+  getMessageCountForConversation(conversationId: string): IQueryResult<number> {
+    try {
+      const result = this.db
+        .prepare('SELECT COUNT(*) as count FROM messages WHERE conversation_id = ?')
+        .get(conversationId) as { count: number } | undefined;
+      return {
+        success: true,
+        data: result?.count ?? 0,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Importer-private: atomic DELETE-then-INSERT replace for a conversation's
+   * `messages` rows. Used by Phase 2 hydration so re-hydration replaces the
+   * cached transcript instead of appending to it. The DELETE + every INSERT
+   * runs inside one better-sqlite3 transaction — either every row is
+   * replaced or nothing changes.
+   *
+   * Idempotent on `conversationId`. Returns the number of rows inserted.
+   * Not added to `IConversationRepository` (consumer surface).
+   */
+  insertImportedMessages(conversationId: string, messages: TMessage[]): IQueryResult<number> {
+    try {
+      const deleteStmt = this.db.prepare('DELETE FROM messages WHERE conversation_id = ?');
+      const insertStmt = this.db.prepare(`
+        INSERT INTO messages (id, conversation_id, msg_id, type, content, position, status, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const replace = this.db.transaction((convId: string, msgs: TMessage[]) => {
+        deleteStmt.run(convId);
+        let inserted = 0;
+        for (const msg of msgs) {
+          const row = messageToRow(msg);
+          insertStmt.run(
+            row.id,
+            row.conversation_id,
+            row.msg_id,
+            row.type,
+            row.content,
+            row.position,
+            row.status,
+            row.created_at
+          );
+          inserted++;
+        }
+        return inserted;
+      });
+
+      const inserted = replace(conversationId, messages);
+      return {
+        success: true,
+        data: inserted,
+      };
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
   getConversationMessages(conversationId: string, page = 0, pageSize = 100, order = 'ASC'): IPaginatedResult<TMessage> {
     try {
       const countResult = this.db
