@@ -58,7 +58,7 @@ vi.mock('@arco-design/web-react', async () => {
 import SourceBadge, {
   SOURCE_MAP,
   pickEntry,
-} from '../../../src/renderer/pages/conversation/GroupedHistory/SourceBadge';
+} from '../../../src/renderer/pages/conversation/GroupedHistory/parts/SourceBadge';
 
 afterEach(() => {
   cleanup();
