@@ -209,5 +209,15 @@
     "request_sent": "Request sent to agent",
     "failed": "Failed to generate",
     "preset_registered": "Agent preset registered successfully!"
+  },
+  "transcript": {
+    "resumeSession": "このセッションを再開",
+    "resumeTooltip": "このトランスクリプトからライブセッションを開始します",
+    "skeleton": {
+      "loading": "トランスクリプトを読み込み中…"
+    },
+    "unavailable": "トランスクリプトを表示できません — ソースファイルが見つかりません。",
+    "cachedWarning": "ソースファイルが見つかりません — 最後にインポートされたトランスクリプトを表示しています。",
+    "error": "トランスクリプトを読み込めませんでした。セッションを再度開いてみてください。"
   }
 }

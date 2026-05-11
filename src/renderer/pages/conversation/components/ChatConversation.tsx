@@ -24,6 +24,7 @@ import { emitter } from '../../../utils/emitter';
 import AcpChat from '../platforms/acp/AcpChat';
 import ChatLayout from './ChatLayout';
 import ChatSider from './ChatSider';
+import TranscriptView, { hasHydratedAt, isImportedAcpConversation } from './TranscriptView';
 import CodexChat from '../platforms/codex/CodexChat';
 import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
@@ -273,8 +274,16 @@ const ChatConversation: React.FC<{
   const conversationNode = useMemo(() => {
     if (!conversation || isGeminiConversation) return null;
 
-    // Terminal mode rendering for ACP conversations
-    if (conversation.type === 'acp' && isTerminalMode) {
+    // CLI-history-imported ACP sessions (extra.sourceFilePath set) open as a
+    // read-only transcript regardless of the mode toggle — the user must
+    // explicitly click "Resume this session" to start any live ACP / terminal
+    // surface (item 8 will wire that launch). Checking this BEFORE the
+    // terminal-mode early-return prevents a stale `extra.currentMode = 'terminal'`
+    // from accidentally launching a live PTY when the user just wants to read.
+    const isImportedAcp = isImportedAcpConversation(conversation);
+
+    // Terminal mode rendering for ACP conversations (live, native rows only).
+    if (conversation.type === 'acp' && isTerminalMode && !isImportedAcp) {
       return (
         <TerminalChat
           key={`terminal-${conversation.id}`}
@@ -289,7 +298,18 @@ const ChatConversation: React.FC<{
     }
 
     switch (conversation.type) {
-      case 'acp':
+      case 'acp': {
+        if (isImportedAcp) {
+          return (
+            <TranscriptView
+              key={conversation.id}
+              conversation_id={conversation.id}
+              workspace={conversation.extra?.workspace}
+              backend={conversation.extra?.backend || 'claude'}
+              isHydrated={hasHydratedAt(conversation)}
+            />
+          );
+        }
         return (
           <AcpChat
             key={conversation.id}
@@ -300,6 +320,7 @@ const ChatConversation: React.FC<{
             agentName={(conversation.extra as { agentName?: string })?.agentName}
           ></AcpChat>
         );
+      }
       case 'codex': // Legacy: new Codex conversations use ACP protocol. Kept for existing sessions.
         return (
           <CodexChat

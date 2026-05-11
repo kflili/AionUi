@@ -209,5 +209,15 @@
     "request_sent": "Request sent to agent",
     "failed": "Failed to generate",
     "preset_registered": "Agent preset registered successfully!"
+  },
+  "transcript": {
+    "resumeSession": "繼續此會話",
+    "resumeTooltip": "從此會話記錄開啟即時會話",
+    "skeleton": {
+      "loading": "正在載入會話記錄…"
+    },
+    "unavailable": "無法顯示會話記錄 — 找不到原始檔案。",
+    "cachedWarning": "找不到原始檔案 — 顯示最後一次匯入的會話記錄。",
+    "error": "無法載入會話記錄,請嘗試重新開啟會話。"
   }
 }
