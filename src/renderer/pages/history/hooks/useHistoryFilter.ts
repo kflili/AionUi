@@ -6,19 +6,19 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import type { SidebarFilterSource } from '@/renderer/pages/conversation/GroupedHistory/utils/sidebarFilterHelpers';
 import {
   DEFAULT_HISTORY_FILTER,
   type HistoryDatePreset,
   type HistoryFilterCriteria,
   type HistorySortKey,
+  type HistorySourceFilter,
   sectionKeyToInitialFilter,
 } from '../utils/historyFilterHelpers';
 
 export type UseHistoryFilterResult = {
   criteria: HistoryFilterCriteria;
-  setSources: (next: ReadonlySet<SidebarFilterSource>) => void;
-  toggleSource: (value: SidebarFilterSource) => void;
+  setSources: (next: ReadonlySet<HistorySourceFilter>) => void;
+  toggleSource: (value: HistorySourceFilter) => void;
   setWorkspaces: (next: ReadonlySet<string>) => void;
   setPreset: (preset: HistoryDatePreset) => void;
   setCustomRange: (range: { from: number | null; to: number | null }) => void;
@@ -51,11 +51,11 @@ export const useHistoryFilter = (): UseHistoryFilterResult => {
     setCriteria(initFromSearchParam(sectionParam));
   }, [sectionParam]);
 
-  const setSources = useCallback((next: ReadonlySet<SidebarFilterSource>) => {
+  const setSources = useCallback((next: ReadonlySet<HistorySourceFilter>) => {
     setCriteria((prev) => ({ ...prev, sources: next }));
   }, []);
 
-  const toggleSource = useCallback((value: SidebarFilterSource) => {
+  const toggleSource = useCallback((value: HistorySourceFilter) => {
     setCriteria((prev) => {
       const next = new Set(prev.sources);
       if (next.has(value)) {

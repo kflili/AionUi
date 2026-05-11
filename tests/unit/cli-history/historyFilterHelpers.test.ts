@@ -7,13 +7,13 @@
 import { describe, expect, it } from 'vitest';
 
 import type { TChatConversation } from '../../../src/common/config/storage';
-import type { SidebarFilterSource } from '../../../src/renderer/pages/conversation/GroupedHistory/utils/sidebarFilterHelpers';
 import {
   applyHistoryFilter,
   collectWorkspaceOptions,
   DEFAULT_HISTORY_FILTER,
   hasNonHydratedImportedRows,
   type HistoryFilterCriteria,
+  type HistorySourceFilter,
   isHistoryFilterActive,
   matchesDateRange,
   NO_WORKSPACE_TOKEN,
@@ -54,7 +54,7 @@ const criteria = (overrides: Partial<HistoryFilterCriteria> = {}): HistoryFilter
   ...overrides,
 });
 
-const sources = (...vals: SidebarFilterSource[]): Set<SidebarFilterSource> => new Set(vals);
+const sources = (...vals: HistorySourceFilter[]): Set<HistorySourceFilter> => new Set(vals);
 const workspaces = (...vals: string[]): Set<string> => new Set(vals);
 
 const HOUR = 60 * 60 * 1000;

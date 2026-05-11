@@ -10,13 +10,22 @@ import type { SidebarFilterSource } from '@/renderer/pages/conversation/GroupedH
 /** Sentinel value used to represent rows with no `extra.workspace` in the workspace filter. */
 export const NO_WORKSPACE_TOKEN = '__none__';
 
+/**
+ * The history view stores source narrowing as a Set of concrete bucket
+ * sources. The `'all'` value from the sidebar's `SidebarFilterSource` union
+ * is intentionally excluded — the history view encodes "all sources" as an
+ * empty Set, which avoids a redundant inactive-but-non-empty state and makes
+ * the `matchesSourceSet` outlier-branch logic unambiguous.
+ */
+export type HistorySourceFilter = Exclude<SidebarFilterSource, 'all'>;
+
 export type HistoryDatePreset = 'last7' | 'last30' | 'all' | 'custom';
 
 export type HistorySortKey = 'date' | 'name';
 
 export type HistoryFilterCriteria = {
   /** Multi-select source set. Empty set means "filter inactive" (admit all sources). */
-  sources: ReadonlySet<SidebarFilterSource>;
+  sources: ReadonlySet<HistorySourceFilter>;
   /**
    * Multi-select workspace set. Empty set = inactive. Contains workspace strings;
    * the special `NO_WORKSPACE_TOKEN` admits rows where `extra.workspace` is missing/empty.
@@ -31,7 +40,7 @@ export type HistoryFilterCriteria = {
 };
 
 export const DEFAULT_HISTORY_FILTER: HistoryFilterCriteria = {
-  sources: new Set<SidebarFilterSource>(),
+  sources: new Set<HistorySourceFilter>(),
   workspaces: new Set<string>(),
   preset: 'all',
   customRange: { from: null, to: null },
@@ -58,19 +67,21 @@ const getWorkspace = (conversation: TChatConversation): string => {
   return typeof workspace === 'string' ? workspace : '';
 };
 
-const matchesSourceSet = (conversation: TChatConversation, sources: ReadonlySet<SidebarFilterSource>): boolean => {
+const matchesSourceSet = (conversation: TChatConversation, sources: ReadonlySet<HistorySourceFilter>): boolean => {
   if (sources.size === 0) return true;
   const convSource = conversation.source as string | null | undefined;
-  // Translate the conversation's raw source into one of the four filter buckets.
-  let bucket: SidebarFilterSource;
+  // Translate the conversation's raw source into one of the three concrete
+  // bucket sources. The 'all' member of SidebarFilterSource is excluded from
+  // HistorySourceFilter at the type level, so the bucket variable is sound.
+  let bucket: HistorySourceFilter;
   if (convSource === 'claude_code') bucket = 'claude_code';
   else if (convSource === 'copilot') bucket = 'copilot';
   else if (convSource === 'aionui' || convSource == null) bucket = 'native';
   else {
-    // outlier sources (telegram/lark/dingtalk/etc.) belong under 'all' only —
-    // they are not 'native' and not CC/CP, so if the user has narrowed sources,
-    // they should not appear.
-    return sources.has('all');
+    // Outlier sources (telegram/lark/dingtalk/etc.) don't map to any of the
+    // three concrete buckets. With an active narrowing set they MUST be
+    // excluded — there's no chip the user could have selected to admit them.
+    return false;
   }
   return sources.has(bucket);
 };

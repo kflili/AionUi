@@ -10,19 +10,19 @@ import { Button, Checkbox, DatePicker, Input, Select } from '@arco-design/web-re
 import { Search } from '@icon-park/react';
 import classNames from 'classnames';
 import type { I18nKey } from '@renderer/services/i18n/i18n-keys';
-import type { SidebarFilterSource } from '@/renderer/pages/conversation/GroupedHistory/utils/sidebarFilterHelpers';
 import {
   NO_WORKSPACE_TOKEN,
   type HistoryDatePreset,
   type HistoryFilterCriteria,
   type HistorySortKey,
+  type HistorySourceFilter,
 } from '../utils/historyFilterHelpers';
 
 const Option = Select.Option;
 const RangePicker = DatePicker.RangePicker;
 
 type SourceChip = {
-  value: Exclude<SidebarFilterSource, 'all'>;
+  value: HistorySourceFilter;
   i18nKey: Extract<
     I18nKey,
     | 'conversation.fullHistory.filter.claudeCode'
@@ -56,10 +56,10 @@ const PRESET_CHIPS: readonly PresetChip[] = [
 ] as const;
 
 type SourceChipButtonProps = {
-  value: Exclude<SidebarFilterSource, 'all'>;
+  value: HistorySourceFilter;
   label: string;
   selected: boolean;
-  onToggle: (value: SidebarFilterSource) => void;
+  onToggle: (value: HistorySourceFilter) => void;
 };
 
 const SourceChipButton: React.FC<SourceChipButtonProps> = ({ value, label, selected, onToggle }) => {
@@ -106,7 +106,7 @@ export type HistoryFilterBarProps = {
   isActive: boolean;
   workspaceOptions: string[];
   showMessageIndexNotice: boolean;
-  onToggleSource: (value: SidebarFilterSource) => void;
+  onToggleSource: (value: HistorySourceFilter) => void;
   onClearSources: () => void;
   onWorkspacesChange: (next: ReadonlySet<string>) => void;
   onPresetChange: (preset: HistoryDatePreset) => void;

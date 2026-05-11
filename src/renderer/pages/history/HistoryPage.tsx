@@ -59,6 +59,10 @@ const HistoryPage: React.FC = () => {
   // resolved after unmount fails its `requestIdRef.current !== myRequestId`
   // guard before calling `setMessageMatchIds` — prevents the React
   // "state update on unmounted component" hazard.
+  //
+  // We also clear the overlay synchronously when a new needle is scheduled so
+  // the visible set never briefly shows results for the *previous* keyword
+  // during the debounce + IPC latency window.
   useEffect(() => {
     if (!criteria.includeMessageContent) {
       setMessageMatchIds(undefined);
@@ -69,6 +73,9 @@ const HistoryPage: React.FC = () => {
       setMessageMatchIds(undefined);
       return;
     }
+    // Clear stale overlay immediately on every needle change so the user
+    // doesn't see leftover matches from the previous keyword.
+    setMessageMatchIds(undefined);
     const myRequestId = ++requestIdRef.current;
     const timer = setTimeout(() => {
       void (async () => {
