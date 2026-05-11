@@ -20,7 +20,7 @@ import { useTranslation } from 'react-i18next';
 import type { ConversationRowProps } from './types';
 import { getBackendKeyFromConversation } from './utils/exportHelpers';
 import { isConversationPinned } from './utils/groupingHelpers';
-import SourceBadge from './SourceBadge';
+import SourceBadge from './parts/SourceBadge';
 
 const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const {

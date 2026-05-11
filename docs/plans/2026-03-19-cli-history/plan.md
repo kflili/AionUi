@@ -447,9 +447,9 @@ Not started:
 
 - [x] Per-section truncation with configurable limits per timeline group
 - [x] "Show N more" expander per section
-- [ ] Source filter dropdown (All / Claude Code / Copilot / Native)
-- [ ] Search bar for filtering by title and workspace match
-- [ ] Mobile-responsive: filter + search collapse to icon button
+- [x] Source filter dropdown (All / Claude Code / Copilot / Native)
+- [x] Search bar for filtering by title and workspace match
+- [x] Mobile-responsive: filter + search collapse to icon button
 
 ### CLI History Import
 

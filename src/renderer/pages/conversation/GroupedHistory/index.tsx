@@ -21,12 +21,14 @@ import WorkspaceCollapse from '../components/WorkspaceCollapse';
 import ConversationRow from './ConversationRow';
 import DragOverlayContent from './DragOverlayContent';
 import SortableConversationRow from './SortableConversationRow';
+import SidebarFilterBar from './parts/SidebarFilterBar';
 import { useBatchSelection } from './hooks/useBatchSelection';
 import { useConversationActions } from './hooks/useConversationActions';
 import { useConversations } from './hooks/useConversations';
 import { useDragAndDrop } from './hooks/useDragAndDrop';
 import { useExport } from './hooks/useExport';
 import { useSectionVisibleBudgets } from './hooks/useSectionVisibleBudgets';
+import { useSidebarFilter } from './hooks/useSidebarFilter';
 import type { ConversationRowProps, WorkspaceGroupedHistoryProps } from './types';
 import { computeBudgetAfterBump, getSectionDefaultLimit, truncateSection } from './utils/groupingHelpers';
 
@@ -49,15 +51,23 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     }
   }, [id, setActiveConversation]);
 
+  const sidebarFilter = useSidebarFilter();
+  // Suppress the filter when the sidebar is collapsed — the filter bar isn't
+  // rendered in icon-only mode (no horizontal room), so applying a narrowing
+  // filter there would leave the sidebar mysteriously empty with no visible
+  // affordance to clear it. Filter state is preserved in the hook so that
+  // expanding restores the previous narrowed view.
+  const filterActive = sidebarFilter.visible && !collapsed;
+
   const {
-    conversations,
+    visibleConversations,
     isConversationGenerating,
     hasCompletionUnread,
     expandedWorkspaces,
     pinnedConversations,
     timelineSections,
     handleToggleWorkspace,
-  } = useConversations();
+  } = useConversations(filterActive ? sidebarFilter.criteria : undefined);
 
   const {
     selectedConversationIds,
@@ -66,7 +76,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     allSelected,
     toggleSelectedConversation,
     handleToggleSelectAll,
-  } = useBatchSelection(batchMode, conversations);
+  } = useBatchSelection(batchMode, visibleConversations);
 
   const {
     renameModalVisible,
@@ -108,7 +118,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
     handleBatchExport,
     handleConfirmExport,
   } = useExport({
-    conversations,
+    conversations: visibleConversations,
     selectedConversationIds,
     setSelectedConversationIds,
     onBatchModeChange,
@@ -210,9 +220,28 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   // Collect all sortable IDs for the pinned section
   const pinnedIds = useMemo(() => pinnedConversations.map((c) => c.id), [pinnedConversations]);
 
-  if (timelineSections.length === 0 && pinnedConversations.length === 0) {
+  const sidebarIsEmpty = timelineSections.length === 0 && pinnedConversations.length === 0;
+  // Show the filter bar above the list whenever CLI history import is enabled
+  // and the sidebar is expanded. We keep it rendered through the empty-state
+  // branch so an active filter that narrowed everything out still has a Reset
+  // affordance. The collapsed-sidebar case suppresses the bar entirely because
+  // the sidebar in icon-only mode has no horizontal room for inputs.
+  const filterBar = sidebarFilter.visible && !collapsed && (
+    <SidebarFilterBar
+      visible={sidebarFilter.visible}
+      source={sidebarFilter.criteria.source}
+      search={sidebarFilter.criteria.search}
+      isActive={sidebarFilter.isActive}
+      onSourceChange={sidebarFilter.setSource}
+      onSearchChange={sidebarFilter.setSearch}
+      onReset={sidebarFilter.reset}
+    />
+  );
+
+  if (sidebarIsEmpty && !sidebarFilter.isActive) {
     return (
       <FlexFullContainer>
+        {filterBar}
         <div className='flex-center'>
           <Empty description={t('conversation.history.noHistory')} />
         </div>
@@ -380,6 +409,8 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         </div>
       )}
 
+      {filterBar}
+
       <div className='size-full overflow-y-auto overflow-x-hidden'>
         <DndContext
           sensors={sensors}
@@ -388,6 +419,11 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           onDragEnd={handleDragEnd}
           onDragCancel={handleDragCancel}
         >
+          {sidebarIsEmpty && sidebarFilter.isActive && (
+            <div className='flex-center py-32px'>
+              <Empty description={t('conversation.history.filter.noMatches')} />
+            </div>
+          )}
           {pinnedConversations.length > 0 && (
             <div className='mb-8px min-w-0'>
               {!collapsed && (

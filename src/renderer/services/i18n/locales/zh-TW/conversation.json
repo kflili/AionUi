@@ -73,6 +73,20 @@
       "claudeCode": "從 Claude Code 匯入",
       "copilot": "從 Copilot 匯入"
     },
+    "filter": {
+      "allSources": "全部來源",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "原生",
+      "sourceLabel": "來源",
+      "searchLabel": "搜尋",
+      "searchPlaceholder": "搜尋對話...",
+      "openMobileSheet": "篩選",
+      "sheetTitle": "篩選對話",
+      "reset": "重設",
+      "applyDone": "完成",
+      "noMatches": "沒有符合條件的對話"
+    },
     "showMore": "再顯示 {{count}} 項"
   },
   "historySearch": {
