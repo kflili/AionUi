@@ -14,7 +14,11 @@ import type {
   TimelineItem,
   TimelineSection,
 } from '../../../src/renderer/pages/conversation/GroupedHistory/types';
-import { truncateSection } from '../../../src/renderer/pages/conversation/GroupedHistory/utils/groupingHelpers';
+import {
+  computeBudgetAfterBump,
+  getSectionDefaultLimit,
+  truncateSection,
+} from '../../../src/renderer/pages/conversation/GroupedHistory/utils/groupingHelpers';
 import type { TChatConversation } from '../../../src/common/config/storage';
 
 afterEach(() => {
@@ -64,7 +68,23 @@ const SectionsHarness: React.FC<{
         isWorkspaceExpanded,
         budget,
       });
-      return { section, result };
+      let revealOnClick = 0;
+      if (result.hiddenRowCount > 0) {
+        const baseLimit = getSectionDefaultLimit(section.timelineKey);
+        const nextBudget = computeBudgetAfterBump({
+          currentBudget: budget,
+          baseLimit,
+          totalRowCount: result.totalRowCount,
+          nextRevealBudget: result.nextRevealBudget,
+        });
+        const after = truncateSection({
+          items: section.items,
+          isWorkspaceExpanded,
+          budget: nextBudget,
+        });
+        revealOnClick = after.visibleRowCount - result.visibleRowCount;
+      }
+      return { section, result, revealOnClick };
     });
   }, [timelineSections, sectionBudgets, collapsed]);
 
@@ -82,19 +102,19 @@ const SectionsHarness: React.FC<{
       )}
 
       {/* Timeline sections, mirroring index.tsx's render gating. */}
-      {truncated.map(({ section, result }) => (
+      {truncated.map(({ section, result, revealOnClick }) => (
         <div key={section.timelineKey} data-testid={`section-${section.timelineKey}`}>
           {result.visibleItems.map((item) => (
             <div key={item.conversation?.id ?? 'ws'} data-testid={`item-${item.conversation?.id ?? 'ws'}`} />
           ))}
-          {!collapsed && result.hiddenRowCount > 0 && (
+          {!collapsed && result.hiddenRowCount > 0 && revealOnClick > 0 && (
             <button
               data-testid={`expander-${section.timelineKey}`}
               onClick={() =>
                 sectionBudgets.bumpBudget(section.timelineKey, result.totalRowCount, result.nextRevealBudget)
               }
             >
-              Show {result.hiddenRowCount} more
+              Show {revealOnClick} more
             </button>
           )}
         </div>
@@ -135,17 +155,21 @@ describe('GroupedHistory truncation rendering', () => {
   });
 
   it('clicking "Show N more" reveals additional rows up to the section budget', () => {
-    const today = makeSection('conversation.history.today', 40); // 40 - 15 = 25 hidden
+    const today = makeSection('conversation.history.today', 40); // 40 - 15 = 25 hidden total
     render(<SectionsHarness timelineSections={[today]} pinnedConversations={[]} collapsed={false} />);
 
     expect(screen.getAllByTestId(/^item-conversation\.history\.today-/)).toHaveLength(15);
-    expect(screen.getByTestId('expander-conversation.history.today').textContent).toBe('Show 25 more');
+    // Label reflects the FIRST CLICK reveal count (one baseLimit step = 15),
+    // not the total hidden rows. Prevents the "Show 25 more" → only 15 appear
+    // mismatch flagged by Codex review.
+    expect(screen.getByTestId('expander-conversation.history.today').textContent).toBe('Show 15 more');
 
     act(() => {
       fireEvent.click(screen.getByTestId('expander-conversation.history.today'));
     });
 
-    // After one click: budget +15 → 30 visible.
+    // After one click: budget +15 → 30 visible. Remaining hidden = 10 rows.
+    // Next click will fully reveal the section (40 - 30 = 10).
     expect(screen.getAllByTestId(/^item-conversation\.history\.today-/)).toHaveLength(30);
     expect(screen.getByTestId('expander-conversation.history.today').textContent).toBe('Show 10 more');
   });
@@ -186,6 +210,33 @@ describe('GroupedHistory truncation rendering', () => {
 
     expect(screen.getAllByTestId(/^item-conversation\.history\.yesterday-/)).toHaveLength(8);
     expect(screen.queryByTestId('expander-conversation.history.yesterday')).toBeNull();
+  });
+
+  it('label reports per-click reveal count (one baseLimit step), not cumulative hidden', () => {
+    // Earlier section: 60 rows, budget 20 (20 visible / 40 hidden). One click bumps
+    // budget by 20 → 40 visible, revealing 20 rows. Label should be "Show 20 more",
+    // not "Show 40 more" (the cumulative hidden count).
+    const earlier = makeSection('conversation.history.earlier', 60);
+    render(<SectionsHarness timelineSections={[earlier]} pinnedConversations={[]} collapsed={false} />);
+
+    expect(screen.getAllByTestId(/^item-conversation\.history\.earlier-/)).toHaveLength(20);
+    expect(screen.getByTestId('expander-conversation.history.earlier').textContent).toBe('Show 20 more');
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('expander-conversation.history.earlier'));
+    });
+
+    // After click: budget 40, 40 visible, 20 still hidden, label "Show 20 more".
+    expect(screen.getAllByTestId(/^item-conversation\.history\.earlier-/)).toHaveLength(40);
+    expect(screen.getByTestId('expander-conversation.history.earlier').textContent).toBe('Show 20 more');
+
+    act(() => {
+      fireEvent.click(screen.getByTestId('expander-conversation.history.earlier'));
+    });
+
+    // Final click reveals the last 20 rows; expander disappears.
+    expect(screen.getAllByTestId(/^item-conversation\.history\.earlier-/)).toHaveLength(60);
+    expect(screen.queryByTestId('expander-conversation.history.earlier')).toBeNull();
   });
 });
 

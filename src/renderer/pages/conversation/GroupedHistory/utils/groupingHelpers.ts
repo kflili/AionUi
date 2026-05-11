@@ -199,6 +199,7 @@ export const getItemRowCount = (item: TimelineItem, isWorkspaceExpanded: (worksp
 
 export type TruncateSectionResult = {
   visibleItems: TimelineItem[];
+  visibleRowCount: number;
   hiddenItemCount: number;
   hiddenRowCount: number;
   totalRowCount: number;
@@ -261,9 +262,28 @@ export const truncateSection = (args: {
 
   return {
     visibleItems,
+    visibleRowCount,
     hiddenItemCount,
     hiddenRowCount,
     totalRowCount,
     nextRevealBudget,
   };
+};
+
+/**
+ * The budget that would be set by a single "Show N more" click given the
+ * current `currentBudget` and the section's `baseLimit`. Mirrors the math in
+ * `useSectionVisibleBudgets.bumpBudget` so the renderer can predict the click
+ * outcome (used for an accurate button label) without mutating state.
+ */
+export const computeBudgetAfterBump = (args: {
+  currentBudget: number;
+  baseLimit: number;
+  totalRowCount: number;
+  nextRevealBudget: number | null;
+}): number => {
+  const { currentBudget, baseLimit, totalRowCount, nextRevealBudget } = args;
+  const incremented = currentBudget + baseLimit;
+  const required = nextRevealBudget ?? 0;
+  return Math.min(totalRowCount, Math.max(incremented, required));
 };

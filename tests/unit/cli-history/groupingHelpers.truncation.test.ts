@@ -7,6 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  computeBudgetAfterBump,
   getItemRowCount,
   getSectionDefaultLimit,
   SECTION_DEFAULT_LIMIT,
@@ -117,11 +118,30 @@ describe('truncateSection', () => {
     const result = truncateSection({ items: [], isWorkspaceExpanded: neverExpanded, budget: 10 });
     expect(result).toEqual({
       visibleItems: [],
+      visibleRowCount: 0,
       hiddenItemCount: 0,
       hiddenRowCount: 0,
       totalRowCount: 0,
       nextRevealBudget: null,
     });
+  });
+
+  it('reports visibleRowCount alongside the running totals', () => {
+    const items: TimelineItem[] = [
+      makeWorkspaceItem('/ws/a', ['a1', 'a2']), // 3 rows expanded
+      makeStandaloneItem('c1'),
+      makeStandaloneItem('c2'),
+      makeStandaloneItem('c3'),
+    ];
+    const result = truncateSection({
+      items,
+      isWorkspaceExpanded: alwaysExpanded,
+      budget: 5,
+    });
+    // workspace (3) + c1 (1) + c2 (1) = 5 rows under budget; c3 doesn't fit.
+    expect(result.visibleRowCount).toBe(5);
+    expect(result.hiddenRowCount).toBe(1);
+    expect(result.totalRowCount).toBe(6);
   });
 
   it('truncates "Today" to its budget with the correct hidden-row count', () => {
@@ -313,5 +333,57 @@ describe('truncateSection', () => {
     });
     expect(result.visibleItems).toHaveLength(2);
     expect(result.nextRevealBudget).toBe(12); // 2 visible + 10 workspace rows
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeBudgetAfterBump — mirrors useSectionVisibleBudgets.bumpBudget so
+// callers can predict the next budget without mutating state.
+// ---------------------------------------------------------------------------
+
+describe('computeBudgetAfterBump', () => {
+  it('adds baseLimit to currentBudget by default', () => {
+    expect(
+      computeBudgetAfterBump({
+        currentBudget: 15,
+        baseLimit: 15,
+        totalRowCount: 100,
+        nextRevealBudget: 16,
+      })
+    ).toBe(30);
+  });
+
+  it('clamps at totalRowCount (never overshoots the section)', () => {
+    expect(
+      computeBudgetAfterBump({
+        currentBudget: 18,
+        baseLimit: 15,
+        totalRowCount: 20,
+        nextRevealBudget: 19,
+      })
+    ).toBe(20);
+  });
+
+  it('uses nextRevealBudget when it exceeds currentBudget + baseLimit', () => {
+    // Big workspace at the next position needs a 50-row budget to reveal.
+    expect(
+      computeBudgetAfterBump({
+        currentBudget: 15,
+        baseLimit: 15,
+        totalRowCount: 100,
+        nextRevealBudget: 50,
+      })
+    ).toBe(50);
+  });
+
+  it('treats null nextRevealBudget as 0 (just adds baseLimit)', () => {
+    expect(
+      computeBudgetAfterBump({
+        currentBudget: 15,
+        baseLimit: 10,
+        totalRowCount: 50,
+        nextRevealBudget: null,
+      })
+    ).toBe(25);
   });
 });

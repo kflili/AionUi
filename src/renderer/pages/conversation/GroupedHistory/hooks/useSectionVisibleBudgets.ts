@@ -7,7 +7,7 @@
 import { useCallback, useMemo, useState } from 'react';
 
 import type { SectionTimelineKey } from '../types';
-import { getSectionDefaultLimit } from '../utils/groupingHelpers';
+import { computeBudgetAfterBump, getSectionDefaultLimit } from '../utils/groupingHelpers';
 
 export type SectionVisibleBudgets = {
   /** Current row-budget for a section, falling back to its default limit. */
@@ -43,9 +43,12 @@ export const useSectionVisibleBudgets = (): SectionVisibleBudgets => {
     setBudgets((prev) => {
       const baseLimit = getSectionDefaultLimit(key);
       const currentBudget = prev.get(key) ?? baseLimit;
-      const incremented = currentBudget + baseLimit;
-      const required = nextRevealBudget ?? 0;
-      const nextBudget = Math.min(totalRowCount, Math.max(incremented, required));
+      const nextBudget = computeBudgetAfterBump({
+        currentBudget,
+        baseLimit,
+        totalRowCount,
+        nextRevealBudget,
+      });
       if (nextBudget === currentBudget) return prev;
       const next = new Map(prev);
       next.set(key, nextBudget);

@@ -28,7 +28,7 @@ import { useDragAndDrop } from './hooks/useDragAndDrop';
 import { useExport } from './hooks/useExport';
 import { useSectionVisibleBudgets } from './hooks/useSectionVisibleBudgets';
 import type { ConversationRowProps, WorkspaceGroupedHistoryProps } from './types';
-import { truncateSection } from './utils/groupingHelpers';
+import { computeBudgetAfterBump, getSectionDefaultLimit, truncateSection } from './utils/groupingHelpers';
 
 const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   onSessionClick,
@@ -133,7 +133,28 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         isWorkspaceExpanded,
         budget,
       });
-      return { section, result };
+
+      // Predict per-click reveal count so the "Show N more" label matches the
+      // budget bump exactly. Without this the label would over-promise
+      // (e.g. "Show 25 more" when the click only reveals one baseLimit step).
+      let revealOnClick = 0;
+      if (result.hiddenRowCount > 0) {
+        const baseLimit = getSectionDefaultLimit(section.timelineKey);
+        const nextBudget = computeBudgetAfterBump({
+          currentBudget: budget,
+          baseLimit,
+          totalRowCount: result.totalRowCount,
+          nextRevealBudget: result.nextRevealBudget,
+        });
+        const after = truncateSection({
+          items: section.items,
+          isWorkspaceExpanded,
+          budget: nextBudget,
+        });
+        revealOnClick = after.visibleRowCount - result.visibleRowCount;
+      }
+
+      return { section, result, revealOnClick };
     });
   }, [timelineSections, expandedWorkspaces, sectionBudgets, collapsed]);
 
@@ -394,7 +415,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
           </DragOverlay>
         </DndContext>
 
-        {truncatedTimelineSections.map(({ section, result }) => (
+        {truncatedTimelineSections.map(({ section, result, revealOnClick }) => (
           <div key={section.timelineKey} className='mb-8px min-w-0'>
             {!collapsed && (
               <div className='chat-history__section px-12px py-8px text-13px text-t-secondary font-bold'>
@@ -434,7 +455,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
               return null;
             })}
 
-            {!collapsed && result.hiddenRowCount > 0 && (
+            {!collapsed && result.hiddenRowCount > 0 && revealOnClick > 0 && (
               <div className='px-12px pt-4px pb-2px'>
                 <Button
                   type='text'
@@ -444,7 +465,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                     sectionBudgets.bumpBudget(section.timelineKey, result.totalRowCount, result.nextRevealBudget)
                   }
                 >
-                  {t('conversation.history.showMore', { count: result.hiddenRowCount })}
+                  {t('conversation.history.showMore', { count: revealOnClick })}
                 </Button>
               </div>
             )}
