@@ -467,6 +467,11 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
                         console.error('Navigation failed:', error);
                       }
                     );
+                    // Close the mobile sidebar drawer so the new /history
+                    // route is visible. The conversation row and footer
+                    // "View all history" link already do this; matching
+                    // behavior here keeps the mobile UX consistent.
+                    onSessionClick?.();
                   }}
                   data-testid={`grouped-history-show-all-${section.timelineKey}`}
                 >
