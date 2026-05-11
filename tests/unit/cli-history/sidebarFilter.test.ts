@@ -27,7 +27,13 @@ type ConvOverrides = {
   extraOverride?: unknown;
 };
 
-const makeConv = ({ id = 'c1', name = 'Some chat', source, workspace, extraOverride }: ConvOverrides = {}): TChatConversation => {
+const makeConv = ({
+  id = 'c1',
+  name = 'Some chat',
+  source,
+  workspace,
+  extraOverride,
+}: ConvOverrides = {}): TChatConversation => {
   const extra = extraOverride === undefined ? (workspace !== undefined ? { workspace } : {}) : extraOverride;
   return {
     id,
@@ -50,10 +56,30 @@ const idsOf = (conversations: TChatConversation[]): string[] => conversations.ma
 // Fixtures — one of each source kind plus an outlier source.
 // ---------------------------------------------------------------------------
 
-const nativeAionui = makeConv({ id: 'n-aionui', name: 'Refactor auth', source: 'aionui', workspace: '/Users/me/aionui-repo' });
-const nativeUndefined = makeConv({ id: 'n-undef', name: 'Untitled chat', source: undefined, workspace: '/Users/me/aionui-repo' });
-const claudeCode = makeConv({ id: 'cc-1', name: 'CC session', source: 'claude_code' as TChatConversation['source'], workspace: '/Users/me/cc-repo' });
-const copilot = makeConv({ id: 'cp-1', name: 'CP session', source: 'copilot' as TChatConversation['source'], workspace: '/Users/me/copilot-repo' });
+const nativeAionui = makeConv({
+  id: 'n-aionui',
+  name: 'Refactor auth',
+  source: 'aionui',
+  workspace: '/Users/me/aionui-repo',
+});
+const nativeUndefined = makeConv({
+  id: 'n-undef',
+  name: 'Untitled chat',
+  source: undefined,
+  workspace: '/Users/me/aionui-repo',
+});
+const claudeCode = makeConv({
+  id: 'cc-1',
+  name: 'CC session',
+  source: 'claude_code' as TChatConversation['source'],
+  workspace: '/Users/me/cc-repo',
+});
+const copilot = makeConv({
+  id: 'cp-1',
+  name: 'CP session',
+  source: 'copilot' as TChatConversation['source'],
+  workspace: '/Users/me/copilot-repo',
+});
 const outlierTelegram = makeConv({ id: 'tg-1', name: 'Telegram chat', source: 'telegram' });
 
 const ALL = [nativeAionui, nativeUndefined, claudeCode, copilot, outlierTelegram];
@@ -119,7 +145,12 @@ describe('applySidebarFilter — search', () => {
   });
 
   it('metadata search matches workspace for non-hydrated imported sessions (generic name, real workspace)', () => {
-    const generic = makeConv({ id: 'imp-1', name: 'Untitled imported chat', source: 'claude_code' as TChatConversation['source'], workspace: '/srv/projects/payments-api' });
+    const generic = makeConv({
+      id: 'imp-1',
+      name: 'Untitled imported chat',
+      source: 'claude_code' as TChatConversation['source'],
+      workspace: '/srv/projects/payments-api',
+    });
     const result = applySidebarFilter([generic, claudeCode], criteria({ search: 'PAYMENTS-api' }));
     expect(idsOf(result)).toEqual(['imp-1']);
   });
@@ -136,8 +167,16 @@ describe('applySidebarFilter — search', () => {
 
 describe('applySidebarFilter — combined behavior', () => {
   it('search + source filter combine via AND', () => {
-    const ccTwo = makeConv({ id: 'cc-2', name: 'Another CC topic', source: 'claude_code' as TChatConversation['source'], workspace: '/work/cc-other' });
-    const result = applySidebarFilter([claudeCode, copilot, ccTwo], criteria({ source: 'claude_code', search: 'another' }));
+    const ccTwo = makeConv({
+      id: 'cc-2',
+      name: 'Another CC topic',
+      source: 'claude_code' as TChatConversation['source'],
+      workspace: '/work/cc-other',
+    });
+    const result = applySidebarFilter(
+      [claudeCode, copilot, ccTwo],
+      criteria({ source: 'claude_code', search: 'another' })
+    );
     expect(idsOf(result)).toEqual(['cc-2']);
   });
 

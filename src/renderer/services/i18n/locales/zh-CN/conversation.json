@@ -73,6 +73,19 @@
       "claudeCode": "从 Claude Code 导入",
       "copilot": "从 Copilot 导入"
     },
+    "filter": {
+      "allSources": "全部来源",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "原生",
+      "sourceLabel": "来源",
+      "searchLabel": "搜索",
+      "searchPlaceholder": "搜索会话...",
+      "openMobileSheet": "筛选",
+      "sheetTitle": "筛选会话",
+      "reset": "重置",
+      "applyDone": "完成"
+    },
     "showMore": "再显示 {{count}} 条"
   },
   "historySearch": {

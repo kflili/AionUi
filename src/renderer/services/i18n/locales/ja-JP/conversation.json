@@ -73,6 +73,19 @@
       "claudeCode": "Claude Code からインポート",
       "copilot": "Copilot からインポート"
     },
+    "filter": {
+      "allSources": "すべて",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "ネイティブ",
+      "sourceLabel": "ソース",
+      "searchLabel": "検索",
+      "searchPlaceholder": "会話を検索...",
+      "openMobileSheet": "フィルター",
+      "sheetTitle": "会話を絞り込む",
+      "reset": "リセット",
+      "applyDone": "完了"
+    },
     "showMore": "さらに {{count}} 件を表示"
   },
   "historySearch": {

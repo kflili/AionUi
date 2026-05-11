@@ -73,6 +73,19 @@
       "claudeCode": "Claude Code'tan içe aktarıldı",
       "copilot": "Copilot'tan içe aktarıldı"
     },
+    "filter": {
+      "allSources": "Tüm kaynaklar",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "Yerel",
+      "sourceLabel": "Kaynak",
+      "searchLabel": "Ara",
+      "searchPlaceholder": "Sohbetlerde ara...",
+      "openMobileSheet": "Filtreler",
+      "sheetTitle": "Sohbetleri filtrele",
+      "reset": "Sıfırla",
+      "applyDone": "Tamam"
+    },
     "showMore": "{{count}} tane daha göster"
   },
   "historySearch": {

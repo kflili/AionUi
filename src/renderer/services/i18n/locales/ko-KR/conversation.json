@@ -73,6 +73,19 @@
       "claudeCode": "Claude Code에서 가져옴",
       "copilot": "Copilot에서 가져옴"
     },
+    "filter": {
+      "allSources": "모든 출처",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "네이티브",
+      "sourceLabel": "출처",
+      "searchLabel": "검색",
+      "searchPlaceholder": "대화 검색...",
+      "openMobileSheet": "필터",
+      "sheetTitle": "대화 필터링",
+      "reset": "초기화",
+      "applyDone": "완료"
+    },
     "showMore": "{{count}}개 더 보기"
   },
   "historySearch": {

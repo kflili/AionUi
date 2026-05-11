@@ -73,6 +73,19 @@
       "claudeCode": "Imported from Claude Code",
       "copilot": "Imported from Copilot"
     },
+    "filter": {
+      "allSources": "All sources",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "Native",
+      "sourceLabel": "Source",
+      "searchLabel": "Search",
+      "searchPlaceholder": "Search conversations...",
+      "openMobileSheet": "Filters",
+      "sheetTitle": "Filter conversations",
+      "reset": "Reset",
+      "applyDone": "Done"
+    },
     "showMore": "Show {{count}} more"
   },
   "historySearch": {
