@@ -48,13 +48,17 @@ export const useExport = ({
   const exportCanceledRef = useRef(false);
   const { t } = useTranslation();
   // `useAgentCliConfig()` returns `undefined` while the initial ConfigStorage
-  // fetch is in flight. We propagate that `undefined` into the hydration
-  // helper so it can refuse to call the IPC with a stale fallback —
-  // hydrate's cache key includes `showThinking` (importer.ts §hydrateSession)
-  // and calling with the wrong value would overwrite the SQLite cache
-  // variant. Mirrors `TranscriptView`'s `showThinking === undefined` gate.
+  // fetch is in flight, and `{}` (an empty config) once loaded with no stored
+  // preference. We only treat the in-flight `undefined` as "still loading"
+  // (helper bails to avoid clobbering the SQLite cache variant); an empty
+  // loaded config means the user has never toggled Show Thinking, in which
+  // case we use `false` — the converter's default and the value that
+  // matches the importer's `normalizedShowThinking` for unconfigured rows.
+  // Mirrors `ChatConversation`'s `agentCliConfig?.showThinking ?? false`
+  // pattern (which only resolves the loaded-vs-loading split implicitly
+  // because its caller already guards against `undefined`).
   const agentCli = useAgentCliConfig();
-  const showThinkingForHydrate = agentCli?.showThinking;
+  const showThinkingForHydrate = agentCli === undefined ? undefined : (agentCli.showThinking ?? false);
 
   const fileExists = useCallback(async (filePath: string): Promise<boolean> => {
     try {
