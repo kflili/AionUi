@@ -16,13 +16,7 @@ import { convertClaudeJsonl } from './converters/claude';
 import { convertCopilotJsonl } from './converters/copilot';
 import { ClaudeCodeProvider } from './providers/claude';
 import { CopilotProvider } from './providers/copilot';
-import type {
-  HydrateResult,
-  ImportResult,
-  SessionMetadata,
-  SessionSourceId,
-  SessionSourceProvider,
-} from './types';
+import type { HydrateResult, ImportResult, SessionMetadata, SessionSourceId, SessionSourceProvider } from './types';
 
 /**
  * Phase 1 metadata-import orchestrator.
@@ -706,10 +700,7 @@ function isFallbackOrGenericTitle(name: string | undefined, generatedName: strin
  * if the candidate is empty, or if the title is not a fallback/generic
  * one (preserves meaningful provider titles per parent design line 509).
  */
-function upgradeTitleFromFirstUserMessage(
-  conv: TChatConversation,
-  messages: TMessage[]
-): TChatConversation {
+function upgradeTitleFromFirstUserMessage(conv: TChatConversation, messages: TMessage[]): TChatConversation {
   const extra = (conv.extra ?? {}) as Partial<AcpImportedExtra>;
   if (!isFallbackOrGenericTitle(conv.name, extra.importMeta?.generatedName)) {
     return conv;
@@ -823,8 +814,7 @@ async function runHydrate(conversationId: string): Promise<HydrateResult> {
   // Prior hydration counts only if it was against the CURRENT source path.
   // A Phase-1 scan that refreshes sourceFilePath (file moved on disk)
   // invalidates the cache regardless of mtime.
-  const hasPriorHydration =
-    (hydratedAt > 0 || existingCount > 0) && hydratedSourceFilePath === sourceFilePath;
+  const hasPriorHydration = (hydratedAt > 0 || existingCount > 0) && hydratedSourceFilePath === sourceFilePath;
 
   if (mtimeMs === null) {
     if (hasPriorHydration) {

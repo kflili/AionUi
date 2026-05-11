@@ -370,12 +370,16 @@ The IPC layer never throws; only the in-process caller (renderer via `cliHistory
 
 - **Risk:** Mocking `fs.promises.stat` and `fs.promises.readFile` directly via `vi.mock` is brittle across Vitest versions and can leak between test files.
   **Mitigation:** Introduce a thin file-IO seam at the top of `importer.ts`:
+
   ```ts
   // Test seam — overridden via __setFileIoForTests() in the test file.
   const defaultFileIo = { statMtimeMs: realStatMtimeMs, readJsonl: realReadJsonl };
   let fileIo = { ...defaultFileIo };
-  export function __setFileIoForTests(override: Partial<typeof fileIo>): void { fileIo = { ...fileIo, ...override }; }
+  export function __setFileIoForTests(override: Partial<typeof fileIo>): void {
+    fileIo = { ...fileIo, ...override };
+  }
   ```
+
   Production code calls `fileIo.statMtimeMs(path)` and `fileIo.readJsonl(path)`. Tests override with in-memory implementations via `__setFileIoForTests(...)`. Extend `__resetInFlightForTests()` (already exported by Phase 1) to also restore `fileIo = { ...defaultFileIo }` so each test calls the existing reset hook without importing private real helpers. Avoids `vi.mock('fs')` and its bleed-through risks.
 
 - **Risk:** Re-read-before-write in step 6 introduces a tiny extra DB read per hydration.
