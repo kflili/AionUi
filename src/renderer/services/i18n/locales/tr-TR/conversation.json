@@ -68,7 +68,11 @@
     "deleteSuccess": "Başarıyla silindi",
     "deleteFailed": "Silme başarısız oldu",
     "copyReference": "Sohbet Referansını Kopyala",
-    "copyReferenceSuccess": "Sohbet referansı kopyalandı"
+    "copyReferenceSuccess": "Sohbet referansı kopyalandı",
+    "source": {
+      "claudeCode": "Claude Code'tan içe aktarıldı",
+      "copilot": "Copilot'tan içe aktarıldı"
+    }
   },
   "historySearch": {
     "tooltip": "Mesajları ara",

@@ -20,6 +20,7 @@ import { useTranslation } from 'react-i18next';
 import type { ConversationRowProps } from './types';
 import { getBackendKeyFromConversation } from './utils/exportHelpers';
 import { isConversationPinned } from './utils/groupingHelpers';
+import SourceBadge from './SourceBadge';
 
 const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const {
@@ -53,6 +54,9 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const cronStatus = getJobStatus(conversation.id);
   const siderTooltipProps = getSiderTooltipProps(tooltipEnabled);
   const inlineNameTooltipEnabled = !collapsed && !isMobile && !!conversation.name;
+  const showCompletionUnreadDot = !batchMode && hasCompletionUnread && !isGenerating;
+  const hideSourceBadgeForActions = !batchMode && (isMobile || isPinned || menuVisible);
+  const hideSourceBadgeOnHover = !batchMode && !hideSourceBadgeForActions;
 
   const renderLeadingIcon = () => {
     if (cronStatus !== 'none') {
@@ -89,7 +93,7 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   };
 
   const renderCompletionUnreadDot = () => {
-    if (batchMode || !hasCompletionUnread || isGenerating) {
+    if (!showCompletionUnreadDot) {
       return null;
     }
 
@@ -151,6 +155,16 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             </div>
           </Tooltip>
         </FlexFullContainer>
+
+        <SourceBadge
+          source={conversation.source}
+          className={classNames(
+            'flex-shrink-0 collapsed-hidden',
+            showCompletionUnreadDot ? 'mr-22px' : 'mr-2px',
+            hideSourceBadgeForActions && 'hidden',
+            hideSourceBadgeOnHover && 'group-hover:invisible'
+          )}
+        />
 
         {renderCompletionUnreadDot()}
         {!batchMode && (
