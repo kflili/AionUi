@@ -338,6 +338,77 @@ describe('TranscriptView (transcript mode surface)', () => {
     expect(onResume).toHaveBeenCalledWith('cached_warning');
   });
 
+  it('disables the Resume button while hydration is in flight (phase === "loading")', async () => {
+    // Codex / copilot R2 on PR #25: a quick click during loading would bypass
+    // the parent's `phase === 'unavailable'` pre-flight and flip the route to
+    // live mode before the importer reports source-missing. Disabling at the
+    // UI level is the primary gate; the handler's defensive checks are
+    // belt-and-suspenders.
+    let resolveHydrate: (v: HydrateResultLike) => void = noop;
+    hydrateInvoke.mockImplementation(
+      () =>
+        new Promise<HydrateResultLike>((resolve) => {
+          resolveHydrate = resolve;
+        })
+    );
+    const onResume = vi.fn();
+    render(<TranscriptView {...baseProps} isHydrated={false} onResume={onResume} />);
+
+    const btn = screen.getByTestId('transcript-resume-button');
+    expect(btn).toHaveAttribute('disabled');
+    fireEvent.click(btn);
+    // Arco Button renders a real <button disabled> which the browser refuses
+    // to dispatch click events on. onResume must not have fired.
+    expect(onResume).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveHydrate(okHydrated());
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+    });
+  });
+
+  it('enables the Resume button after hydrate settles to "ready"', async () => {
+    hydrateInvoke.mockResolvedValue(okHydrated());
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-message-list')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
+  it('enables the Resume button after hydrate settles to "cached_warning" (source gone, cache present)', async () => {
+    hydrateInvoke.mockResolvedValue(okCachedMissing());
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-cached-warning')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
+  it('enables the Resume button after hydrate settles to "unavailable" (parent surfaces sourceMissing toast on click)', async () => {
+    // Once unavailable is determined, the button is clickable so the parent's
+    // pre-flight can emit the dedicated `sourceMissing` error toast. Without
+    // re-enabling, the user couldn't retry after a transient hydrate failure.
+    hydrateInvoke.mockResolvedValue(okUnavailable());
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-unavailable')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
+  it('enables the Resume button after hydrate fails (phase = "error")', async () => {
+    hydrateInvoke.mockResolvedValue(fail('boom'));
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-error')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
   it('always calls hydrate on mount for the mtime / source-missing recheck (plan §Stale Data Handling)', async () => {
     hydrateInvoke.mockResolvedValue(okCached());
     render(<TranscriptView {...baseProps} isHydrated={true} />);
@@ -613,7 +684,7 @@ describe('isResumedImportedSession predicate (gate for transcript-mode override)
     expect(isResumedImportedSession(conv)).toBe(false);
   });
 
-  it('returns true once extra.resumedAt is stamped (Date.now from a successful Resume click)', () => {
+  it('returns true once extra.resumedAt is stamped on an IMPORTED row (Date.now from a successful Resume click)', () => {
     const conv = mkConv({
       extra: {
         workspace: '/ws',
@@ -625,9 +696,24 @@ describe('isResumedImportedSession predicate (gate for transcript-mode override)
     expect(isResumedImportedSession(conv)).toBe(true);
   });
 
+  it('returns false for a NATIVE ACP row with stray extra.resumedAt — the predicate composes with isImportedAcpConversation (copilot R2 on PR #25)', () => {
+    // Without the imported-marker composition, a native row with a stray
+    // resumedAt would mis-claim "resumed-imported", muddling the routing
+    // semantics. The predicate's name must match its behavior.
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', resumedAt: 1_715_000_000_000 },
+    } as unknown as Partial<TChatConversation>);
+    expect(isResumedImportedSession(conv)).toBe(false);
+  });
+
   it('returns false when extra.resumedAt is non-numeric (defensive: legacy / corrupted rows)', () => {
     const conv = mkConv({
-      extra: { workspace: '/ws', backend: 'claude', resumedAt: 'yes' },
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        sourceFilePath: '/Users/me/.claude/sess.jsonl',
+        resumedAt: 'yes',
+      },
     } as unknown as Partial<TChatConversation>);
     expect(isResumedImportedSession(conv)).toBe(false);
   });
@@ -834,13 +920,16 @@ describe('shouldShowTranscript routing composition (ChatConversation gate)', () 
   });
 
   it('native ACP with extra.resumedAt set (defensive: should not flip a non-imported row off transcript spuriously)', () => {
-    // A native row with resumedAt is an unexpected state (we only stamp
-    // resumedAt on imported rows), but defensively: it must still route live
-    // because isImportedAcpConversation is false to begin with.
+    // The predicate now composes with isImportedAcpConversation, so a native
+    // row with a stray resumedAt cannot mis-claim resumed-imported status.
+    // Native rows go live regardless because they are never in transcript
+    // mode to begin with.
     const conv = mkConv({
       extra: { workspace: '/ws', backend: 'claude', resumedAt: 1 },
     } as unknown as Partial<TChatConversation>);
     expect(shouldShowTranscript(conv)).toBe(false);
+    // Also assert the predicate itself doesn't claim resumed-imported (copilot R2).
+    expect(isResumedImportedSession(conv)).toBe(false);
   });
 });
 

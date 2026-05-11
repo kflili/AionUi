@@ -61,19 +61,17 @@ export const hasHydratedAt = (conversation: TChatConversation | undefined | null
  * AND pre-flight validation passes — flipping the row from read-only transcript
  * mode into the live ACP/terminal route on subsequent renders / opens.
  *
- * Keeping `extra.sourceFilePath` intact preserves the importer's dedup invariant
- * (`${source}::id:${acpSessionId}`) and the CC/CP source badge, so the row is
- * still recognized as imported from CLI history — it just no longer routes
- * through TranscriptView.
+ * Composes with `isImportedAcpConversation` (so a stray `resumedAt` on a native
+ * ACP row can't accidentally claim this is a "resumed-imported" row — the
+ * predicate's name is its contract). Keeping `extra.sourceFilePath` intact
+ * preserves the importer's dedup invariant (`${source}::id:${acpSessionId}`)
+ * and the CC/CP source badge, so the row is still recognized as imported from
+ * CLI history — it just no longer routes through TranscriptView.
  */
 export const isResumedImportedSession = (conversation: TChatConversation | undefined | null): boolean => {
-  if (!conversation || conversation.type !== 'acp') return false;
-  const extra =
-    conversation.extra && typeof conversation.extra === 'object'
-      ? (conversation.extra as Record<string, unknown>)
-      : null;
-  if (!extra) return false;
-  return typeof extra.resumedAt === 'number';
+  if (!isImportedAcpConversation(conversation)) return false;
+  const extra = (conversation as TChatConversation).extra as Record<string, unknown> | null | undefined;
+  return typeof extra?.resumedAt === 'number';
 };
 
 /**
@@ -384,6 +382,14 @@ const TranscriptView: React.FC<TranscriptViewProps> = ({
               type='primary'
               size='large'
               data-testid='transcript-resume-button'
+              // Disable the Resume button while hydration is in flight: the
+              // `phase === 'unavailable'` pre-flight check in the parent can
+              // only fire AFTER `hydrate` resolves, and a quick click during
+              // `loading` would otherwise bypass the source-missing gate (codex
+              // / copilot R2 on PR #25). Once hydration settles, the button
+              // becomes clickable in every phase including `unavailable` (the
+              // parent surfaces the dedicated error toast in that case).
+              disabled={isLoading}
               icon={
                 <Play
                   theme='outline'

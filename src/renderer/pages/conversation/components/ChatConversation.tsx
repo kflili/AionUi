@@ -263,6 +263,18 @@ const ChatConversation: React.FC<{
         return;
       }
 
+      // Synchronously align the local `currentMode` with the persisted target
+      // BEFORE the IPC. Without this, a row whose stale `extra.currentMode` is
+      // 'terminal' but whose Resume picks Rich UI (`defaultMode === 'acp'`)
+      // would, in the first render after `mutate`, still see `isTerminalMode`
+      // true (driven by the local React state) while `shouldShowTranscript`
+      // flips to false (driven by the just-persisted `extra.resumedAt`). That
+      // window mounts TerminalChat for a frame and could start a PTY despite
+      // the user's choice. The `persistedMode` sync effect would fix it on the
+      // next render, but doing the alignment synchronously here prevents the
+      // race entirely (codex R2 on PR #25).
+      setCurrentMode(result.updates.extra.currentMode);
+
       void ipcBridge.conversation.update
         .invoke({
           id: conversation.id,
