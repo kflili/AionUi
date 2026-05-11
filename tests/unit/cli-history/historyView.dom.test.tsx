@@ -470,6 +470,35 @@ describe('HistoryPage — message-content toggle', () => {
     fireEvent.click(checkbox);
     expect(screen.queryByTestId('history-message-index-notice')).toBeNull();
   });
+
+  it('keeps the index notice visible when the search needle filtered out the non-hydrated row (codex 25z)', () => {
+    // Regression: the notice was previously computed from the *final* visible
+    // set, so a needle that filtered the non-hydrated import out hid the
+    // warning in exactly the case it was supposed to warn about. Now it's
+    // computed from the pre-search candidate set.
+    useConversationListSyncMock.mockReturnValue({
+      conversations: [
+        makeConv({
+          id: 'imported-not-hydrated',
+          source: 'claude_code',
+          extraOverride: { workspace: '/p', sourceFilePath: '/x.jsonl' },
+          name: 'unmatched-name', // does NOT contain the search needle below
+        }),
+      ],
+    });
+    renderPage();
+    // Enable the toggle.
+    const checkbox = screen
+      .getByTestId('history-include-message-content')
+      .querySelector('input[type="checkbox"]') as HTMLInputElement;
+    fireEvent.click(checkbox);
+    // Type a needle that the row's name doesn't match. The visible set will
+    // be empty (the message-content overlay hasn't returned anything in our
+    // mock), but the notice should still be visible.
+    const input = screen.getByTestId('history-search-input') as HTMLInputElement;
+    fireEvent.change(input, { target: { value: 'zzzz_no_name_match' } });
+    expect(screen.getByTestId('history-message-index-notice')).toBeTruthy();
+  });
 });
 
 describe('HistoryPage — sort', () => {

@@ -14,6 +14,7 @@ import HistoryFilterBar from './components/HistoryFilterBar';
 import HistoryList from './components/HistoryList';
 import { useHistoryFilter } from './hooks/useHistoryFilter';
 import {
+  applyHistoryAxisFilters,
   applyHistoryFilter,
   collectWorkspaceOptions,
   hasNonHydratedImportedRows,
@@ -122,10 +123,19 @@ const HistoryPage: React.FC = () => {
 
   const sorted = useMemo(() => sortConversations(filtered, criteria.sort), [filtered, criteria.sort]);
 
+  // The "Some sessions not yet indexed for message search" notice has to be
+  // computed from the **pre-search** candidate set (post source/workspace/date
+  // filters, before the text needle and message-overlay). Otherwise the text
+  // needle filters non-hydrated imports out of `sorted` and the warning
+  // disappears in exactly the failure mode it's supposed to warn about —
+  // user types a keyword that an unindexed transcript would match, gets zero
+  // results, and is given no indication that the search was incomplete.
+  const axisCandidates = useMemo(() => applyHistoryAxisFilters(conversations, criteria), [conversations, criteria]);
+
   const showMessageIndexNotice = useMemo(() => {
     if (!criteria.includeMessageContent) return false;
-    return hasNonHydratedImportedRows(sorted);
-  }, [criteria.includeMessageContent, sorted]);
+    return hasNonHydratedImportedRows(axisCandidates);
+  }, [criteria.includeMessageContent, axisCandidates]);
 
   const handleRowClick = useCallback(
     (conversation: TChatConversation) => {

@@ -136,6 +136,29 @@ const matchesNameOrWorkspace = (conversation: TChatConversation, needle: string)
 };
 
 /**
+ * Apply only the non-search axes (source + workspace + date range) and return
+ * the candidate set. The history page renders these to the user as "rows that
+ * pass the structural filters" — separate from the text-search overlay. The
+ * "Some sessions not yet indexed for message search" notice is computed
+ * against this candidate set so it surfaces even when the text needle has
+ * filtered the unindexed imports out of the final visible set.
+ */
+export const applyHistoryAxisFilters = (
+  conversations: TChatConversation[],
+  criteria: HistoryFilterCriteria,
+  now: number = Date.now()
+): TChatConversation[] => {
+  const axesInactive = criteria.sources.size === 0 && criteria.workspaces.size === 0 && criteria.preset === 'all';
+  if (axesInactive) return conversations;
+  return conversations.filter((conversation) => {
+    if (!matchesSourceSet(conversation, criteria.sources)) return false;
+    if (!matchesWorkspaceSet(conversation, criteria.workspaces)) return false;
+    if (!matchesDateRange(conversation, criteria, now)) return false;
+    return true;
+  });
+};
+
+/**
  * Pure filter. Returns a new array (or the input array reference unchanged when
  * the filter is inactive AND no message-match overlay is provided — preserves
  * downstream `useMemo` identity).
