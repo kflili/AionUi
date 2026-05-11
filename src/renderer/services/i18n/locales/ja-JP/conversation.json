@@ -101,6 +101,43 @@
     "loadingMore": "さらに読み込み中...",
     "untitled": "無題の会話"
   },
+  "fullHistory": {
+    "pageTitle": "すべての履歴",
+    "viewAll": "すべての履歴を表示",
+    "viewAllTooltip": "すべての履歴を表示",
+    "showAll": "すべて表示",
+    "sessionCount_one": "{{count}} 件のセッション",
+    "sessionCount_other": "{{count}} 件のセッション",
+    "filter": {
+      "sourceLabel": "ソース",
+      "workspaceLabel": "ワークスペース",
+      "dateLabel": "日付",
+      "sortLabel": "並び替え",
+      "allSources": "すべてのソース",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "ネイティブ",
+      "workspacesPlaceholder": "すべてのワークスペース",
+      "noneWorkspace": "（ワークスペースなし）",
+      "datePreset": {
+        "last7": "過去 7 日間",
+        "last30": "過去 30 日間",
+        "all": "すべての期間",
+        "custom": "カスタム"
+      },
+      "search": "会話やワークスペースを検索...",
+      "includeMessageContent": "メッセージ内容を含める",
+      "messageIndexNotice": "一部のセッションはメッセージ検索のインデックスがまだ作成されていません",
+      "reset": "フィルタをリセット"
+    },
+    "sort": {
+      "date": "日付順（新しい順）",
+      "name": "名前順"
+    },
+    "empty": {
+      "noMatches": "フィルタに一致する会話がありません"
+    }
+  },
   "dropdown": {
     "cliAgents": "CLI Agents",
     "presetAssistants": "プリセットアシスタント"

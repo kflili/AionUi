@@ -15,7 +15,7 @@ import { FolderOpen } from '@icon-park/react';
 import classNames from 'classnames';
 import React, { useCallback, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 
 import WorkspaceCollapse from '../components/WorkspaceCollapse';
 import ConversationRow from './ConversationRow';
@@ -52,6 +52,7 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
   }, [id, setActiveConversation]);
 
   const sidebarFilter = useSidebarFilter();
+  const navigate = useNavigate();
   // Suppress the filter when the sidebar is collapsed — the filter bar isn't
   // rendered in icon-only mode (no horizontal room), so applying a narrowing
   // filter there would leave the sidebar mysteriously empty with no visible
@@ -454,8 +455,28 @@ const WorkspaceGroupedHistory: React.FC<WorkspaceGroupedHistoryProps> = ({
         {truncatedTimelineSections.map(({ section, result, revealOnClick }) => (
           <div key={section.timelineKey} className='mb-8px min-w-0'>
             {!collapsed && (
-              <div className='chat-history__section px-12px py-8px text-13px text-t-secondary font-bold'>
-                {section.timeline}
+              <div className='chat-history__section flex items-center justify-between px-12px py-8px text-13px text-t-secondary font-bold'>
+                <span className='truncate'>{section.timeline}</span>
+                <Button
+                  type='text'
+                  size='mini'
+                  className='!h-20px !px-6px !text-11px !font-normal !text-t-tertiary hover:!text-t-primary'
+                  onClick={() => {
+                    Promise.resolve(navigate(`/history?section=${encodeURIComponent(section.timelineKey)}`)).catch(
+                      (error) => {
+                        console.error('Navigation failed:', error);
+                      }
+                    );
+                    // Close the mobile sidebar drawer so the new /history
+                    // route is visible. The conversation row and footer
+                    // "View all history" link already do this; matching
+                    // behavior here keeps the mobile UX consistent.
+                    onSessionClick?.();
+                  }}
+                  data-testid={`grouped-history-show-all-${section.timelineKey}`}
+                >
+                  {t('conversation.fullHistory.showAll')}
+                </Button>
               </div>
             )}
 

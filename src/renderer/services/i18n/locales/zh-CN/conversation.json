@@ -101,6 +101,43 @@
     "loadingMore": "正在加载更多...",
     "untitled": "未命名会话"
   },
+  "fullHistory": {
+    "pageTitle": "全部历史",
+    "viewAll": "查看全部历史",
+    "viewAllTooltip": "查看全部历史",
+    "showAll": "查看全部",
+    "sessionCount_one": "{{count}} 个会话",
+    "sessionCount_other": "{{count}} 个会话",
+    "filter": {
+      "sourceLabel": "来源",
+      "workspaceLabel": "工作区",
+      "dateLabel": "日期",
+      "sortLabel": "排序",
+      "allSources": "全部来源",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "原生",
+      "workspacesPlaceholder": "全部工作区",
+      "noneWorkspace": "（无工作区）",
+      "datePreset": {
+        "last7": "最近 7 天",
+        "last30": "最近 30 天",
+        "all": "全部时间",
+        "custom": "自定义"
+      },
+      "search": "搜索会话和工作区...",
+      "includeMessageContent": "包含消息内容",
+      "messageIndexNotice": "部分会话尚未建立消息搜索索引",
+      "reset": "重置筛选"
+    },
+    "sort": {
+      "date": "按日期（最新）",
+      "name": "按名称"
+    },
+    "empty": {
+      "noMatches": "没有会话符合筛选条件"
+    }
+  },
   "tabs": {
     "closeAll": "关闭全部",
     "closeLeft": "关闭左侧",
