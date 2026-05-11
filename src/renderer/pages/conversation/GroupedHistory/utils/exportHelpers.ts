@@ -190,12 +190,24 @@ export type EnsureHydratedOutcome =
   | { status: 'failed'; message?: string }; // IPC error, success=false, missing data, or showThinking undefined; abort
 
 /**
- * Mirrors `TranscriptView.isHydrationFresh` — kept in lock-step with that
- * function so the export hot-path uses the same cache-validity rules as the
- * transcript surface. The importer (`hydrateSession`) keys its cache on
- * `(conversationId, normalizedShowThinking)` and gates validity on matching
- * `hydratedSourceFilePath`, so all three fields must align before we can skip
- * the IPC and trust the SQLite messages.
+ * Cache-validity predicate for the export auto-hydration fast path.
+ *
+ * Mirrors `TranscriptView.isHydrationFresh` on the three cache keys the
+ * importer (`hydrateSession`) uses to decide whether the SQLite messages
+ * are still authoritative:
+ *
+ *   1. `hydratedAt` is a number — the row has been through Phase 2 at least once.
+ *   2. `hydratedSourceFilePath === sourceFilePath` — the importer's incremental
+ *      scan hasn't relocated the source JSONL since the last hydration.
+ *   3. `hydratedShowThinking === showThinking` — the cached transcript matches
+ *      the variant the user wants exported.
+ *
+ * Intentional deviation: we additionally reject `NaN` / non-finite / non-positive
+ * `hydratedAt` values to guard against a corrupted `extra` blob. TranscriptView's
+ * version uses the looser `typeof === 'number'` check; for the export path we'd
+ * rather take the IPC round-trip than ZIP a transcript whose freshness marker is
+ * meaningless. Either version still trips on `hydratedSourceFilePath` /
+ * `hydratedShowThinking`, so the two surfaces agree in every realistic state.
  */
 const isHydrationFreshForExport = (conversation: TChatConversation, showThinking: boolean): boolean => {
   const extra =
