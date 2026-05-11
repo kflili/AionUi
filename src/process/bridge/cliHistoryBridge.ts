@@ -18,6 +18,7 @@ import {
   disableSource as disableImportSource,
   discoverAndImport,
   discoverAndImportAll,
+  hydrateSession,
   reenableSource as reenableImportSource,
 } from '@process/cli-history/importer';
 
@@ -288,6 +289,22 @@ export function initCliHistoryBridge(): void {
   ipcBridge.cliHistory.reenableSource.provider(async ({ source }) => {
     try {
       const data = await reenableImportSource(source);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Phase 2 on-demand message hydration (importer.ts → hydrateSession).
+  // Renderer (item 3 transcript-mode) and export wrapper (item 7) call this
+  // before mounting a transcript surface. Coalescing is handled inside
+  // hydrateSession() via an in-flight Map<conversationId, Promise>.
+  // ---------------------------------------------------------------------------
+
+  ipcBridge.cliHistory.hydrate.provider(async ({ conversationId }) => {
+    try {
+      const data = await hydrateSession(conversationId);
       return { success: true, data };
     } catch (err) {
       return { success: false, msg: err instanceof Error ? err.message : String(err) };
