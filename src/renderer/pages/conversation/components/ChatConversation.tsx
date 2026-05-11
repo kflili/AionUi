@@ -231,6 +231,17 @@ const ChatConversation: React.FC<{
     });
   }, [agentCliConfig]);
 
+  // Stub click handler for the "Resume this session" button rendered by
+  // TranscriptView for CLI-history-imported sessions. Item 8 will replace
+  // this with the live ACP / terminal launch (the Step 1 default-mode toggle
+  // decides which surface starts). Until then the button stays a deliberate
+  // no-op so a user click cannot accidentally mount a live session.
+  const handleResumeImported = useCallback(() => {
+    // TODO(item 8): wire to live ACP session resume OR terminal `--resume <id>`
+    // based on conversation.extra.currentMode (defaulting per the Step 1 toggle).
+    console.warn('[ChatConversation] "Resume this session" clicked — live launch not implemented yet (item 8).');
+  }, []);
+
   // Sync mode state when conversation changes or SWR revalidates with fresh extra data
   const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
   useEffect(() => {
@@ -313,6 +324,7 @@ const ChatConversation: React.FC<{
               sourceFilePath={sourceFilePath}
               isHydrated={isHydrationFresh(conversation, showThinking)}
               showThinking={showThinking}
+              onResume={handleResumeImported}
             />
           );
         }
@@ -354,7 +366,7 @@ const ChatConversation: React.FC<{
       default:
         return null;
     }
-  }, [conversation, isGeminiConversation, isTerminalMode, showThinking]);
+  }, [conversation, isGeminiConversation, isTerminalMode, showThinking, handleResumeImported]);
 
   // 使用统一的 Hook 获取预设助手信息（ACP/Codex 会话）
   // Use unified hook for preset assistant info (ACP/Codex conversations)
