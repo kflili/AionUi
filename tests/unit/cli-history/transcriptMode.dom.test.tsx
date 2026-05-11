@@ -70,6 +70,9 @@ import TranscriptView, {
   hasHydratedAt,
   isHydrationFresh,
   isImportedAcpConversation,
+  isResumedImportedSession,
+  validateResumeRequest,
+  type HydrationPhase,
 } from '../../../src/renderer/pages/conversation/components/TranscriptView';
 
 type HydrateResultLike = {
@@ -291,7 +294,7 @@ describe('TranscriptView (transcript mode surface)', () => {
     expect(screen.getByTestId('transcript-resume-button')).toHaveTextContent('conversation.transcript.resumeSession');
   });
 
-  it('calls onResume on click and does NOT mount any live input as a side-effect', () => {
+  it('calls onResume on click with the current hydration phase and does NOT mount any live input as a side-effect', () => {
     const onResume = vi.fn();
     render(<TranscriptView {...baseProps} isHydrated={true} onResume={onResume} />);
 
@@ -299,10 +302,111 @@ describe('TranscriptView (transcript mode surface)', () => {
     fireEvent.click(btn);
 
     expect(onResume).toHaveBeenCalledTimes(1);
-    // Item-3 contract: clicking Resume must not mount a live ACP / terminal input.
-    // Item 8 will replace the stub handler.
+    // Item-8 contract: the click handler threads its current hydration phase
+    // up so the parent can detect `phase === 'unavailable'` (source gone +
+    // no cache) before flipping the route gate. With `isHydrated=true` and
+    // no hydrate-resolved error path triggered, the phase starts at 'ready'.
+    expect(onResume).toHaveBeenCalledWith('ready');
+    // The button click itself must not mount a live ACP / terminal input.
+    // The actual live-launch happens after the parent stamps extra.resumedAt
+    // and SWR re-routes; both are out of scope for this DOM test.
     expect(screen.queryByTestId('acp-send-box')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
+  });
+
+  it('threads phase === "unavailable" to onResume so the parent can short-circuit with sourceMissing', async () => {
+    hydrateInvoke.mockResolvedValue(okUnavailable());
+    const onResume = vi.fn();
+    render(<TranscriptView {...baseProps} isHydrated={false} onResume={onResume} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-unavailable')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('transcript-resume-button'));
+    expect(onResume).toHaveBeenCalledWith('unavailable');
+  });
+
+  it('threads phase === "cached_warning" to onResume — cached transcript exists; parent decides whether to allow', async () => {
+    hydrateInvoke.mockResolvedValue(okCachedMissing());
+    const onResume = vi.fn();
+    render(<TranscriptView {...baseProps} isHydrated={false} onResume={onResume} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-cached-warning')).toBeInTheDocument();
+    });
+    fireEvent.click(screen.getByTestId('transcript-resume-button'));
+    expect(onResume).toHaveBeenCalledWith('cached_warning');
+  });
+
+  it('disables the Resume button while hydration is in flight (phase === "loading")', async () => {
+    // Codex / copilot R2 on PR #25: a quick click during loading would bypass
+    // the parent's `phase === 'unavailable'` pre-flight and flip the route to
+    // live mode before the importer reports source-missing. Disabling at the
+    // UI level is the primary gate; the handler's defensive checks are
+    // belt-and-suspenders.
+    let resolveHydrate: (v: HydrateResultLike) => void = noop;
+    hydrateInvoke.mockImplementation(
+      () =>
+        new Promise<HydrateResultLike>((resolve) => {
+          resolveHydrate = resolve;
+        })
+    );
+    const onResume = vi.fn();
+    render(<TranscriptView {...baseProps} isHydrated={false} onResume={onResume} />);
+
+    const btn = screen.getByTestId('transcript-resume-button');
+    expect(btn).toHaveAttribute('disabled');
+    fireEvent.click(btn);
+    // Arco Button renders a real <button disabled> which the browser refuses
+    // to dispatch click events on. onResume must not have fired.
+    expect(onResume).not.toHaveBeenCalled();
+
+    await act(async () => {
+      resolveHydrate(okHydrated());
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+    });
+  });
+
+  it('enables the Resume button after hydrate settles to "ready"', async () => {
+    hydrateInvoke.mockResolvedValue(okHydrated());
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('mock-message-list')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
+  it('enables the Resume button after hydrate settles to "cached_warning" (source gone, cache present)', async () => {
+    hydrateInvoke.mockResolvedValue(okCachedMissing());
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-cached-warning')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
+  it('enables the Resume button after hydrate settles to "unavailable" (parent surfaces sourceMissing toast on click)', async () => {
+    // Once unavailable is determined, the button is clickable so the parent's
+    // pre-flight can emit the dedicated `sourceMissing` error toast. Without
+    // re-enabling, the user couldn't retry after a transient hydrate failure.
+    hydrateInvoke.mockResolvedValue(okUnavailable());
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-unavailable')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
+  });
+
+  it('enables the Resume button after hydrate fails (phase = "error")', async () => {
+    hydrateInvoke.mockResolvedValue(fail('boom'));
+    render(<TranscriptView {...baseProps} isHydrated={false} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('transcript-error')).toBeInTheDocument();
+    });
+    expect(screen.getByTestId('transcript-resume-button')).not.toHaveAttribute('disabled');
   });
 
   it('always calls hydrate on mount for the mtime / source-missing recheck (plan §Stale Data Handling)', async () => {
@@ -551,3 +655,285 @@ describe('TranscriptView (transcript mode surface)', () => {
     expect(wrapper.getAttribute('data-backend')).toBe('claude');
   });
 });
+
+// ---------------------------------------------------------------------------
+// Item-8: Resume launch — predicate + pure-function validation tests
+// ---------------------------------------------------------------------------
+// These cover the test-plan §5 Resume rows (plan lines 547-555):
+//
+//   - resume launches Rich UI mode when Step 1 default is Rich
+//   - resume launches Terminal mode when Step 1 default is Terminal
+//   - failed resume (auth / cwd / source / backend) shows a clear error,
+//     transcript stays read-only
+//   - native ACP unaffected (regression — covered by `isResumedImportedSession`
+//     and `isImportedAcpConversation` already returning false for native rows)
+//
+// The live-launch wiring itself is in ChatConversation.tsx — covered here
+// indirectly by exhaustively testing the pure-function `validateResumeRequest`
+// (the click handler's only behavior beyond calling Arco's `Message.error` and
+// `ipcBridge.conversation.update`, both already extensively tested in the
+// codebase). Mocking ChatConversation's full dependency graph (SWR, layout
+// context, Arco header, model selectors) for one boolean gate would add 200+
+// lines of fragile setup with no extra signal.
+
+describe('isResumedImportedSession predicate (gate for transcript-mode override)', () => {
+  it('returns false for an imported row that has NOT been resumed', () => {
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', sourceFilePath: '/Users/me/.claude/sess.jsonl' },
+    } as unknown as Partial<TChatConversation>);
+    expect(isResumedImportedSession(conv)).toBe(false);
+  });
+
+  it('returns true once extra.resumedAt is stamped on an IMPORTED row (Date.now from a successful Resume click)', () => {
+    const conv = mkConv({
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        sourceFilePath: '/Users/me/.claude/sess.jsonl',
+        resumedAt: 1_715_000_000_000,
+      },
+    } as unknown as Partial<TChatConversation>);
+    expect(isResumedImportedSession(conv)).toBe(true);
+  });
+
+  it('returns false for a NATIVE ACP row with stray extra.resumedAt — the predicate composes with isImportedAcpConversation (copilot R2 on PR #25)', () => {
+    // Without the imported-marker composition, a native row with a stray
+    // resumedAt would mis-claim "resumed-imported", muddling the routing
+    // semantics. The predicate's name must match its behavior.
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', resumedAt: 1_715_000_000_000 },
+    } as unknown as Partial<TChatConversation>);
+    expect(isResumedImportedSession(conv)).toBe(false);
+  });
+
+  it('returns false when extra.resumedAt is non-numeric (defensive: legacy / corrupted rows)', () => {
+    const conv = mkConv({
+      extra: {
+        workspace: '/ws',
+        backend: 'claude',
+        sourceFilePath: '/Users/me/.claude/sess.jsonl',
+        resumedAt: 'yes',
+      },
+    } as unknown as Partial<TChatConversation>);
+    expect(isResumedImportedSession(conv)).toBe(false);
+  });
+
+  it('returns false when extra is null (legacy row)', () => {
+    expect(isResumedImportedSession({ ...mkConv(), extra: null as unknown as TChatConversation['extra'] })).toBe(false);
+  });
+
+  it('returns false for non-ACP conversation types', () => {
+    expect(
+      isResumedImportedSession({
+        ...mkConv(),
+        type: 'gemini',
+        extra: { resumedAt: 1 } as unknown as TChatConversation['extra'],
+      } as unknown as TChatConversation)
+    ).toBe(false);
+  });
+
+  it('returns false for undefined / null inputs', () => {
+    expect(isResumedImportedSession(undefined)).toBe(false);
+    expect(isResumedImportedSession(null)).toBe(false);
+  });
+});
+
+describe('validateResumeRequest (pure-function pre-flight for the click handler)', () => {
+  const NOW = 1_715_555_555_555;
+
+  const importedConv = (overrides: Record<string, unknown> = {}): TChatConversation =>
+    mkConv({
+      extra: {
+        workspace: '/Users/me/proj',
+        backend: 'claude',
+        acpSessionId: 'sess-abc',
+        sourceFilePath: '/Users/me/.claude/sess-abc.jsonl',
+        ...overrides,
+      },
+    } as unknown as Partial<TChatConversation>);
+
+  it('Step 1 default = Rich UI ("acp"): returns updates { resumedAt, currentMode: "acp" } without terminalSwitchedAt', () => {
+    const result = validateResumeRequest(importedConv(), 'acp', 'ready', NOW);
+    expect(result).toEqual({
+      ok: true,
+      updates: { extra: { resumedAt: NOW, currentMode: 'acp' } },
+    });
+  });
+
+  it('Step 1 default = undefined (loaded-but-empty config = {}): falls back to Rich UI', () => {
+    // `useAgentCliConfig()` returns `{}` when storage is loaded with no saved
+    // preference. `defaultMode` is then `undefined` and the helper must treat
+    // that as the documented default (Rich UI / 'acp'), NOT crash and NOT
+    // accidentally route to terminal mode.
+    const result = validateResumeRequest(importedConv(), undefined, 'ready', NOW);
+    expect(result).toEqual({
+      ok: true,
+      updates: { extra: { resumedAt: NOW, currentMode: 'acp' } },
+    });
+  });
+
+  it('Step 1 default = "terminal": returns updates { resumedAt, currentMode: "terminal", terminalSwitchedAt }', () => {
+    const result = validateResumeRequest(importedConv(), 'terminal', 'ready', NOW);
+    expect(result).toEqual({
+      ok: true,
+      updates: { extra: { resumedAt: NOW, currentMode: 'terminal', terminalSwitchedAt: NOW } },
+    });
+  });
+
+  it('rejects unsupported backend with errorKey="unsupportedBackend" (Codex V2-deferred per plan)', () => {
+    const result = validateResumeRequest(importedConv({ backend: 'codex' }), 'acp', 'ready', NOW);
+    expect(result).toEqual({ ok: false, errorKey: 'unsupportedBackend' });
+  });
+
+  it('rejects a row whose backend tag is missing entirely', () => {
+    const conv = mkConv({
+      extra: { workspace: '/ws', acpSessionId: 'x', sourceFilePath: '/p' },
+    } as unknown as Partial<TChatConversation>);
+    expect(validateResumeRequest(conv, 'acp', 'ready', NOW)).toEqual({ ok: false, errorKey: 'unsupportedBackend' });
+  });
+
+  it('accepts backend="copilot"', () => {
+    const result = validateResumeRequest(importedConv({ backend: 'copilot' }), 'acp', 'ready', NOW);
+    expect(result.ok).toBe(true);
+  });
+
+  it('rejects when acpSessionId is missing — errorKey="sessionMissing"', () => {
+    const result = validateResumeRequest(importedConv({ acpSessionId: '' }), 'acp', 'ready', NOW);
+    expect(result).toEqual({ ok: false, errorKey: 'sessionMissing' });
+  });
+
+  it('rejects when acpSessionId is undefined', () => {
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', sourceFilePath: '/p' },
+    } as unknown as Partial<TChatConversation>);
+    expect(validateResumeRequest(conv, 'acp', 'ready', NOW)).toEqual({ ok: false, errorKey: 'sessionMissing' });
+  });
+
+  it('rejects when workspace is missing — errorKey="cwdMissing" (terminal can\'t spawn / ACP can\'t bind without cwd)', () => {
+    const result = validateResumeRequest(importedConv({ workspace: '' }), 'acp', 'ready', NOW);
+    expect(result).toEqual({ ok: false, errorKey: 'cwdMissing' });
+  });
+
+  it('rejects when workspace is undefined', () => {
+    const conv = mkConv({
+      extra: { backend: 'claude', acpSessionId: 'x', sourceFilePath: '/p' },
+    } as unknown as Partial<TChatConversation>);
+    expect(validateResumeRequest(conv, 'acp', 'ready', NOW)).toEqual({ ok: false, errorKey: 'cwdMissing' });
+  });
+
+  it('rejects when hydration phase is "unavailable" — errorKey="sourceMissing" (source JSONL gone + no cache)', () => {
+    // Even when every other field looks valid, an unavailable phase means the
+    // live backend cannot resume — the JSONL is gone and nothing was cached.
+    // Surface the dedicated `sourceMissing` error rather than let AcpChat /
+    // TerminalChat fail opaquely after the route gate flips.
+    const result = validateResumeRequest(importedConv(), 'acp', 'unavailable', NOW);
+    expect(result).toEqual({ ok: false, errorKey: 'sourceMissing' });
+  });
+
+  it('"unavailable" phase is checked BEFORE backend / session / workspace — exposes the cleanest user-facing reason', () => {
+    // If a row has multiple issues at once, the missing source file is the
+    // most actionable for the user (the importer's earlier scan already told
+    // them it's gone). Checking it first guarantees they get that message
+    // instead of, e.g., "unsupportedBackend" from a row whose backend tag
+    // happens to also be wrong.
+    const conv = mkConv({
+      extra: { backend: 'codex', acpSessionId: '', workspace: '' },
+    } as unknown as Partial<TChatConversation>);
+    expect(validateResumeRequest(conv, 'acp', 'unavailable', NOW)).toEqual({ ok: false, errorKey: 'sourceMissing' });
+  });
+
+  it('cached_warning phase still allows resume — cached transcript exists, live backend can still resume by sessionId', () => {
+    // The cached-warning path = source JSONL is gone but SQLite has the
+    // imported messages. The live ACP / terminal backend's resume is keyed on
+    // `acpSessionId`, not the JSONL path, so resume can still succeed. We
+    // surface no error and let the user proceed; if the backend rejects the
+    // sessionId at connect-time, that's the backend's own surface.
+    const result = validateResumeRequest(importedConv(), 'acp', 'cached_warning', NOW);
+    expect(result.ok).toBe(true);
+  });
+
+  it("error phase still allows resume — failed mtime recheck doesn't block a session-id-based resume", () => {
+    const result = validateResumeRequest(importedConv(), 'acp', 'error', NOW);
+    expect(result.ok).toBe(true);
+  });
+
+  it('returns errorKey="unsupportedBackend" when given a null conversation (defensive)', () => {
+    // The click handler in ChatConversation guards on `!conversation` before
+    // calling, but the pure function defends against bad input by routing
+    // through the backend-check path (no backend → unsupportedBackend).
+    expect(validateResumeRequest(null, 'acp', 'ready', NOW)).toEqual({ ok: false, errorKey: 'unsupportedBackend' });
+    expect(validateResumeRequest(undefined, 'acp', 'ready', NOW)).toEqual({
+      ok: false,
+      errorKey: 'unsupportedBackend',
+    });
+  });
+
+  it('returns errorKey="unsupportedBackend" when extra is a non-object (corrupted row)', () => {
+    const conv = { ...mkConv(), extra: 'oops' as unknown as TChatConversation['extra'] };
+    expect(validateResumeRequest(conv, 'acp', 'ready', NOW)).toEqual({ ok: false, errorKey: 'unsupportedBackend' });
+  });
+
+  it('confirms updates.extra contains exactly the keys mergeExtra will merge — no unrelated stripping', () => {
+    // Sanity check on the contract with ipcBridge.conversation.update +
+    // mergeExtra: true. The returned `extra` patch contains ONLY the new keys
+    // (resumedAt, currentMode, optional terminalSwitchedAt) so the merge
+    // preserves the importer-owned fields (sourceFilePath, acpSessionId,
+    // hydratedAt, etc.) that downstream code still reads.
+    const result = validateResumeRequest(importedConv(), 'terminal', 'ready', NOW);
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(Object.keys(result.updates.extra).toSorted()).toEqual(['currentMode', 'resumedAt', 'terminalSwitchedAt']);
+    }
+  });
+});
+
+// Cross-check: the routing predicates compose correctly so a resumed row
+// flips from transcript-mode to live-mode without affecting any other row.
+describe('shouldShowTranscript routing composition (ChatConversation gate)', () => {
+  const importedExtra = {
+    workspace: '/ws',
+    backend: 'claude',
+    acpSessionId: 'sess-abc',
+    sourceFilePath: '/Users/me/.claude/sess-abc.jsonl',
+  } as const;
+
+  const shouldShowTranscript = (conv: TChatConversation | undefined | null): boolean =>
+    isImportedAcpConversation(conv) && !isResumedImportedSession(conv);
+
+  it('imported, not resumed → transcript', () => {
+    const conv = mkConv({ extra: importedExtra } as unknown as Partial<TChatConversation>);
+    expect(shouldShowTranscript(conv)).toBe(true);
+  });
+
+  it('imported, resumed → live route (no transcript)', () => {
+    const conv = mkConv({
+      extra: { ...importedExtra, resumedAt: 1_715_000_000_000 },
+    } as unknown as Partial<TChatConversation>);
+    expect(shouldShowTranscript(conv)).toBe(false);
+  });
+
+  it('native ACP, never resumed → live route (sanity: regression for item-3 native-ACP contract)', () => {
+    // Native rows don't have sourceFilePath; isImportedAcpConversation returns
+    // false, so they go straight to live without any resumed-state involved.
+    const conv = mkConv({ extra: { workspace: '/ws', backend: 'claude' } } as unknown as Partial<TChatConversation>);
+    expect(shouldShowTranscript(conv)).toBe(false);
+  });
+
+  it('native ACP with extra.resumedAt set (defensive: should not flip a non-imported row off transcript spuriously)', () => {
+    // The predicate now composes with isImportedAcpConversation, so a native
+    // row with a stray resumedAt cannot mis-claim resumed-imported status.
+    // Native rows go live regardless because they are never in transcript
+    // mode to begin with.
+    const conv = mkConv({
+      extra: { workspace: '/ws', backend: 'claude', resumedAt: 1 },
+    } as unknown as Partial<TChatConversation>);
+    expect(shouldShowTranscript(conv)).toBe(false);
+    // Also assert the predicate itself doesn't claim resumed-imported (copilot R2).
+    expect(isResumedImportedSession(conv)).toBe(false);
+  });
+});
+
+// Silence the "useless declared but never used" lint when the test file is
+// the only consumer of `HydrationPhase` outside production code.
+const _phaseAssertion: HydrationPhase = 'ready';
+void _phaseAssertion;

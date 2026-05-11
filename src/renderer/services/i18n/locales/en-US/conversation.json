@@ -239,6 +239,13 @@
     },
     "unavailable": "Transcript unavailable — source file not found.",
     "cachedWarning": "Source file not found — showing last imported transcript.",
-    "error": "Could not load transcript. Try reopening the session."
+    "error": "Could not load transcript. Try reopening the session.",
+    "resumeError": {
+      "title": "Cannot resume session",
+      "unsupportedBackend": "Resume is only supported for Claude Code and Copilot sessions.",
+      "sessionMissing": "Cannot resume — original session ID is missing.",
+      "cwdMissing": "Cannot resume — workspace folder is unknown.",
+      "sourceMissing": "Cannot resume — transcript source file is missing."
+    }
   }
 }

@@ -239,6 +239,13 @@
     },
     "unavailable": "無法顯示會話記錄 — 找不到原始檔案。",
     "cachedWarning": "找不到原始檔案 — 顯示最後一次匯入的會話記錄。",
-    "error": "無法載入會話記錄，請嘗試重新開啟會話。"
+    "error": "無法載入會話記錄，請嘗試重新開啟會話。",
+    "resumeError": {
+      "title": "無法繼續此會話",
+      "unsupportedBackend": "僅支援繼續 Claude Code 和 Copilot 的會話。",
+      "sessionMissing": "無法繼續 — 原始會話 ID 缺失。",
+      "cwdMissing": "無法繼續 — 工作目錄未知。",
+      "sourceMissing": "無法繼續 — 找不到會話記錄原始檔案。"
+    }
   }
 }

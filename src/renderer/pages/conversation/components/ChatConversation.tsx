@@ -14,17 +14,23 @@ import { useAgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
 import { usePresetAssistantInfo } from '@/renderer/hooks/agent/usePresetAssistantInfo';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { iconColors } from '@/renderer/styles/colors';
-import { Button, Dropdown, Menu, Tooltip, Typography } from '@arco-design/web-react';
+import { Button, Dropdown, Menu, Message, Tooltip, Typography } from '@arco-design/web-react';
 import { Brain, History } from '@icon-park/react';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import useSWR from 'swr';
+import useSWR, { mutate } from 'swr';
 import { emitter } from '../../../utils/emitter';
 import AcpChat from '../platforms/acp/AcpChat';
 import ChatLayout from './ChatLayout';
 import ChatSider from './ChatSider';
-import TranscriptView, { isHydrationFresh, isImportedAcpConversation } from './TranscriptView';
+import TranscriptView, {
+  isHydrationFresh,
+  isImportedAcpConversation,
+  isResumedImportedSession,
+  validateResumeRequest,
+  type HydrationPhase,
+} from './TranscriptView';
 import CodexChat from '../platforms/codex/CodexChat';
 import NanobotChat from '../platforms/nanobot/NanobotChat';
 import OpenClawChat from '../platforms/openclaw/OpenClawChat';
@@ -231,16 +237,63 @@ const ChatConversation: React.FC<{
     });
   }, [agentCliConfig]);
 
-  // Stub click handler for the "Resume this session" button rendered by
-  // TranscriptView for CLI-history-imported sessions. Item 8 will replace
-  // this with the live ACP / terminal launch (the Step 1 default-mode toggle
-  // decides which surface starts). Until then the button stays a deliberate
-  // no-op so a user click cannot accidentally mount a live session.
-  const handleResumeImported = useCallback(() => {
-    // TODO(item 8): wire to live ACP session resume OR terminal `--resume <id>`
-    // based on conversation.extra.currentMode (defaulting per the Step 1 toggle).
-    console.warn('[ChatConversation] "Resume this session" clicked — live launch not implemented yet (item 8).');
-  }, []);
+  // Wire the "Resume this session" click on imported CLI-history rows to a real
+  // live launch. We do NOT spawn ACP / terminal processes directly here — instead
+  // we (a) pre-flight the row, then (b) stamp `extra.resumedAt` + `currentMode`
+  // (and `terminalSwitchedAt` when the Step 1 toggle is Terminal) so the next
+  // render falls through `shouldShowTranscript` into the existing AcpChat /
+  // TerminalChat branch. Those branches own the actual `--resume <id>` /
+  // ACP-connect logic and we deliberately reuse them rather than duplicate.
+  //
+  // On any pre-flight failure the transcript stays mounted + read-only and the
+  // user sees an Arco `Message.error` toast keyed off
+  // `conversation.transcript.resumeError.<reason>`.
+  const handleResumeImported = useCallback(
+    (phase: HydrationPhase) => {
+      // Defensive — the button is rendered without a disabled state, but a click
+      // before `useAgentCliConfig` resolves should not mutate state with the
+      // fallback Rich-UI mode. The hook normally settles long before the user
+      // could reach the transcript surface; this guard catches the racy edge.
+      if (agentCliConfig === undefined) return;
+      if (!conversation || conversation.type !== 'acp') return;
+
+      const result = validateResumeRequest(conversation, agentCliConfig.defaultMode, phase, Date.now());
+      if (result.ok === false) {
+        Message.error(t(`conversation.transcript.resumeError.${result.errorKey}` as const));
+        return;
+      }
+
+      // Synchronously align the local `currentMode` with the persisted target
+      // BEFORE the IPC. Without this, a row whose stale `extra.currentMode` is
+      // 'terminal' but whose Resume picks Rich UI (`defaultMode === 'acp'`)
+      // would, in the first render after `mutate`, still see `isTerminalMode`
+      // true (driven by the local React state) while `shouldShowTranscript`
+      // flips to false (driven by the just-persisted `extra.resumedAt`). That
+      // window mounts TerminalChat for a frame and could start a PTY despite
+      // the user's choice. The `persistedMode` sync effect would fix it on the
+      // next render, but doing the alignment synchronously here prevents the
+      // race entirely (codex R2 on PR #25).
+      setCurrentMode(result.updates.extra.currentMode);
+
+      void ipcBridge.conversation.update
+        .invoke({
+          id: conversation.id,
+          updates: result.updates as unknown as Partial<TChatConversation>,
+          mergeExtra: true,
+        })
+        .then(() => mutate(`conversation/${conversation.id}`))
+        .catch((err: unknown) => {
+          // Persist failure — the IPC itself rejected (e.g. DB write error or
+          // bridge disconnect), distinct from the pre-flight validation
+          // failures above. Use the generic `common.saveFailed` rather than a
+          // resume-specific key so the user understands the click didn't take
+          // effect for a transport / storage reason. Transcript stays mounted.
+          console.error('[ChatConversation] Failed to persist resume state', err);
+          Message.error(t('common.saveFailed'));
+        });
+    },
+    [agentCliConfig, conversation, t]
+  );
 
   // Sync mode state when conversation changes or SWR revalidates with fresh extra data
   const persistedMode = conversation?.type === 'acp' ? conversation.extra?.currentMode : undefined;
@@ -288,13 +341,16 @@ const ChatConversation: React.FC<{
     // CLI-history-imported ACP sessions (extra.sourceFilePath set) open as a
     // read-only transcript regardless of the mode toggle — the user must
     // explicitly click "Resume this session" to start any live ACP / terminal
-    // surface (item 8 will wire that launch). Checking this BEFORE the
-    // terminal-mode early-return prevents a stale `extra.currentMode = 'terminal'`
-    // from accidentally launching a live PTY when the user just wants to read.
-    const isImportedAcp = isImportedAcpConversation(conversation);
+    // surface. Once Resume succeeds, `extra.resumedAt` is stamped and the row
+    // flips out of transcript mode permanently (subsequent opens go straight to
+    // the live route). Checking this BEFORE the terminal-mode early-return
+    // prevents a stale `extra.currentMode = 'terminal'` from accidentally
+    // launching a live PTY when the user just wants to read.
+    const shouldShowTranscript = isImportedAcpConversation(conversation) && !isResumedImportedSession(conversation);
 
-    // Terminal mode rendering for ACP conversations (live, native rows only).
-    if (conversation.type === 'acp' && isTerminalMode && !isImportedAcp) {
+    // Terminal mode rendering for ACP conversations (live, native rows OR
+    // resumed-imported rows).
+    if (conversation.type === 'acp' && isTerminalMode && !shouldShowTranscript) {
       return (
         <TerminalChat
           key={`terminal-${conversation.id}`}
@@ -310,7 +366,7 @@ const ChatConversation: React.FC<{
 
     switch (conversation.type) {
       case 'acp': {
-        if (isImportedAcp) {
+        if (shouldShowTranscript) {
           // `sourceFilePath` is guaranteed non-empty by `isImportedAcpConversation`;
           // assertion is safe here. Threading it explicitly lets TranscriptView re-fire
           // hydration when an incremental scan refreshes the source pointer mid-mount.
