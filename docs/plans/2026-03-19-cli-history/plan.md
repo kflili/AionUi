@@ -82,6 +82,7 @@ Do NOT eagerly import all messages. Split into metadata indexing (instant) and m
 ### Phase 1: Metadata Index (on enable)
 
 Scan all session files via provider-native indexes, extract metadata only:
+
 - Session ID, source file path, last modified time
 - Title candidate from provider metadata: for Claude Code, use `firstPrompt` from `sessions-index.json`; for Copilot, use `summary` from `session-store.db`. If the provider lacks a good title candidate, promote the title during Phase 2 hydration (extract first user message from JSONL).
 - Message count (if available from index)
@@ -92,6 +93,7 @@ Write a `conversations` row per session. This is near-instant — reading 200 in
 ### Phase 2: Message Hydration (on click)
 
 When the user opens a session for the first time:
+
 1. Intercept before the normal `AcpChat` surface mounts (which would show a live editable chat)
 2. If messages are not yet hydrated, show skeleton loading state
 3. Read and parse the full JSONL file
@@ -124,12 +126,12 @@ Importing hundreds of CLI sessions will flood the sidebar. The sidebar is a **re
 
 Show a limited number of items per timeline group, with "Show N more" expanders:
 
-| Timeline group | Default visible | Expand behavior          |
-| -------------- | --------------- | ------------------------ |
-| Today          | 15              | "Show N more" per click  |
-| Yesterday      | 10              | "Show N more" per click  |
-| Recent 7 Days  | 20              | "Show N more" per click  |
-| Earlier        | 20              | "Show N more" per click  |
+| Timeline group | Default visible | Expand behavior         |
+| -------------- | --------------- | ----------------------- |
+| Today          | 15              | "Show N more" per click |
+| Yesterday      | 10              | "Show N more" per click |
+| Recent 7 Days  | 20              | "Show N more" per click |
+| Earlier        | 20              | "Show N more" per click |
 
 Implementation: Do not truncate `TimelineSection.items` directly. Because a section item may be a workspace group containing multiple conversations, truncation must be applied after expansion into visible rows (or with separate limits for standalone conversations vs workspace-group children). Track expanded section state independently from expanded workspace state.
 
@@ -210,6 +212,7 @@ CLI sessions can be updated externally (user continues working in terminal) whil
 ### Strategy: mtime check on open
 
 When a user opens a hydrated imported session:
+
 1. Check `mtime` of the source JSONL file
 2. Compare against `extra.hydratedAt` timestamp
 3. If file is newer → re-hydrate (re-read JSONL, re-convert, update messages in SQLite)
@@ -227,6 +230,7 @@ When a user opens a hydrated imported session:
 ### Disabling
 
 When the user turns off CLI import:
+
 1. Show confirmation: "This will hide N imported sessions from the sidebar, history view, and search. They won't be deleted."
 2. Hide imported conversations from all discovery surfaces (sidebar, full-history view, and search results). SQLite rows remain intact.
 3. User's customizations (renames, pins) are preserved in SQLite
@@ -245,18 +249,23 @@ Deleting an imported conversation is a separate user action via the `...` menu. 
 ## Edge Cases
 
 ### Corrupted JSONL
+
 Import partially — skip malformed lines and continue. Show a non-blocking warning: "Imported with N skipped events." The conversation is still usable with the valid messages.
 
 ### Missing source files
+
 If the source file is missing and the session has already been hydrated, continue showing the cached SQLite transcript and surface a warning banner: "Source file not found — showing last imported transcript." If the source file is missing before first hydration, show "Transcript unavailable — source file not found." In both cases the sidebar row remains (metadata is in SQLite).
 
 ### Deduplication
+
 Key imported sessions by `source + extra.acpSessionId` (or `source + extra.sourceFilePath`). On incremental sync, upsert — never create duplicate rows for the same CLI session. Incremental sync may refresh provider-owned metadata (`updatedAt`, `messageCount`, `filePath`, `workspace`), but must not overwrite user-controlled fields such as manual renames or pin state. Track whether the current title is auto-generated (`extra.importMeta.autoNamed = true`) before replacing it on re-sync.
 
 ### Read-only by default
+
 Imported sessions open in **transcript mode** (see Phase 2 above). The normal `AcpSendBox` is hidden; messages render as read-only. A primary "Resume this session" action starts an ACP or terminal session with the appropriate resume flags.
 
 ### Search scope
+
 - **Metadata search** (conversation name, workspace): Works for all imported sessions immediately
 - **Full-text message search**: Only works for hydrated sessions (messages in SQLite). Non-hydrated sessions won't appear in message search results. The Full History view should indicate this: "Some sessions not yet indexed for message search."
 
@@ -283,7 +292,7 @@ One provider per CLI. Each handles platform-specific path resolution internally.
 ### Cross-Platform Path Resolution
 
 | CLI         | macOS                                   | Linux               | Windows                   |
-| ----------- | --------------------------------------- | -------------------- | ------------------------- |
+| ----------- | --------------------------------------- | ------------------- | ------------------------- |
 | Claude Code | `~/.claude/`                            | `~/.claude/`        | `%USERPROFILE%\.claude\`  |
 | Copilot     | `~/.copilot/`                           | `~/.copilot/`       | `%USERPROFILE%\.copilot\` |
 | Codex       | `~/.codex/`                             | `~/.codex/`         | `%USERPROFILE%\.codex\`   |
@@ -371,12 +380,18 @@ Done (on main):
   src/process/cli-history/converters/copilot.ts — Copilot JSONL -> TMessage converter
 
 Done (Phase 1 metadata index):
-  src/process/cli-history/importer.ts           — Phase 1 orchestrator (discoverAndImport, disableSource, reenableSource, hydrateSession stub)
+  src/process/cli-history/importer.ts           — Phase 1 orchestrator (discoverAndImport, disableSource, reenableSource); Phase 2 hydrateSession also landed here
   src/process/bridge/conversationEvents.ts      — Extracted emitConversationListChanged helper (breaks circular import)
   src/common/adapter/ipcBridge.ts               — cliHistory.{scan, scanAll, disableSource, reenableSource} IPC routes
   src/process/services/database/index.ts        — getUserConversations hidden filter + getImportedConversationsIncludingHidden + updateImportedConversation
   src/renderer/components/settings/SettingsModal/contents/AgentCliModalContent.tsx — Per-CLI import toggles (Claude Code, Copilot)
   src/process/bridge/index.ts                   — Wires initCliHistoryImporter() for app-launch sync
+
+Done (Phase 2 on-demand message hydration):
+  src/process/cli-history/importer.ts           — hydrateSession + helpers (mtime cache keyed by hydratedAt + hydratedSourceFilePath, in-flight coalescing, splitJsonlByValidity, upgradeTitleFromFirstUserMessage)
+  src/process/services/database/index.ts        — getMessageCountForConversation + atomic DELETE-then-INSERT insertImportedMessages
+  src/common/config/storage.ts                  — extra.hydratedAt + extra.hydratedSourceFilePath optional fields on the acp variant
+  src/common/adapter/ipcBridge.ts               — cliHistory.hydrate IPC route (forwards optional showThinking)
 
 Not started:
   src/process/cli-history/providers/codex.ts    — Codex CLI provider (deferred to V2)
@@ -440,7 +455,7 @@ Not started:
 
 - [x] Per-CLI import toggles in Settings > AgentCLI (Claude Code + Copilot for V1)
 - [x] Phase 1: metadata index on enable (instant scan)
-- [ ] Phase 2: on-demand message hydration on open (with skeleton loading)
+- [x] Phase 2: on-demand message hydration (backend done; transcript-mode UI with skeleton loading is item 3)
 - [ ] Imported sessions appear in normal sidebar timeline (mixed with native)
 - [ ] Source badge visible on imported sessions (2-letter chips: CC, CP)
 - [ ] Auto-naming uses provider metadata first, upgrades from first user message when needed, and appends workspace for disambiguation
@@ -479,6 +494,7 @@ Tests follow project conventions: Vitest 4, behavior-focused descriptions, at le
 #### 1. Importer Orchestrator (`cli-history/importer.test.ts`)
 
 **Phase 1: Metadata Import**
+
 - imports discovered Claude Code sessions as sidebar-ready conversations with provider metadata preserved
 - imports discovered Copilot sessions using `summary` as title
 - skips sessions that are already imported (deduplication by `source + acpSessionId`)
@@ -489,6 +505,7 @@ Tests follow project conventions: Vitest 4, behavior-focused descriptions, at le
 - handles provider throwing an error without crashing import of other providers
 
 **Phase 2: Message Hydration**
+
 - opens a non-hydrated imported session by loading its transcript once, then reuses cached data until the source changes
 - skips hydration if messages already exist and source file mtime is unchanged
 - re-hydrates if source file mtime is newer than `extra.hydratedAt`
@@ -499,6 +516,7 @@ Tests follow project conventions: Vitest 4, behavior-focused descriptions, at le
 - handles missing source file for previously-hydrated session: returns "cached" status with warning
 
 **Auto-Naming**
+
 - uses Claude Code `firstPrompt` as title when available
 - uses Copilot `summary` as title when available
 - falls back to relative time + workspace when provider metadata and first user message are both unavailable
@@ -510,6 +528,7 @@ Tests follow project conventions: Vitest 4, behavior-focused descriptions, at le
 - does not upgrade title if user has manually renamed (`importMeta.autoNamed = false`)
 
 **Disable/Re-enable**
+
 - disabling import marks imported conversations as hidden
 - re-enabling import restores previously hidden conversations with customizations intact
 - re-enabling triggers incremental sync for new sessions

@@ -72,3 +72,24 @@ export type ImportResult = {
   /** Per-session errors collected during the scan (provider or DB failures) */
   errors: Array<{ sessionId: string; message: string }>;
 };
+
+/**
+ * Result of a single Phase 2 hydration call for one conversation.
+ *
+ * - `hydrated` — messages were freshly inserted (first hydration OR mtime
+ *   newer than `hydratedAt`); `warningCount` may report JSONL parse failures.
+ * - `cached`   — messages already in SQLite are still current.
+ * - `unavailable` — never hydrated AND source file is missing/unreadable;
+ *   nothing to render.
+ *
+ * `warning: 'source_missing'` is set on the `cached` and `unavailable` paths
+ * when the source JSONL is missing or unreadable, so the UI can surface
+ * the parent design's "Source file not found" banner / empty-state.
+ */
+export type HydrateResult = {
+  status: 'hydrated' | 'cached' | 'unavailable';
+  /** Number of JSONL lines we could not JSON-parse (skipped, partial transcript). */
+  warningCount?: number;
+  /** Discriminates clean cache hits from cached-but-source-missing states. */
+  warning?: 'source_missing';
+};

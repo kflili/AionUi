@@ -34,9 +34,20 @@ const hoisted = vi.hoisted(() => {
   };
 
   const dbStore = new Map<string, TChatConversation>();
+  const messageStore = new Map<string, unknown[]>();
   const writeFailures = new Set<string>();
   const createSpy = vi.fn();
   const updateSpy = vi.fn();
+  const insertMessagesSpy = vi.fn();
+
+  // Switches the mockDatabase methods can read to simulate error returns
+  // from the underlying SQLite helpers without throwing.
+  const dbFailureSwitches = {
+    countFails: false,
+    getConvFails: false,
+    insertMessagesFails: false,
+    updateFailsAfterInsert: false,
+  };
 
   const mockDatabase = {
     createConversation: (conv: TChatConversation) => {
@@ -52,6 +63,9 @@ const hoisted = vi.hoisted(() => {
       if (writeFailures.has(conv.id)) {
         return { success: false, error: 'forced DB update failure' };
       }
+      if (dbFailureSwitches.updateFailsAfterInsert) {
+        return { success: false, error: 'simulated update failure after insert' };
+      }
       if (!dbStore.has(conv.id)) {
         return { success: false, error: 'Conversation not found' };
       }
@@ -61,6 +75,29 @@ const hoisted = vi.hoisted(() => {
     getImportedConversationsIncludingHidden: (sources: string[]) => {
       const data = Array.from(dbStore.values()).filter((c) => sources.includes(c.source ?? ''));
       return { success: true, data };
+    },
+    getConversation: (id: string) => {
+      if (dbFailureSwitches.getConvFails) {
+        return { success: false, error: 'simulated getConversation failure' };
+      }
+      const row = dbStore.get(id);
+      if (!row) return { success: false, error: 'Conversation not found' };
+      return { success: true, data: structuredClone(row) };
+    },
+    getMessageCountForConversation: (conversationId: string) => {
+      if (dbFailureSwitches.countFails) {
+        return { success: false, error: 'simulated count failure' };
+      }
+      const count = messageStore.get(conversationId)?.length ?? 0;
+      return { success: true, data: count };
+    },
+    insertImportedMessages: (conversationId: string, messages: unknown[]) => {
+      insertMessagesSpy(conversationId, messages);
+      if (dbFailureSwitches.insertMessagesFails) {
+        return { success: false, error: 'simulated insert failure' };
+      }
+      messageStore.set(conversationId, [...messages]);
+      return { success: true, data: messages.length };
     },
   };
 
@@ -72,9 +109,12 @@ const hoisted = vi.hoisted(() => {
     mockClaude,
     mockCopilot,
     dbStore,
+    messageStore,
     writeFailures,
     createSpy,
     updateSpy,
+    insertMessagesSpy,
+    dbFailureSwitches,
     mockDatabase,
     emitSpy,
     processConfigGet,
@@ -119,9 +159,12 @@ vi.mock('@process/utils/initStorage', () => ({
 const mockClaude = hoisted.mockClaude;
 const mockCopilot = hoisted.mockCopilot;
 const dbStore = hoisted.dbStore;
+const messageStore = hoisted.messageStore;
 const writeFailures = hoisted.writeFailures;
 const createSpy = hoisted.createSpy;
 const updateSpy = hoisted.updateSpy;
+const insertMessagesSpy = hoisted.insertMessagesSpy;
+const dbFailureSwitches = hoisted.dbFailureSwitches;
 const mockDatabase = hoisted.mockDatabase;
 const emitSpy = hoisted.emitSpy;
 const processConfigGet = hoisted.processConfigGet;
@@ -129,6 +172,7 @@ const processConfigGet = hoisted.processConfigGet;
 // Import AFTER mocks are set up.
 import {
   __resetInFlightForTests,
+  __setFileIoForTests,
   buildAutoName,
   buildConversationRow,
   dedupKey,
@@ -165,9 +209,15 @@ function meta(overrides: Partial<SessionMetadata> = {}): SessionMetadata {
 function resetState(): void {
   hoisted.uuidState.counter = 0;
   dbStore.clear();
+  messageStore.clear();
   writeFailures.clear();
   createSpy.mockClear();
   updateSpy.mockClear();
+  insertMessagesSpy.mockClear();
+  dbFailureSwitches.countFails = false;
+  dbFailureSwitches.getConvFails = false;
+  dbFailureSwitches.insertMessagesFails = false;
+  dbFailureSwitches.updateFailsAfterInsert = false;
   emitSpy.mockClear();
   processConfigGet.mockReset();
   processConfigGet.mockResolvedValue({});
@@ -614,12 +664,867 @@ describe('deduplication & sync (plan §7)', () => {
 });
 
 // ---------------------------------------------------------------------------
-// hydrateSession is a stub
+// Phase 2: on-demand message hydration
 // ---------------------------------------------------------------------------
 
-describe('hydrateSession', () => {
-  it('throws "not implemented in Phase 1"', async () => {
-    await expect(hydrateSession('any-id')).rejects.toThrow(/not implemented in Phase 1/);
+type AcpExtra = {
+  backend: 'claude' | 'copilot';
+  workspace: string;
+  acpSessionId: string;
+  acpSessionUpdatedAt: number;
+  sourceFilePath: string;
+  hydratedAt?: number;
+  hydratedSourceFilePath?: string;
+  importMeta: { autoNamed: boolean; generatedName?: string; hidden?: boolean };
+};
+
+/**
+ * Build a Phase-1-shaped imported conversation row directly in the
+ * test DB. Mirrors what `buildConversationRow` produces but lets each
+ * test pin specific fields (autoNamed, generatedName, hydratedAt, ...)
+ * without having to round-trip through `discoverAndImport`.
+ */
+function seedImportedRow(
+  overrides: Partial<{
+    id: string;
+    source: 'claude_code' | 'copilot';
+    name: string;
+    generatedName: string;
+    autoNamed: boolean;
+    workspace: string;
+    sourceFilePath: string;
+    hydratedAt: number | undefined;
+    hydratedSourceFilePath: string | undefined;
+    hidden: boolean;
+    extraOverrides: Partial<AcpExtra>;
+  }> = {}
+): TChatConversation {
+  const id = overrides.id ?? 'conv-1';
+  const source = overrides.source ?? 'claude_code';
+  const generatedName = overrides.generatedName ?? '5 min ago · demo-project';
+  const name = overrides.name ?? generatedName;
+  const workspace = overrides.workspace ?? '/Users/x/projects/demo-project';
+  const sourceFilePath = overrides.sourceFilePath ?? '/tmp/sessions/sess-1.jsonl';
+
+  const extra: AcpExtra = {
+    backend: source === 'claude_code' ? 'claude' : 'copilot',
+    workspace,
+    acpSessionId: id,
+    acpSessionUpdatedAt: 1000,
+    sourceFilePath,
+    hydratedAt: overrides.hydratedAt,
+    hydratedSourceFilePath: overrides.hydratedSourceFilePath,
+    importMeta: {
+      autoNamed: overrides.autoNamed ?? true,
+      generatedName,
+      hidden: overrides.hidden ?? false,
+    },
+    ...overrides.extraOverrides,
+  };
+
+  const row = {
+    id,
+    type: 'acp' as const,
+    name,
+    createTime: 1,
+    modifyTime: 2,
+    source,
+    extra,
+  } as unknown as TChatConversation;
+  dbStore.set(id, row);
+  return row;
+}
+
+/**
+ * Minimal `TMessage`-shaped objects produced by `convertClaudeJsonl` / `convertCopilotJsonl`
+ * for the hydration flow. Tests don't need to round-trip through real converters — they
+ * stub the converters' input (JSONL lines) so `splitJsonlByValidity` + the converters'
+ * happy path produce the messages we want to inspect.
+ */
+const CLAUDE_USER_LINE = (text: string) =>
+  JSON.stringify({
+    type: 'user',
+    timestamp: '2026-05-10T10:00:00.000Z',
+    message: { role: 'user', content: text },
+  });
+const CLAUDE_ASSISTANT_LINE = (text: string) =>
+  JSON.stringify({
+    type: 'assistant',
+    timestamp: '2026-05-10T10:00:30.000Z',
+    message: { role: 'assistant', content: [{ type: 'text', text }] },
+  });
+
+describe('hydrateSession (Phase 2)', () => {
+  it('first open hydrates: returns hydrated, inserts messages, stamps mtimeMs as hydratedAt', async () => {
+    seedImportedRow({ id: 'conv-1', sourceFilePath: '/tmp/s.jsonl', generatedName: '5 min ago · demo-project' });
+    const lines = [CLAUDE_USER_LINE('hello world'), CLAUDE_ASSISTANT_LINE('hi there')].join('\n');
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    expect(result.warningCount).toBe(0);
+    expect(result.warning).toBeUndefined();
+
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const [convId, msgs] = insertMessagesSpy.mock.calls[0];
+    expect(convId).toBe('conv-1');
+    expect((msgs as unknown[]).length).toBeGreaterThan(0);
+
+    const row = dbStore.get('conv-1')!;
+    const extra = row.extra as AcpExtra;
+    expect(extra.hydratedAt).toBe(5000);
+    expect(extra.hydratedSourceFilePath).toBe('/tmp/s.jsonl');
+    expect(emitSpy).toHaveBeenCalledWith(expect.objectContaining({ id: 'conv-1' }), 'updated');
+  });
+
+  it('second open with unchanged mtime returns cached without re-reading', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('first prompt'),
+    });
+    await hydrateSession('conv-1');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+
+    const readSpy = vi.fn(async () => CLAUDE_USER_LINE('first prompt'));
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: readSpy,
+    });
+    const second = await hydrateSession('conv-1');
+    expect(second.status).toBe('cached');
+    expect(second.warning).toBeUndefined();
+    expect(readSpy).not.toHaveBeenCalled();
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('re-hydrates when mtime is newer than hydratedAt (replaces messages)', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('old'),
+    });
+    await hydrateSession('conv-1');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+
+    __setFileIoForTests({
+      statMtimeMs: async () => 6000,
+      readJsonl: async () => [CLAUDE_USER_LINE('old'), CLAUDE_USER_LINE('new')].join('\n'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(2);
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra;
+    expect(extra.hydratedAt).toBe(6000);
+  });
+
+  it('treats hydratedAt > 0 as prior hydration even with zero messages (caches)', async () => {
+    seedImportedRow({
+      id: 'conv-1',
+      hydratedAt: 5000,
+      hydratedSourceFilePath: '/tmp/s.jsonl',
+      sourceFilePath: '/tmp/s.jsonl',
+    });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000, // unchanged
+      readJsonl: async () => '',
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
+
+  it('parses extra.hydratedAt persisted as a numeric string without Date.parse-as-calendar-year', async () => {
+    // If a future JSON round-trip stringifies the number, `Date.parse('5000')`
+    // would yield year-5000 (~9.5e13 ms), making the cache check think the
+    // file is stale and re-hydrating spuriously. The numeric-string fast path
+    // in parseTimestampOr handles this.
+    const row = seedImportedRow({
+      id: 'conv-1',
+      sourceFilePath: '/tmp/s.jsonl',
+      hydratedSourceFilePath: '/tmp/s.jsonl',
+    });
+    // Bypass the typed seedImportedRow shape and write the numeric string directly.
+    (row.extra as unknown as { hydratedAt: unknown }).hydratedAt = '5000';
+    (row.extra as unknown as { hydratedShowThinking: boolean }).hydratedShowThinking = false;
+    dbStore.set('conv-1', row);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000, // matches the numeric value, not year-5000
+      readJsonl: async () => CLAUDE_USER_LINE('should not be read'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
+
+  it('missing source for a never-hydrated session returns unavailable + source_missing', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    __setFileIoForTests({
+      statMtimeMs: async () => null,
+      readJsonl: async () => null,
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('unavailable');
+    expect(result.warning).toBe('source_missing');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+    expect(updateSpy).not.toHaveBeenCalled();
+  });
+
+  it('missing source for a previously-hydrated session returns cached + source_missing', async () => {
+    seedImportedRow({
+      id: 'conv-1',
+      hydratedAt: 5000,
+      hydratedSourceFilePath: '/tmp/s.jsonl',
+      sourceFilePath: '/tmp/s.jsonl',
+    });
+    messageStore.set('conv-1', [{ id: 'm-1' }]);
+    __setFileIoForTests({
+      statMtimeMs: async () => null,
+      readJsonl: async () => null,
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('cached');
+    expect(result.warning).toBe('source_missing');
+    expect(result.warningCount).toBe(0);
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
+
+  it('post-stat read failure maps to the same source_missing branch', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000, // stat succeeds
+      readJsonl: async () => null, // read races out
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('unavailable');
+    expect(result.warning).toBe('source_missing');
+
+    // With prior hydration on the same path it should return cached instead.
+    seedImportedRow({
+      id: 'conv-2',
+      sourceFilePath: '/tmp/s2.jsonl',
+      hydratedAt: 4000,
+      hydratedSourceFilePath: '/tmp/s2.jsonl',
+    });
+    messageStore.set('conv-2', [{ id: 'm-1' }]);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => null,
+    });
+    const result2 = await hydrateSession('conv-2');
+    expect(result2.status).toBe('cached');
+    expect(result2.warning).toBe('source_missing');
+  });
+
+  it('corrupted JSONL skips bad lines and reports warningCount', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    const lines = [CLAUDE_USER_LINE('valid'), '{ not json', CLAUDE_ASSISTANT_LINE('also valid'), '{"oops": '].join(
+      '\n'
+    );
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    expect(result.warningCount).toBe(2);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalesces two concurrent hydration calls into one read+parse+insert pass', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    let readCalls = 0;
+    let resolveRead: ((value: string | null) => void) | undefined;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          readCalls++;
+          resolveRead = resolve;
+        }),
+    });
+
+    const p1 = hydrateSession('conv-1');
+    const p2 = hydrateSession('conv-1');
+    expect(p1).toBe(p2);
+    // Let the first microtask of runHydrate run so readJsonl is awaited.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(readCalls).toBe(1);
+
+    resolveRead!(CLAUDE_USER_LINE('only-one-read'));
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1.status).toBe('hydrated');
+    expect(r2).toBe(r1);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('coalescing key is per-conversation: two different conversationIds run in parallel', async () => {
+    seedImportedRow({ id: 'conv-A', sourceFilePath: '/tmp/a.jsonl' });
+    seedImportedRow({ id: 'conv-B', sourceFilePath: '/tmp/b.jsonl' });
+    const reads: string[] = [];
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async (filePath: string) => {
+        reads.push(filePath);
+        return CLAUDE_USER_LINE('hi');
+      },
+    });
+    await Promise.all([hydrateSession('conv-A'), hydrateSession('conv-B')]);
+    expect(reads.toSorted()).toEqual(['/tmp/a.jsonl', '/tmp/b.jsonl']);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('throws on unknown conversationId', async () => {
+    await expect(hydrateSession('does-not-exist')).rejects.toThrow(/Conversation not found/);
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws on a row missing extra.sourceFilePath (not an imported session)', async () => {
+    const native = {
+      id: 'native-1',
+      type: 'acp',
+      name: 'native',
+      createTime: 1,
+      modifyTime: 1,
+      source: 'claude_code',
+      extra: { backend: 'claude', workspace: '/w', acpSessionId: 'native-1' },
+    } as unknown as TChatConversation;
+    dbStore.set(native.id, native);
+    await expect(hydrateSession('native-1')).rejects.toThrow(/not an imported CLI session/);
+  });
+
+  it('throws on hidden imported session', async () => {
+    seedImportedRow({ id: 'conv-1', hidden: true });
+    await expect(hydrateSession('conv-1')).rejects.toThrow(/hidden imported session/);
+  });
+
+  it('throws on unsupported source (coding bug — surfaces before file I/O)', async () => {
+    const row = seedImportedRow({ id: 'conv-1' });
+    (row as unknown as { source: string }).source = 'codex'; // not in CONVERTER_FOR_SOURCE
+    dbStore.set('conv-1', row);
+    let statCalls = 0;
+    __setFileIoForTests({
+      statMtimeMs: async () => {
+        statCalls++;
+        return 5000;
+      },
+      readJsonl: async () => CLAUDE_USER_LINE('never read'),
+    });
+    await expect(hydrateSession('conv-1')).rejects.toThrow(/Unsupported CLI history source/);
+    expect(statCalls).toBe(0); // converter lookup happens BEFORE any file I/O
+  });
+
+  it('throws when DB count read fails', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    dbFailureSwitches.countFails = true;
+    __setFileIoForTests({ statMtimeMs: async () => 5000, readJsonl: async () => CLAUDE_USER_LINE('x') });
+    await expect(hydrateSession('conv-1')).rejects.toThrow(/Failed to count imported messages|simulated count failure/);
+  });
+
+  it('throws when DB insertImportedMessages fails (no metadata write side-effect)', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    dbFailureSwitches.insertMessagesFails = true;
+    __setFileIoForTests({ statMtimeMs: async () => 5000, readJsonl: async () => CLAUDE_USER_LINE('x') });
+    await expect(hydrateSession('conv-1')).rejects.toThrow(
+      /Failed to insert imported messages|simulated insert failure/
+    );
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('throws when update after insert fails', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    dbFailureSwitches.updateFailsAfterInsert = true;
+    __setFileIoForTests({ statMtimeMs: async () => 5000, readJsonl: async () => CLAUDE_USER_LINE('x') });
+    await expect(hydrateSession('conv-1')).rejects.toThrow(
+      /Failed to update imported conversation after hydration|simulated update failure/
+    );
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    expect(emitSpy).not.toHaveBeenCalled();
+  });
+
+  it('re-hydrates when sourceFilePath was refreshed by a scan, even if mtime matches', async () => {
+    // Prior hydration was against /old/path; Phase-1 moved-file dedup refreshed
+    // sourceFilePath to /new/path. Cache must NOT be reused even with mtime
+    // matching the prior `hydratedAt` value.
+    seedImportedRow({
+      id: 'conv-1',
+      sourceFilePath: '/new/path.jsonl',
+      hydratedAt: 5000,
+      hydratedSourceFilePath: '/old/path.jsonl',
+    });
+    messageStore.set('conv-1', [{ id: 'm-1' }]);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('fresh content'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra;
+    expect(extra.hydratedSourceFilePath).toBe('/new/path.jsonl');
+  });
+
+  it('pre-Phase-2 row with existing messages but no hydratedSourceFilePath: re-hydrates (cannot trust source)', async () => {
+    // A row imported by Phase 1 before this PR — `existingCount > 0` is possible
+    // if another code path inserted messages, but there's no `hydratedSourceFilePath`
+    // to confirm those messages came from the current `sourceFilePath`. The cache
+    // check must err on the side of re-hydration to avoid serving stale-from-a-
+    // different-file messages.
+    seedImportedRow({
+      id: 'conv-1',
+      sourceFilePath: '/tmp/s.jsonl',
+      hydratedAt: undefined,
+      hydratedSourceFilePath: undefined,
+    });
+    messageStore.set('conv-1', [{ id: 'm-old' }]);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('current content'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra;
+    expect(extra.hydratedSourceFilePath).toBe('/tmp/s.jsonl');
+  });
+
+  it('forwards showThinking to the converter so thinking blocks appear in the hydrated transcript', async () => {
+    seedImportedRow({ id: 'conv-1' });
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-10T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'reasoning step', signature: 'sig' },
+            { type: 'text', text: 'visible response' },
+          ],
+        },
+      }),
+    ].join('\n');
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+
+    await hydrateSession('conv-1', { showThinking: true });
+    const [, msgsWithThinking] = insertMessagesSpy.mock.calls[0];
+    const texts = (msgsWithThinking as Array<{ type: string; content: { content: string } }>)
+      .filter((m) => m.type === 'text')
+      .map((m) => m.content.content);
+    expect(texts.some((t) => t.includes('reasoning step'))).toBe(true);
+    expect(texts.some((t) => t.includes('visible response'))).toBe(true);
+
+    // Default (no option) drops thinking blocks.
+    insertMessagesSpy.mockClear();
+    seedImportedRow({ id: 'conv-2', sourceFilePath: '/tmp/s2.jsonl' });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+    await hydrateSession('conv-2');
+    const [, msgsNoThinking] = insertMessagesSpy.mock.calls[0];
+    const texts2 = (msgsNoThinking as Array<{ type: string; content: { content: string } }>)
+      .filter((m) => m.type === 'text')
+      .map((m) => m.content.content);
+    expect(texts2.some((t) => t.includes('reasoning step'))).toBe(false);
+    expect(texts2.some((t) => t.includes('visible response'))).toBe(true);
+  });
+
+  it('invalidates cache when showThinking flips between calls (even with unchanged mtime)', async () => {
+    // First hydration stores messages without thinking blocks.
+    seedImportedRow({ id: 'conv-1', sourceFilePath: '/tmp/s.jsonl' });
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-10T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'reasoning step', signature: 'sig' },
+            { type: 'text', text: 'visible response' },
+          ],
+        },
+      }),
+    ].join('\n');
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => lines,
+    });
+
+    const first = await hydrateSession('conv-1', { showThinking: false });
+    expect(first.status).toBe('hydrated');
+    const extraAfterFirst = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extraAfterFirst.hydratedShowThinking).toBe(false);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+
+    // Second call with showThinking=true and unchanged mtime: must NOT serve cache.
+    insertMessagesSpy.mockClear();
+    const second = await hydrateSession('conv-1', { showThinking: true });
+    expect(second.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extraAfterSecond = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extraAfterSecond.hydratedShowThinking).toBe(true);
+
+    // Third call with the same showThinking=true and unchanged mtime: cache hit.
+    insertMessagesSpy.mockClear();
+    const third = await hydrateSession('conv-1', { showThinking: true });
+    expect(third.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+
+    // Fourth call with showThinking omitted (default): treated equivalent to false → invalidates again.
+    insertMessagesSpy.mockClear();
+    const fourth = await hydrateSession('conv-1');
+    expect(fourth.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+    const extraAfterFourth = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extraAfterFourth.hydratedShowThinking).toBe(false);
+
+    // Fifth call with showThinking=false explicit: cache hit (equivalent to undefined).
+    insertMessagesSpy.mockClear();
+    const fifth = await hydrateSession('conv-1', { showThinking: false });
+    expect(fifth.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not coalesce concurrent hydrations for the same conversation with DIFFERENT showThinking; serializes them so the latest request wins SQLite', async () => {
+    // If A (false) and B (true) ran in parallel, both would call insertImportedMessages
+    // and one variant would clobber the other at random, leaving the caller whose
+    // promise resolved first reading the WRONG variant when it queries SQLite.
+    // The hydration chain serializes them: B runs after A finishes, re-reads the row,
+    // sees the cached variant doesn't match, and re-converts.
+    seedImportedRow({ id: 'conv-1' });
+    const startOrder: string[] = [];
+    const finishOrder: string[] = [];
+    let resolveA: ((value: string) => void) | undefined;
+    let resolveB: ((value: string) => void) | undefined;
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-10T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'reasoning step', signature: 'sig' },
+            { type: 'text', text: 'visible response' },
+          ],
+        },
+      }),
+    ].join('\n');
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          if (!resolveA) {
+            startOrder.push('A');
+            resolveA = (val) => {
+              finishOrder.push('A');
+              resolve(val);
+            };
+          } else {
+            startOrder.push('B');
+            resolveB = (val) => {
+              finishOrder.push('B');
+              resolve(val);
+            };
+          }
+        }),
+    });
+
+    const aPromise = hydrateSession('conv-1', { showThinking: false });
+    const bPromise = hydrateSession('conv-1', { showThinking: true });
+    // Drain microtasks so the chain's next step is queued.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A']);
+    expect(resolveB).toBeUndefined();
+
+    // Finish A; B should start next.
+    resolveA!(lines);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B']);
+
+    resolveB!(lines);
+    const [aResult, bResult] = await Promise.all([aPromise, bPromise]);
+    expect(aResult.status).toBe('hydrated');
+    expect(bResult.status).toBe('hydrated');
+    expect(finishOrder).toEqual(['A', 'B']);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(2);
+
+    // Final SQLite state reflects B (the latest request, with thinking).
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extra.hydratedShowThinking).toBe(true);
+  });
+
+  it('still coalesces concurrent hydrations for the same conversation with the SAME showThinking', async () => {
+    // Reaffirms the original coalescing contract: matching options still share one pass.
+    seedImportedRow({ id: 'conv-1' });
+    let resolveRead: ((value: string) => void) | undefined;
+    let readCalls = 0;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          readCalls++;
+          resolveRead = (val) => resolve(val);
+        }),
+    });
+
+    const p1 = hydrateSession('conv-1', { showThinking: true });
+    const p2 = hydrateSession('conv-1', { showThinking: true });
+    expect(p1).toBe(p2);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(readCalls).toBe(1);
+    resolveRead!(CLAUDE_USER_LINE('only-one'));
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1).toBe(r2);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('queues same-option callers behind the chain tail when a different-option step is pending', async () => {
+    // A (false) is running, B (true) is queued. A new C (false) request arrives:
+    // coalescing C with A would have C resolve when A finishes, but B is queued
+    // AFTER A and will rewrite SQLite to true before C's renderer reads. C must
+    // queue behind B instead so C's runHydrate re-reads and re-converts to false.
+    seedImportedRow({ id: 'conv-1' });
+    const startOrder: string[] = [];
+    let resolveA: ((value: string) => void) | undefined;
+    let resolveB: ((value: string) => void) | undefined;
+    let resolveC: ((value: string) => void) | undefined;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          if (!resolveA) {
+            startOrder.push('A');
+            resolveA = (val) => resolve(val);
+          } else if (!resolveB) {
+            startOrder.push('B');
+            resolveB = (val) => resolve(val);
+          } else {
+            startOrder.push('C');
+            resolveC = (val) => resolve(val);
+          }
+        }),
+    });
+
+    const aPromise = hydrateSession('conv-1', { showThinking: false });
+    const bPromise = hydrateSession('conv-1', { showThinking: true });
+    const cPromise = hydrateSession('conv-1', { showThinking: false });
+
+    // C must NOT be A's promise — if it were, C would resolve before B runs.
+    expect(cPromise).not.toBe(aPromise);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A']);
+
+    // Finish A; B should start next (not C, since B was queued earlier).
+    resolveA!(CLAUDE_USER_LINE('a'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B']);
+
+    // Finish B; C should start next.
+    resolveB!(CLAUDE_USER_LINE('b'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B', 'C']);
+
+    resolveC!(CLAUDE_USER_LINE('c'));
+    const [aResult, bResult, cResult] = await Promise.all([aPromise, bPromise, cPromise]);
+    expect(aResult.status).toBe('hydrated');
+    expect(bResult.status).toBe('hydrated');
+    expect(cResult.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(3);
+
+    // Final SQLite state reflects C (the latest request).
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extra.hydratedShowThinking).toBe(false);
+  });
+
+  it('a second same-option call DOES coalesce with the most-recently-queued tail (not with a still-running earlier step)', async () => {
+    // A (false) is running, B (true) is queued (chain tail = B). D (true) arrives:
+    // D should coalesce with B (chain tail with matching key), NOT start a new step.
+    seedImportedRow({ id: 'conv-1' });
+    const startOrder: string[] = [];
+    let resolveA: ((value: string) => void) | undefined;
+    let resolveB: ((value: string) => void) | undefined;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          if (!resolveA) {
+            startOrder.push('A');
+            resolveA = (val) => resolve(val);
+          } else {
+            startOrder.push('B');
+            resolveB = (val) => resolve(val);
+          }
+        }),
+    });
+
+    const aPromise = hydrateSession('conv-1', { showThinking: false });
+    const bPromise = hydrateSession('conv-1', { showThinking: true });
+    const dPromise = hydrateSession('conv-1', { showThinking: true });
+
+    expect(dPromise).toBe(bPromise);
+
+    // Drain microtasks so A's runHydrate progresses to the readJsonl call.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A']);
+
+    resolveA!(CLAUDE_USER_LINE('a'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B']);
+    resolveB!(CLAUDE_USER_LINE('b'));
+    await Promise.all([aPromise, bPromise, dPromise]);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(2); // A + B; D coalesced with B.
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 2: Auto-Naming upgrade
+// ---------------------------------------------------------------------------
+
+describe('hydrateSession Phase-2 title upgrade', () => {
+  it('upgrades a relative-time fallback title using the first user message', async () => {
+    seedImportedRow({
+      id: 'conv-1',
+      generatedName: '5 min ago · demo-project',
+      name: '5 min ago · demo-project',
+      autoNamed: true,
+    });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () =>
+        [
+          CLAUDE_USER_LINE('Fix the auth bug in the login flow'),
+          CLAUDE_ASSISTANT_LINE('Sure, let me look at it.'),
+        ].join('\n'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('hydrated');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('Fix the auth bug in the login flow · demo-project');
+    const extra = row.extra as AcpExtra;
+    expect(extra.importMeta.autoNamed).toBe(true);
+    expect(extra.importMeta.generatedName).toBe('Fix the auth bug in the login flow · demo-project');
+  });
+
+  it('truncates the candidate to 60 codepoints', async () => {
+    seedImportedRow({ id: 'conv-1', generatedName: '5 min ago · demo-project', autoNamed: true });
+    const longPrompt = 'a'.repeat(120);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE(longPrompt),
+    });
+    await hydrateSession('conv-1');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe(`${'a'.repeat(60)}… · demo-project`);
+  });
+
+  it('preserves a meaningful provider title (does not downgrade)', async () => {
+    seedImportedRow({
+      id: 'conv-1',
+      generatedName: 'Refactor the auth middleware · demo-project',
+      name: 'Refactor the auth middleware · demo-project',
+      autoNamed: true,
+    });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('something totally different'),
+    });
+    await hydrateSession('conv-1');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('Refactor the auth middleware · demo-project');
+  });
+
+  it('does not upgrade if user has renamed (autoNamed=false)', async () => {
+    seedImportedRow({
+      id: 'conv-1',
+      generatedName: '5 min ago · demo-project',
+      name: 'My manual rename',
+      autoNamed: false,
+    });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('first user prompt'),
+    });
+    await hydrateSession('conv-1');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('My manual rename');
+    const extra = row.extra as AcpExtra;
+    expect(extra.importMeta.autoNamed).toBe(false);
+  });
+
+  it('does NOT classify a provider title as fallback just because it starts with a relative-time phrase', async () => {
+    // The relative-time regex was originally `^(just now|...)` with no end
+    // anchor, so a meaningful provider title like
+    // "5 min ago we discovered the auth bug · demo-project" would have matched
+    // and been treated as upgradeable. The fixed regex requires a full match
+    // (optional ` · <workspace>` suffix only), so titles that START with a
+    // relative-time phrase but continue with meaningful content are preserved.
+    seedImportedRow({
+      id: 'conv-1',
+      generatedName: '5 min ago we discovered the auth bug · demo-project',
+      name: '5 min ago we discovered the auth bug · demo-project',
+      autoNamed: true,
+    });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('something totally different'),
+    });
+    await hydrateSession('conv-1');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('5 min ago we discovered the auth bug · demo-project');
+  });
+
+  it('does not upgrade when the JSONL has no user-role text messages', async () => {
+    seedImportedRow({ id: 'conv-1', generatedName: '5 min ago · demo-project', autoNamed: true });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      // Only assistant lines, no user-role text.
+      readJsonl: async () => CLAUDE_ASSISTANT_LINE('hello from the assistant'),
+    });
+    await hydrateSession('conv-1');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('5 min ago · demo-project');
+  });
+
+  it('rename racing during hydration: fresh re-read flips autoNamed to false → title upgrade skipped', async () => {
+    seedImportedRow({
+      id: 'conv-1',
+      generatedName: '5 min ago · demo-project',
+      name: '5 min ago · demo-project',
+      autoNamed: true,
+    });
+    let readResolve: ((value: string) => void) | undefined;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          readResolve = (val) => resolve(val);
+        }),
+    });
+
+    const promise = hydrateSession('conv-1');
+    await new Promise((resolve) => setImmediate(resolve));
+
+    // Concurrent rename lands while readJsonl is pending.
+    const fresh = structuredClone(dbStore.get('conv-1')!);
+    (fresh as { name: string }).name = 'User Renamed';
+    const freshExtra = fresh.extra as AcpExtra;
+    freshExtra.importMeta = { ...freshExtra.importMeta, autoNamed: false };
+    dbStore.set('conv-1', fresh);
+
+    readResolve!(CLAUDE_USER_LINE('would have upgraded'));
+    const result = await promise;
+    expect(result.status).toBe('hydrated');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('User Renamed');
+    expect((row.extra as AcpExtra).importMeta.autoNamed).toBe(false);
   });
 });
 

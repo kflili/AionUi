@@ -26,7 +26,8 @@ Build terminal wrapper infrastructure: embed xterm.js in the renderer, spawn CLI
 
 ### Step 2: CLI History Integration
 
-**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md)
+**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (parent design)
+**Implementation sub-plans:** [`importer-phase1.md`](./2026-03-19-cli-history/importer-phase1.md) (metadata index — done) · [`importer-phase2.md`](./2026-03-19-cli-history/importer-phase2.md) (on-demand message hydration — done)
 **Where:** AionUI project
 
 Import CLI sessions (Claude Code, Copilot, Codex) into AionUI's SQLite as first-class conversations. No separate data model — imported sessions appear in the normal sidebar timeline with full functionality (rename, pin, delete, export, resume). JSONL + SQLite hybrid approach, same as Copilot and Codex already use. Background message conversion newest-first.

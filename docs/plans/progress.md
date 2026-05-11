@@ -8,12 +8,12 @@ Quick status of each step in the [plan index](./2026-03-19-plan-index.md).
 
 ## Overview
 
-| Step | Feature                  | Status           | PRs      |
-| ---- | ------------------------ | ---------------- | -------- |
-| 0.5  | Copy Chat Reference      | Done             | #2       |
-| 1    | Terminal Wrapper Mode    | Done             | #5, #9   |
-| 2    | CLI History Integration  | Partially done   | #5       |
-| 3    | Knowledge Consolidation  | Not started      | —        |
+| Step | Feature                 | Status                                           | PRs          |
+| ---- | ----------------------- | ------------------------------------------------ | ------------ |
+| 0.5  | Copy Chat Reference     | Done                                             | #2           |
+| 1    | Terminal Wrapper Mode   | Done                                             | #5, #9       |
+| 2    | CLI History Integration | Phase 1 + 2 done (transcript-mode UI + rest WIP) | #5, #18, #19 |
+| 3    | Knowledge Consolidation | Not started                                      | —            |
 
 ---
 
@@ -61,9 +61,21 @@ All 3 iterations complete:
 
 **Key files:** `src/process/cli-history/importer.ts` (orchestrator), `src/process/bridge/conversationEvents.ts` (extracted listChanged emitter), `src/process/bridge/cliHistoryBridge.ts` (4 new IPC handlers), `src/process/services/database/index.ts` (hidden filter + importer-private DB methods), `src/renderer/components/settings/SettingsModal/contents/AgentCliModalContent.tsx` (toggles)
 
-### Not started (Phase 2 and beyond)
+### Done (Phase 2 — on-demand message hydration)
 
-- Phase 2: on-demand message hydration (`hydrateSession()` is a stub that throws)
+- `hydrateSession(conversationId, options?)` — reads source JSONL, converts via existing converters, batch-replaces `messages` rows inside one SQLite transaction
+- mtime-bound cache: `extra.hydratedAt` (source mtimeMs) + `extra.hydratedSourceFilePath` invalidate on file move or content change
+- In-flight coalescing keyed by `(conversationId, normalizedShowThinking)` — same-option concurrent callers share one read+parse+insert pass; mixed-option callers are serialized through a per-conversation chain so the latest request wins SQLite
+- Source-missing / unreadable / post-stat-race handling — surfaces as `{ status: 'unavailable' | 'cached', warning: 'source_missing' }` rather than throwing
+- Corrupted-JSONL handling — skips malformed lines, returns `warningCount`
+- Phase 2 title upgrade — replaces relative-time / generic fallback titles with the first user message, never downgrades a meaningful provider title, never overrides a manual rename
+- IPC route `cli-history.hydrate` (forwards optional `showThinking`)
+
+**Key files (Phase 2):** `src/process/cli-history/importer.ts` (hydrateSession + helpers), `src/process/services/database/index.ts` (getMessageCountForConversation + insertImportedMessages atomic replace), `src/common/config/storage.ts` (hydratedAt + hydratedSourceFilePath fields), `src/common/adapter/ipcBridge.ts` + `src/process/bridge/cliHistoryBridge.ts` (hydrate IPC route)
+
+### Not started (Phase 3 and beyond)
+
+- Transcript-mode UI for imported sessions (skeleton loading, read-only messages, "Resume this session" button)
 - Background message conversion (newest-first)
 - Sidebar integration — imported sessions visible in timeline with source badges
 - Resume support for imported sessions
@@ -71,7 +83,7 @@ All 3 iterations complete:
 - Sidebar truncation / filter / search
 - Full-history view page
 
-**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (parent design) · [`2026-03-19-cli-history/importer-phase1.md`](./2026-03-19-cli-history/importer-phase1.md) (Phase 1 implementation plan)
+**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (parent design) · [`2026-03-19-cli-history/importer-phase1.md`](./2026-03-19-cli-history/importer-phase1.md) (Phase 1 implementation plan) · [`2026-03-19-cli-history/importer-phase2.md`](./2026-03-19-cli-history/importer-phase2.md) (Phase 2 implementation plan)
 
 ---
 

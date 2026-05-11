@@ -5,21 +5,29 @@
  */
 
 import path from 'path';
+import { promises as fsPromises } from 'fs';
 import { uuid } from '@/common/utils';
 import { getDatabase } from '@process/services/database/export';
 import { emitConversationListChanged } from '@process/bridge/conversationEvents';
 import { ProcessConfig } from '@process/utils/initStorage';
 import type { TChatConversation } from '@/common/config/storage';
+import type { TMessage } from '@/common/chat/chatLib';
+import { convertClaudeJsonl } from './converters/claude';
+import { convertCopilotJsonl } from './converters/copilot';
 import { ClaudeCodeProvider } from './providers/claude';
 import { CopilotProvider } from './providers/copilot';
-import type { ImportResult, SessionMetadata, SessionSourceId, SessionSourceProvider } from './types';
+import type { HydrateResult, ImportResult, SessionMetadata, SessionSourceId, SessionSourceProvider } from './types';
 
 /**
- * Phase 1 metadata-import orchestrator.
+ * CLI history import orchestrator: Phase 1 (metadata index) + Phase 2 (on-demand hydration).
  *
- * Scans registered `SessionSourceProvider`s and upserts one `conversations` row per
- * discovered CLI session. Messages are NOT hydrated — `hydrateSession()` is a stub
- * that throws so item 2 (Phase 2 message hydration) has a clean integration surface.
+ * Phase 1 scans registered `SessionSourceProvider`s and upserts one `conversations` row
+ * per discovered CLI session — no messages yet, instant sidebar population.
+ *
+ * Phase 2 hydrates the `messages` table on demand (open or export) via `hydrateSession`:
+ * stat the source JSONL, compare mtime against `extra.hydratedAt`, read+parse+convert
+ * if stale, and batch-replace the conversation's messages inside a single SQLite
+ * transaction. Concurrent calls for the same conversation share one in-flight pass.
  *
  * Persistence goes directly through `getDatabase()` (`AionUIDatabase`) — NOT through
  * `ConversationServiceImpl` (which has ACP-agent and workspace side-effects) and NOT
@@ -199,6 +207,9 @@ type AcpImportedExtra = {
   acpSessionUpdatedAt: number;
   sourceFilePath: string;
   messageCount?: number;
+  hydratedAt?: number;
+  hydratedSourceFilePath?: string;
+  hydratedShowThinking?: boolean;
   importMeta: {
     autoNamed: boolean;
     generatedName?: string;
@@ -555,10 +566,416 @@ async function runReenableSource(source: SessionSourceId): Promise<ImportResult>
 }
 
 /**
- * Phase 2 (item 2) integration surface. Throws in Phase 1 — callers must not invoke.
+ * ---------- Phase 2: On-demand message hydration ----------
  */
-export async function hydrateSession(_conversationId: string): Promise<never> {
-  throw new Error('hydrateSession not implemented in Phase 1');
+
+type ConverterOptions = { showThinking?: boolean };
+type JsonlConverter = (lines: string[], conversationId?: string, options?: ConverterOptions) => TMessage[];
+
+/**
+ * Converter registry keyed by `SessionSourceId`. The plan deliberately keeps
+ * this list small (claude_code, copilot) — adding a new source means adding
+ * an entry here AND a provider in `providers/`. Lookup via
+ * `getConverterForSource` so an unknown `conv.source` surfaces as a coding
+ * bug (thrown) rather than silently defaulting to one of the existing
+ * converters.
+ */
+const CONVERTER_FOR_SOURCE = {
+  claude_code: convertClaudeJsonl,
+  copilot: convertCopilotJsonl,
+} satisfies Record<SessionSourceId, JsonlConverter>;
+
+function getConverterForSource(source: string | undefined): JsonlConverter | undefined {
+  if (!source) return undefined;
+  return (CONVERTER_FOR_SOURCE as Partial<Record<string, JsonlConverter>>)[source];
+}
+
+/**
+ * Number-aware sibling of Phase 1's `parseDateOr`. Phase 2 stores
+ * `extra.hydratedAt` as a number (the source JSONL `mtimeMs`), so reading
+ * it back through the string-only `parseDateOr` would always yield the
+ * fallback and trigger spurious re-hydration. Accepts `unknown` because
+ * older / future rows may carry a string.
+ */
+function parseTimestampOr(input: unknown, fallback: number): number {
+  if (typeof input === 'number' && Number.isFinite(input)) return input;
+  if (typeof input !== 'string') return fallback;
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return fallback;
+  // Handle numeric strings (e.g. JSON-round-tripped mtimeMs) before falling
+  // through to `Date.parse`, which would interpret "5000" as a year-5000
+  // calendar date and return the wrong value. A purely numeric string is
+  // unambiguously the same kind of millisecond timestamp as the number path.
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    const asNumber = Number(trimmed);
+    return Number.isFinite(asNumber) ? asNumber : fallback;
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isNaN(parsed) ? fallback : parsed;
+}
+
+/**
+ * Real-world file IO. Exposed as a single object so tests can swap in
+ * in-memory implementations via `__setFileIoForTests(...)` and avoid
+ * `vi.mock('fs')` and its bleed-through risks.
+ *
+ * Note on sync-vs-async: `cliHistoryBridge.convertSessionToMessages`
+ * (the legacy terminal-switching path) uses synchronous `fsSync.readFileSync`
+ * "to avoid Electron async I/O deadlock". That comment is specific to the
+ * IPC hot path where the conversion runs synchronously inside the IPC reply.
+ * `hydrateSession` runs off the IPC reply path — the IPC handler awaits
+ * the entire algorithm and only returns when the messages have been written,
+ * so we can safely use `fsPromises` here without blocking the event loop
+ * the way `convertSessionToMessages` would have.
+ */
+async function realStatMtimeMs(filePath: string): Promise<number | null> {
+  try {
+    const st = await fsPromises.stat(filePath);
+    return st.mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+async function realReadJsonl(filePath: string): Promise<string | null> {
+  try {
+    return await fsPromises.readFile(filePath, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+type FileIo = {
+  statMtimeMs: (filePath: string) => Promise<number | null>;
+  readJsonl: (filePath: string) => Promise<string | null>;
+};
+
+const defaultFileIo: FileIo = {
+  statMtimeMs: realStatMtimeMs,
+  readJsonl: realReadJsonl,
+};
+
+let fileIo: FileIo = { ...defaultFileIo };
+
+/**
+ * Test-only: layer overrides on top of the current file-IO seam. Does NOT
+ * restore defaults — call `__resetInFlightForTests()` between tests to
+ * reset both the in-flight maps AND the file-IO seam back to `defaultFileIo`.
+ */
+export function __setFileIoForTests(override: Partial<FileIo>): void {
+  fileIo = { ...fileIo, ...override };
+}
+
+/**
+ * Split JSONL `\n`-terminated lines into the subset that parses as valid
+ * JSON plus a warning count for the rest. Empty / whitespace-only lines
+ * are skipped silently (not counted as warnings). The converter's own
+ * `safeParseLine` would also log+drop malformed lines, but pre-filtering
+ * here means we can report `warningCount` to the renderer without
+ * modifying the converter contract.
+ */
+function splitJsonlByValidity(lines: string[]): { validLines: string[]; warningCount: number } {
+  const validLines: string[] = [];
+  let warningCount = 0;
+  for (const raw of lines) {
+    if (typeof raw !== 'string') continue;
+    const trimmed = raw.trim();
+    if (trimmed.length === 0) continue;
+    try {
+      JSON.parse(trimmed);
+      validLines.push(raw);
+    } catch {
+      warningCount++;
+    }
+  }
+  return { validLines, warningCount };
+}
+
+const RELATIVE_TIME_FALLBACK_RE =
+  /^(?:just now|\d+ min ago|\d+ hours? ago|\d+ days? ago|\d+ months? ago|\d+ years? ago)(?: · .+)?$/;
+
+/**
+ * Phase-2-only "is this title safe to upgrade?" check. Returns true ONLY
+ * when the current name is one of the Phase-1 fallback / defensive
+ * patterns AND it still matches `generatedName` (so a user rename has
+ * not happened). Phase 1 also stores meaningful provider titles as
+ * `generatedName`, so `name === generatedName` is necessary but NOT
+ * sufficient — the additional fallback-shape check prevents this helper
+ * from declaring a meaningful provider title (e.g. "Fix the auth bug ·
+ * my-project") as "generic and safe to overwrite."
+ */
+function isFallbackOrGenericTitle(name: string | undefined, generatedName: string | undefined): boolean {
+  if (typeof name !== 'string' || typeof generatedName !== 'string') return false;
+  if (name !== generatedName) return false;
+  const trimmed = name.trim();
+  if (trimmed.length === 0) return false;
+  if (RELATIVE_TIME_FALLBACK_RE.test(trimmed)) return true;
+  if (trimmed.startsWith('(untitled)')) return true;
+  if (UUID_LIKE.test(trimmed)) return true;
+  if (RAW_FILENAME_LIKE.test(trimmed)) return true;
+  return false;
+}
+
+/**
+ * Phase-2 title upgrade: when a Phase-1 row was generic-named, pull the
+ * first user-role text message from the freshly-hydrated transcript and
+ * use it as the new title. Truncates to 60 codepoints and appends
+ * ` · <workspace-basename>` to match `buildAutoName`.
+ *
+ * Returns the conversation unchanged if no user-role text is present,
+ * if the candidate is empty, or if the title is not a fallback/generic
+ * one (preserves meaningful provider titles per parent design line 509).
+ */
+function upgradeTitleFromFirstUserMessage(conv: TChatConversation, messages: TMessage[]): TChatConversation {
+  const extra = (conv.extra ?? {}) as Partial<AcpImportedExtra>;
+  if (!isFallbackOrGenericTitle(conv.name, extra.importMeta?.generatedName)) {
+    return conv;
+  }
+
+  const firstUser = messages.find(
+    (m): m is Extract<TMessage, { type: 'text' }> => m.type === 'text' && m.position === 'right'
+  );
+  if (!firstUser) return conv;
+
+  const raw = firstUser.content.content;
+  if (typeof raw !== 'string') return conv;
+  const candidate = raw.trim();
+  if (candidate.length === 0) return conv;
+
+  const wsBase = workspaceBasename(extra.workspace);
+  const chars = Array.from(candidate);
+  const truncated = chars.length > TITLE_MAX ? `${chars.slice(0, TITLE_MAX).join('').trimEnd()}…` : candidate;
+  const newName = wsBase ? `${truncated} · ${wsBase}` : truncated;
+
+  const nextImportMeta = {
+    ...(extra.importMeta ?? { autoNamed: true }),
+    autoNamed: true,
+    generatedName: newName,
+  };
+
+  return {
+    ...conv,
+    name: newName,
+    extra: {
+      ...(extra as object),
+      importMeta: nextImportMeta,
+    },
+  } as TChatConversation;
+}
+
+/**
+ * In-flight hydration promises keyed by `(conversationId, normalizedShowThinking)`.
+ * Two concurrent callers for the same conversation with the SAME requested
+ * `showThinking` value (after normalizing `undefined`→`false`) share a single
+ * read+parse+insert pass. Callers with DIFFERENT requested values do NOT
+ * coalesce — joining the wrong in-flight pass would resolve the late caller's
+ * promise with messages produced under the other variant, leaving SQLite in
+ * a state that contradicts the late caller's request. Entry is cleared in
+ * `finally` so the next caller starts fresh.
+ */
+const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
+
+/**
+ * Per-conversation hydration operation chain. Different-option callers for
+ * the same conversation are serialized through this chain (not parallelized)
+ * so two concurrent runs cannot both call `insertImportedMessages` — the
+ * last writer would win SQLite, leaving the renderer that already received
+ * its promise with a SQLite state that contradicts its request. Sequential
+ * execution + re-reading the row inside `runHydrate` step 6 guarantees the
+ * LATEST caller's request determines the final variant.
+ *
+ * Same-option callers still coalesce via `inFlightHydrate` (they don't need
+ * to chain — they share one in-flight pass).
+ */
+const hydrationChain: Map<string, Promise<unknown>> = new Map();
+
+function hydrationKey(conversationId: string, showThinking: boolean | undefined): string {
+  // Treat `undefined` and `false` as equivalent (both → the converter's default).
+  const normalized = showThinking === true ? 't' : 'f';
+  return `${conversationId}:${normalized}`;
+}
+
+/**
+ * Hydrate an imported session's transcript on demand. Reads the conversation
+ * row, compares the source file `mtime` to `extra.hydratedAt`, and either
+ * returns the cached state or re-reads + re-converts + replaces the
+ * `messages` rows inside a single SQLite transaction. Phase-2 title
+ * upgrade runs when the row was Phase-1-imported with a generic name.
+ *
+ * Concurrent callers for the same `conversationId` and the same requested
+ * `showThinking` (after normalizing `undefined`→`false`) share one in-flight
+ * promise via `inFlightHydrate`. Callers with a different requested value
+ * do NOT share an in-flight promise — they are queued via the per-conversation
+ * `hydrationChain` and run SEQUENTIALLY. The latest caller's request
+ * therefore wins SQLite's final state. Item 3's render-time filter remains
+ * the cleaner long-term path — at that point both the cache key and the
+ * in-flight key can drop the `showThinking` axis entirely, and the
+ * hydration chain reduces to a single key (per conversation) again.
+ *
+ * Hydration does NOT enqueue onto the per-source `operationChain` —
+ * hydration is per-conversation, scan / disable / reenable are per-source.
+ * Step 6 re-reads the row immediately before writing so concurrent scan
+ * updates and concurrent manual renames are preserved.
+ *
+ * Throws for contract violations (unknown conversationId, non-imported row,
+ * hidden imported row, unsupported source, DB failures, row deleted
+ * mid-hydration). Missing / unreadable source files are NOT contract
+ * violations — they map to `{ status: 'unavailable' | 'cached', warning:
+ * 'source_missing' }`.
+ */
+export function hydrateSession(conversationId: string, options?: ConverterOptions): Promise<HydrateResult> {
+  const key = hydrationKey(conversationId, options?.showThinking);
+  const chainTail = hydrationChain.get(conversationId);
+  const existing = inFlightHydrate.get(key);
+
+  // Coalesce same-option callers ONLY when no later-queued step would
+  // clobber the in-flight's SQLite writes. If `existing` is the chain tail,
+  // it's the LAST queued step for this conversation — joining it is safe.
+  // If a different-option step has been queued after `existing` (so the
+  // tail is no longer `existing`), coalescing would resolve the late
+  // same-option caller with a result that is then overwritten by the
+  // queued step before the caller reads SQLite. Queue this caller behind
+  // the chain tail instead so it picks up the latest stored variant.
+  if (existing && chainTail === existing) {
+    return existing;
+  }
+
+  // Serialize different-option callers per conversation. A previous chain
+  // step's rejection must NOT poison the chain — `.then(task, task)` runs
+  // `runHydrate` whether the prior step resolved or rejected.
+  const previous = chainTail ?? Promise.resolve();
+  const run = () => runHydrate(conversationId, options ?? {});
+  const promise = previous.then(run, run);
+
+  const cleanup = () => {
+    if (inFlightHydrate.get(key) === promise) inFlightHydrate.delete(key);
+    if (hydrationChain.get(conversationId) === promise) hydrationChain.delete(conversationId);
+  };
+  void promise.then(cleanup, cleanup);
+
+  // Replace any earlier inFlightHydrate entry for the same key — a future
+  // same-option caller must coalesce with THIS new tail, not the still-running
+  // older step whose writes will be clobbered by an intermediate queued step.
+  inFlightHydrate.set(key, promise);
+  hydrationChain.set(conversationId, promise);
+  return promise;
+}
+
+async function runHydrate(conversationId: string, options: ConverterOptions): Promise<HydrateResult> {
+  const db = getDatabase();
+  const rowResult = db.getConversation(conversationId);
+  if (!rowResult.success || !rowResult.data) {
+    throw new Error(rowResult.error ?? `Conversation not found: ${conversationId}`);
+  }
+  const conv = rowResult.data;
+  const extra = (conv.extra ?? {}) as Partial<AcpImportedExtra>;
+
+  if (!extra.sourceFilePath) {
+    throw new Error(`Conversation is not an imported CLI session: ${conversationId}`);
+  }
+  if (extra.importMeta?.hidden === true) {
+    throw new Error(`Cannot hydrate hidden imported session: ${conversationId}`);
+  }
+  const converter = getConverterForSource(conv.source);
+  if (!converter) {
+    throw new Error(`Unsupported CLI history source for hydration: ${String(conv.source)}`);
+  }
+
+  const sourceFilePath = extra.sourceFilePath;
+
+  const mtimeMs = await fileIo.statMtimeMs(sourceFilePath);
+
+  const countResult = db.getMessageCountForConversation(conversationId);
+  if (!countResult.success) {
+    throw new Error(countResult.error ?? 'Failed to count imported messages');
+  }
+  const existingCount = countResult.data ?? 0;
+
+  const hydratedAt = parseTimestampOr(extra.hydratedAt, 0);
+  const hydratedSourceFilePath =
+    typeof extra.hydratedSourceFilePath === 'string' ? extra.hydratedSourceFilePath : undefined;
+  // Normalize `showThinking` so callers that omit the option don't spuriously
+  // invalidate the cache vs callers that pass `false` (the converter's default).
+  const requestedShowThinking = options.showThinking === true;
+  const storedShowThinking = extra.hydratedShowThinking === true;
+  // Prior hydration counts only if it was against the CURRENT source path AND
+  // produced messages under the CURRENT showThinking variant. A Phase-1 scan
+  // that refreshes `sourceFilePath` (file moved on disk) invalidates the cache
+  // regardless of mtime; toggling the renderer's "show thinking" setting
+  // similarly invalidates the cache so SQLite reflects the requested variant.
+  // A pre-Phase-2 row that has `existingCount > 0` but no `hydratedSourceFilePath`
+  // recorded does NOT match — we cannot prove the existing messages came from
+  // the current path, so we re-hydrate to be safe.
+  const hasPriorHydration =
+    (hydratedAt > 0 || existingCount > 0) &&
+    hydratedSourceFilePath === sourceFilePath &&
+    storedShowThinking === requestedShowThinking;
+
+  if (mtimeMs === null) {
+    if (hasPriorHydration) {
+      return { status: 'cached', warning: 'source_missing', warningCount: 0 };
+    }
+    return { status: 'unavailable', warning: 'source_missing' };
+  }
+
+  if (hasPriorHydration && mtimeMs <= hydratedAt) {
+    return { status: 'cached', warningCount: 0 };
+  }
+
+  // Read + parse. `fileIo.readJsonl` (the production impl, `realReadJsonl`,
+  // catches all errors and returns null) handles the race where the file
+  // disappears or flips permissions between stat (step 3) and read (step 4).
+  const fileContent = await fileIo.readJsonl(sourceFilePath);
+  if (fileContent === null) {
+    if (hasPriorHydration) {
+      return { status: 'cached', warning: 'source_missing', warningCount: 0 };
+    }
+    return { status: 'unavailable', warning: 'source_missing' };
+  }
+
+  const lines = fileContent.split('\n');
+  const { validLines, warningCount } = splitJsonlByValidity(lines);
+  const messages = converter(validLines, conversationId, options);
+
+  const insertResult = db.insertImportedMessages(conversationId, messages);
+  if (!insertResult.success) {
+    throw new Error(insertResult.error ?? 'Failed to insert imported messages');
+  }
+
+  // Re-read the row immediately before the metadata write so a concurrent
+  // scan (refreshing acpSessionUpdatedAt / workspace / sourceFilePath /
+  // messageCount) and a concurrent manual rename (autoNamed → false)
+  // both survive this update.
+  const freshResult = db.getConversation(conversationId);
+  if (!freshResult.success || !freshResult.data) {
+    throw new Error(freshResult.error ?? `Conversation row vanished mid-hydration: ${conversationId}`);
+  }
+  const fresh = freshResult.data;
+  const freshExtra = (fresh.extra ?? {}) as Partial<AcpImportedExtra>;
+
+  const nextExtra: Partial<AcpImportedExtra> = {
+    ...freshExtra,
+    hydratedAt: mtimeMs,
+    hydratedSourceFilePath: sourceFilePath,
+    hydratedShowThinking: requestedShowThinking,
+  };
+
+  let conv2: TChatConversation = {
+    ...fresh,
+    extra: nextExtra,
+  } as TChatConversation;
+
+  if (freshExtra.importMeta?.autoNamed === true && messages.length > 0) {
+    conv2 = upgradeTitleFromFirstUserMessage(conv2, messages);
+  }
+
+  const updateResult = db.updateImportedConversation(conv2);
+  if (!updateResult.success) {
+    throw new Error(updateResult.error ?? 'Failed to update imported conversation after hydration');
+  }
+  emitConversationListChanged(conv2, 'updated');
+
+  return { status: 'hydrated', warningCount };
 }
 
 /**
@@ -588,11 +1005,15 @@ export function initCliHistoryImporter(): void {
 }
 
 /**
- * Test-only: clear in-flight scan cache and per-source operation chain. Avoids
- * state leaking between Vitest tests that exercise coalescing / serialization.
- * Not part of the production API.
+ * Test-only: clear in-flight scan cache, per-source operation chain, the
+ * Phase-2 hydration in-flight map, and restore the default file-IO seam.
+ * Avoids state leaking between Vitest tests that exercise coalescing /
+ * serialization / hydration. Not part of the production API.
  */
 export function __resetInFlightForTests(): void {
   inFlight.clear();
   operationChain.clear();
+  inFlightHydrate.clear();
+  hydrationChain.clear();
+  fileIo = { ...defaultFileIo };
 }

@@ -21,7 +21,7 @@ import type {
   AutoUpdateStatus,
 } from '../update/updateTypes';
 import type { ProtocolDetectionRequest, ProtocolDetectionResponse } from '../utils/protocolDetector';
-import type { ImportResult, SessionSourceId } from '../../process/cli-history/types';
+import type { HydrateResult, ImportResult, SessionSourceId } from '../../process/cli-history/types';
 
 export const shell = {
   openFile: bridge.buildProvider<void, string>('open-file'), // 使用系统默认程序打开文件
@@ -1107,5 +1107,16 @@ export const cliHistory = {
   /** Soft-re-enable a source: restore hidden rows + run incremental sync */
   reenableSource: bridge.buildProvider<IBridgeResponse<ImportResult>, { source: SessionSourceId }>(
     'cli-history.reenable-source'
+  ),
+  /**
+   * Phase 2 (on-demand message hydration): read the conversation's source
+   * JSONL, convert + persist `messages` rows, and return the hydration state.
+   * Coalescing keyed by `(conversationId, normalizedShowThinking)` — same-
+   * option concurrent callers share one in-flight pass; mixed-option callers
+   * are serialized through a per-conversation chain so the latest request
+   * wins SQLite's final state.
+   */
+  hydrate: bridge.buildProvider<IBridgeResponse<HydrateResult>, { conversationId: string; showThinking?: boolean }>(
+    'cli-history.hydrate'
   ),
 };
