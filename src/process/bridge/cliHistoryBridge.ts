@@ -299,7 +299,10 @@ export function initCliHistoryBridge(): void {
   // Phase 2 on-demand message hydration (importer.ts → hydrateSession).
   // Renderer (item 3 transcript-mode) and export wrapper (item 7) call this
   // before mounting a transcript surface. Coalescing is handled inside
-  // hydrateSession() via an in-flight Map<conversationId, Promise>.
+  // hydrateSession() via an in-flight Map keyed by `(conversationId,
+  // normalizedShowThinking)`; per-conversation requests are serialized via
+  // an operation chain so two callers with different showThinking values
+  // run sequentially and the latest request determines SQLite's final state.
   // ---------------------------------------------------------------------------
 
   ipcBridge.cliHistory.hydrate.provider(async ({ conversationId, showThinking }) => {

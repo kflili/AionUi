@@ -600,7 +600,17 @@ function getConverterForSource(source: string | undefined): JsonlConverter | und
 function parseTimestampOr(input: unknown, fallback: number): number {
   if (typeof input === 'number' && Number.isFinite(input)) return input;
   if (typeof input !== 'string') return fallback;
-  const parsed = Date.parse(input);
+  const trimmed = input.trim();
+  if (trimmed.length === 0) return fallback;
+  // Handle numeric strings (e.g. JSON-round-tripped mtimeMs) before falling
+  // through to `Date.parse`, which would interpret "5000" as a year-5000
+  // calendar date and return the wrong value. A purely numeric string is
+  // unambiguously the same kind of millisecond timestamp as the number path.
+  if (/^-?\d+(?:\.\d+)?$/.test(trimmed)) {
+    const asNumber = Number(trimmed);
+    return Number.isFinite(asNumber) ? asNumber : fallback;
+  }
+  const parsed = Date.parse(trimmed);
   return Number.isNaN(parsed) ? fallback : parsed;
 }
 
@@ -765,6 +775,20 @@ function upgradeTitleFromFirstUserMessage(conv: TChatConversation, messages: TMe
  */
 const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
 
+/**
+ * Per-conversation hydration operation chain. Different-option callers for
+ * the same conversation are serialized through this chain (not parallelized)
+ * so two concurrent runs cannot both call `insertImportedMessages` — the
+ * last writer would win SQLite, leaving the renderer that already received
+ * its promise with a SQLite state that contradicts its request. Sequential
+ * execution + re-reading the row inside `runHydrate` step 6 guarantees the
+ * LATEST caller's request determines the final variant.
+ *
+ * Same-option callers still coalesce via `inFlightHydrate` (they don't need
+ * to chain — they share one in-flight pass).
+ */
+const hydrationChain: Map<string, Promise<unknown>> = new Map();
+
 function hydrationKey(conversationId: string, showThinking: boolean | undefined): string {
   // Treat `undefined` and `false` as equivalent (both → the converter's default).
   const normalized = showThinking === true ? 't' : 'f';
@@ -781,12 +805,12 @@ function hydrationKey(conversationId: string, showThinking: boolean | undefined)
  * Concurrent callers for the same `conversationId` and the same requested
  * `showThinking` (after normalizing `undefined`→`false`) share one in-flight
  * promise via `inFlightHydrate`. Callers with a different requested value
- * do NOT coalesce — they run a separate hydration pass so each caller's
- * promise reflects the variant it asked for. The cache predicate then
- * invalidates the previous variant's SQLite state. Item 3's render-time
- * filter remains the cleaner long-term path — at that point the
- * `showThinking` axis can drop from both the cache key and the in-flight
- * key.
+ * do NOT share an in-flight promise — they are queued via the per-conversation
+ * `hydrationChain` and run SEQUENTIALLY. The latest caller's request
+ * therefore wins SQLite's final state. Item 3's render-time filter remains
+ * the cleaner long-term path — at that point both the cache key and the
+ * in-flight key can drop the `showThinking` axis entirely, and the
+ * hydration chain reduces to a single key (per conversation) again.
  *
  * Hydration does NOT enqueue onto the per-source `operationChain` —
  * hydration is per-conversation, scan / disable / reenable are per-source.
@@ -804,12 +828,21 @@ export function hydrateSession(conversationId: string, options?: ConverterOption
   const existing = inFlightHydrate.get(key);
   if (existing) return existing;
 
-  const promise = runHydrate(conversationId, options ?? {}).finally(() => {
-    if (inFlightHydrate.get(key) === promise) {
-      inFlightHydrate.delete(key);
-    }
-  });
+  // Serialize different-option callers per conversation. A previous chain
+  // step's rejection must NOT poison the chain — `.then(task, task)` runs
+  // `runHydrate` whether the prior step resolved or rejected.
+  const previous = hydrationChain.get(conversationId) ?? Promise.resolve();
+  const run = () => runHydrate(conversationId, options ?? {});
+  const promise = previous.then(run, run);
+
+  const cleanup = () => {
+    if (inFlightHydrate.get(key) === promise) inFlightHydrate.delete(key);
+    if (hydrationChain.get(conversationId) === promise) hydrationChain.delete(conversationId);
+  };
+  void promise.then(cleanup, cleanup);
+
   inFlightHydrate.set(key, promise);
+  hydrationChain.set(conversationId, promise);
   return promise;
 }
 
@@ -966,5 +999,6 @@ export function __resetInFlightForTests(): void {
   inFlight.clear();
   operationChain.clear();
   inFlightHydrate.clear();
+  hydrationChain.clear();
   fileIo = { ...defaultFileIo };
 }

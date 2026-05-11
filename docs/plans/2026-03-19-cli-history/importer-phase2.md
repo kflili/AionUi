@@ -1,7 +1,7 @@
 # Plan: CLI History Importer — Phase 2 (On-Demand Message Hydration)
 
 **Date:** 2026-05-11
-**Status:** Active — implementation in progress on `feat/cli-history-importer-phase2`
+**Status:** Implemented in PR #19. Transcript-mode UI (item 3) and export wrapper (item 7) are downstream consumers — see "Out of scope" below.
 **Scope:** Phase 2 only (on-demand message hydration + Phase-2 auto-name upgrade). Out of scope: transcript-mode UI (item 3), export-triggered hydration (item 7), resume gating (item 8), sidebar/badge/history (items 4/5/6/9).
 **Parent design:** `docs/plans/2026-03-19-cli-history/plan.md`
 **Phase 1 (predecessor):** `docs/plans/2026-03-19-cli-history/importer-phase1.md` (landed as PR #18, merged at `470b0813`).
@@ -26,7 +26,7 @@ Phase 2 also delivers the parent design's "Auto-Naming step 2" (lines 179–180)
   - returns `'unavailable'` when the source file is missing/unreadable AND no prior hydration occurred;
   - returns `'cached'` with a warning when the source file is missing/unreadable AND prior hydration occurred, including successful zero-message hydrations (preserve cached transcript / cached empty state per parent line 251);
   - otherwise reads JSONL, calls the matching converter, batch-inserts `TMessage[]` rows, and updates `extra.hydratedAt`;
-  - coalesces concurrent hydration requests for the same `conversationId` via an in-flight `Map<conversationId, Promise>`, so two callers (e.g. open + export) share one read+parse+insert pass.
+  - coalesces concurrent hydration requests via an in-flight `Map` keyed by `(conversationId, normalizedShowThinking)`, so two callers with the same option share one read+parse+insert pass (open + export with matching settings); callers with different `showThinking` values do NOT share — they are serialized through a per-conversation operation chain so the latest request wins SQLite.
 - Add a Phase-2 title-upgrade helper (`upgradeTitleFromFirstUserMessage`) that:
   - runs only when `extra.importMeta.autoNamed === true` (never downgrades a manual rename);
   - extracts the first user-role `TMessage` from the freshly-hydrated batch;

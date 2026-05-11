@@ -837,6 +837,29 @@ describe('hydrateSession (Phase 2)', () => {
     expect(insertMessagesSpy).not.toHaveBeenCalled();
   });
 
+  it('parses extra.hydratedAt persisted as a numeric string without Date.parse-as-calendar-year', async () => {
+    // If a future JSON round-trip stringifies the number, `Date.parse('5000')`
+    // would yield year-5000 (~9.5e13 ms), making the cache check think the
+    // file is stale and re-hydrating spuriously. The numeric-string fast path
+    // in parseTimestampOr handles this.
+    const row = seedImportedRow({
+      id: 'conv-1',
+      sourceFilePath: '/tmp/s.jsonl',
+      hydratedSourceFilePath: '/tmp/s.jsonl',
+    });
+    // Bypass the typed seedImportedRow shape and write the numeric string directly.
+    (row.extra as unknown as { hydratedAt: unknown }).hydratedAt = '5000';
+    (row.extra as unknown as { hydratedShowThinking: boolean }).hydratedShowThinking = false;
+    dbStore.set('conv-1', row);
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000, // matches the numeric value, not year-5000
+      readJsonl: async () => CLAUDE_USER_LINE('should not be read'),
+    });
+    const result = await hydrateSession('conv-1');
+    expect(result.status).toBe('cached');
+    expect(insertMessagesSpy).not.toHaveBeenCalled();
+  });
+
   it('missing source for a never-hydrated session returns unavailable + source_missing', async () => {
     seedImportedRow({ id: 'conv-1' });
     __setFileIoForTests({
@@ -1169,30 +1192,76 @@ describe('hydrateSession (Phase 2)', () => {
     expect(insertMessagesSpy).not.toHaveBeenCalled();
   });
 
-  it('does not coalesce concurrent hydrations for the same conversation with DIFFERENT showThinking', async () => {
-    // If A (false) and B (true) both ran via the same in-flight promise, B's
-    // promise would resolve with A's message set — wrong variant for B. The
-    // in-flight key must include showThinking so each caller gets the variant
-    // it asked for.
+  it('does not coalesce concurrent hydrations for the same conversation with DIFFERENT showThinking; serializes them so the latest request wins SQLite', async () => {
+    // If A (false) and B (true) ran in parallel, both would call insertImportedMessages
+    // and one variant would clobber the other at random, leaving the caller whose
+    // promise resolved first reading the WRONG variant when it queries SQLite.
+    // The hydration chain serializes them: B runs after A finishes, re-reads the row,
+    // sees the cached variant doesn't match, and re-converts.
     seedImportedRow({ id: 'conv-1' });
-    const reads: boolean[] = [];
+    const startOrder: string[] = [];
+    const finishOrder: string[] = [];
+    let resolveA: ((value: string) => void) | undefined;
+    let resolveB: ((value: string) => void) | undefined;
+    let bStartedDuringA = false;
+    const lines = [
+      JSON.stringify({
+        type: 'assistant',
+        timestamp: '2026-05-10T10:00:00.000Z',
+        message: {
+          role: 'assistant',
+          content: [
+            { type: 'thinking', thinking: 'reasoning step', signature: 'sig' },
+            { type: 'text', text: 'visible response' },
+          ],
+        },
+      }),
+    ].join('\n');
     __setFileIoForTests({
       statMtimeMs: async () => 5000,
-      readJsonl: async () => {
-        reads.push(true);
-        return CLAUDE_USER_LINE('hi');
-      },
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          if (!resolveA) {
+            startOrder.push('A');
+            resolveA = (val) => {
+              finishOrder.push('A');
+              resolve(val);
+            };
+          } else {
+            startOrder.push('B');
+            bStartedDuringA = false;
+            resolveB = (val) => {
+              finishOrder.push('B');
+              resolve(val);
+            };
+          }
+        }),
     });
 
-    const [aResult, bResult] = await Promise.all([
-      hydrateSession('conv-1', { showThinking: false }),
-      hydrateSession('conv-1', { showThinking: true }),
-    ]);
+    const aPromise = hydrateSession('conv-1', { showThinking: false });
+    const bPromise = hydrateSession('conv-1', { showThinking: true });
+    // Drain microtasks so the chain's next step is queued.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A']);
+    expect(resolveB).toBeUndefined();
+
+    // Finish A; B should start next.
+    resolveA!(lines);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B']);
+
+    resolveB!(lines);
+    const [aResult, bResult] = await Promise.all([aPromise, bPromise]);
     expect(aResult.status).toBe('hydrated');
     expect(bResult.status).toBe('hydrated');
-    // Two separate runs — two file reads, two insert calls.
-    expect(reads.length).toBe(2);
+    expect(finishOrder).toEqual(['A', 'B']);
     expect(insertMessagesSpy).toHaveBeenCalledTimes(2);
+
+    // Final SQLite state reflects B (the latest request, with thinking).
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extra.hydratedShowThinking).toBe(true);
+    // bStartedDuringA only matters as documentation — it was false (B started after A).
+    expect(bStartedDuringA).toBe(false);
   });
 
   it('still coalesces concurrent hydrations for the same conversation with the SAME showThinking', async () => {

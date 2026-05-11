@@ -873,16 +873,10 @@ export class AionUIDatabase {
         let inserted = 0;
         for (const msg of msgs) {
           const row = messageToRow(msg);
-          insertStmt.run(
-            row.id,
-            row.conversation_id,
-            row.msg_id,
-            row.type,
-            row.content,
-            row.position,
-            row.status,
-            row.created_at
-          );
+          // Force conversation_id = convId so a converter bug or future caller
+          // passing TMessage rows with a different `conversation_id` cannot
+          // write to the wrong conversation and leave the target empty.
+          insertStmt.run(row.id, convId, row.msg_id, row.type, row.content, row.position, row.status, row.created_at);
           inserted++;
         }
         return inserted;
