@@ -681,6 +681,12 @@
     "sessionEvicted": "アイドル状態のターミナルセッションを閉じました（上限：{{max}}）。ターミナル設定で上限を増やせます。",
     "switchModeFailed": "モード切り替えに失敗しました",
     "copilotGateway": "Copilot ゲートウェイ",
-    "copilotGatewayDesc": "ローカルの copilot-gateway が実行中の場合、自動検出して Claude をルーティング"
+    "copilotGatewayDesc": "ローカルの copilot-gateway が実行中の場合、自動検出して Claude をルーティング",
+    "cliHistoryClaudeCodeLabel": "Claude Code の履歴をインポート",
+    "cliHistoryClaudeCodeDesc": "サイドバーに Claude Code CLI セッションを表示（開くまでは読み取り専用）",
+    "cliHistoryCopilotLabel": "Copilot の履歴をインポート",
+    "cliHistoryCopilotDesc": "サイドバーに Copilot CLI セッションを表示（開くまでは読み取り専用）",
+    "cliHistoryEnableFailed": "履歴のインポートを有効化できませんでした",
+    "cliHistoryDisableFailed": "履歴のインポートを無効化できませんでした"
   }
 }

@@ -679,6 +679,12 @@
     "sessionEvicted": "Boşta bir terminal oturumu kapatıldı (sınır: {{max}}). Sınırı Terminal ayarlarından artırabilirsiniz.",
     "switchModeFailed": "Mod değiştirme başarısız oldu",
     "copilotGateway": "Copilot Ağ Geçidi",
-    "copilotGatewayDesc": "Yerel copilot-gateway çalışırken Claude'u otomatik algıla ve yönlendir"
+    "copilotGatewayDesc": "Yerel copilot-gateway çalışırken Claude'u otomatik algıla ve yönlendir",
+    "cliHistoryClaudeCodeLabel": "Claude Code geçmişini içe aktar",
+    "cliHistoryClaudeCodeDesc": "Claude Code CLI oturumlarını kenar çubuğunda göster (açılana kadar salt okunur)",
+    "cliHistoryCopilotLabel": "Copilot geçmişini içe aktar",
+    "cliHistoryCopilotDesc": "Copilot CLI oturumlarını kenar çubuğunda göster (açılana kadar salt okunur)",
+    "cliHistoryEnableFailed": "Geçmiş içe aktarma etkinleştirilemedi",
+    "cliHistoryDisableFailed": "Geçmiş içe aktarma devre dışı bırakılamadı"
   }
 }

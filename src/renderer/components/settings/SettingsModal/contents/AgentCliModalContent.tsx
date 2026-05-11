@@ -4,13 +4,16 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ConfigStorage } from '@/common/config/storage';
 import { useAgentCliConfig, type AgentCliConfig } from '@/renderer/hooks/agent/useAgentCliConfig';
-import { InputNumber, Switch } from '@arco-design/web-react';
+import { InputNumber, Message, Switch } from '@arco-design/web-react';
+import { ipcBridge } from '@/common';
 import AionScrollArea from '@/renderer/components/base/AionScrollArea';
 import { useSettingsViewMode } from '../settingsViewContext';
+
+type ImportSource = 'claude_code' | 'copilot';
 
 const PreferenceRow: React.FC<{
   label: string;
@@ -58,6 +61,109 @@ const AgentCliModalContent: React.FC = () => {
       }
     });
   }, []);
+
+  /**
+   * Awaitable sibling of `saveConfig` used by the CLI-history import toggles. Unlike
+   * the fire-and-forget `saveConfig`, this variant surfaces persistence errors so the
+   * toggle handler can roll back and show a user-visible error before the IPC fires.
+   * Kept separate from `saveConfig` because other handlers (font size, max sessions)
+   * intentionally don't need the await + rollback path.
+   */
+  const saveConfigAwaitable = useCallback(async (updates: Partial<AgentCliConfig>) => {
+    const previous = configRef.current;
+    const next = { ...previous, ...updates };
+    configRef.current = next;
+    try {
+      await ConfigStorage.set('agentCli.config', next);
+    } catch (error) {
+      if (configRef.current === next) {
+        configRef.current = previous;
+      }
+      throw error;
+    }
+  }, []);
+
+  // Per-source pending state: disables the corresponding switch while a
+  // persist → IPC → rollback sequence is in flight so rapid toggles cannot
+  // interleave their writes.
+  const [pending, setPending] = useState<Record<ImportSource, boolean>>({
+    claude_code: false,
+    copilot: false,
+  });
+
+  const handleImportToggle = useCallback(
+    async (source: ImportSource, enabled: boolean) => {
+      const configKey: keyof AgentCliConfig = source === 'claude_code' ? 'importClaudeCode' : 'importCopilot';
+      const previousEnabled = configRef.current?.[configKey] ?? false;
+      setPending((prev) => ({ ...prev, [source]: true }));
+      try {
+        try {
+          await saveConfigAwaitable({ [configKey]: enabled } as Partial<AgentCliConfig>);
+        } catch (error) {
+          console.error('[AgentCliModalContent] Failed to persist import toggle', error);
+          Message.error(
+            t(
+              enabled
+                ? 'settings.terminalWrapper.cliHistoryEnableFailed'
+                : 'settings.terminalWrapper.cliHistoryDisableFailed'
+            )
+          );
+          return;
+        }
+
+        let ipcResult: { success: boolean; data?: { errors?: Array<{ message: string }> }; msg?: string };
+        try {
+          ipcResult = enabled
+            ? await ipcBridge.cliHistory.reenableSource.invoke({ source })
+            : await ipcBridge.cliHistory.disableSource.invoke({ source });
+        } catch (transportError) {
+          console.error('[AgentCliModalContent] IPC call failed', transportError);
+          try {
+            await saveConfigAwaitable({ [configKey]: previousEnabled } as Partial<AgentCliConfig>);
+          } catch (rollbackError) {
+            console.error('[AgentCliModalContent] Failed to roll back import toggle', rollbackError);
+          }
+          Message.error(
+            t(
+              enabled
+                ? 'settings.terminalWrapper.cliHistoryEnableFailed'
+                : 'settings.terminalWrapper.cliHistoryDisableFailed'
+            )
+          );
+          return;
+        }
+
+        // Treat partial failures (success: true with non-empty errors[]) as a soft
+        // failure: keep the optimistic toggle (some rows were processed) but
+        // surface the first error to the user.
+        const partialErrorMessage =
+          ipcResult.success && ipcResult.data?.errors && ipcResult.data.errors.length > 0
+            ? ipcResult.data.errors[0]?.message
+            : undefined;
+
+        if (!ipcResult.success) {
+          try {
+            await saveConfigAwaitable({ [configKey]: previousEnabled } as Partial<AgentCliConfig>);
+          } catch (rollbackError) {
+            console.error('[AgentCliModalContent] Failed to roll back import toggle', rollbackError);
+          }
+          Message.error(
+            ipcResult.msg ||
+              t(
+                enabled
+                  ? 'settings.terminalWrapper.cliHistoryEnableFailed'
+                  : 'settings.terminalWrapper.cliHistoryDisableFailed'
+              )
+          );
+        } else if (partialErrorMessage) {
+          Message.error(partialErrorMessage);
+        }
+      } finally {
+        setPending((prev) => ({ ...prev, [source]: false }));
+      }
+    },
+    [saveConfigAwaitable, t]
+  );
 
   if (config === undefined) return null;
 
@@ -141,6 +247,34 @@ const AgentCliModalContent: React.FC = () => {
                 <Switch
                   checked={config.copilotGateway ?? true}
                   onChange={(val) => saveConfig({ copilotGateway: val })}
+                />
+              </PreferenceRow>
+
+              {/* CLI History Import — Claude Code */}
+              <PreferenceRow
+                label={t('settings.terminalWrapper.cliHistoryClaudeCodeLabel')}
+                description={t('settings.terminalWrapper.cliHistoryClaudeCodeDesc')}
+              >
+                <Switch
+                  checked={config.importClaudeCode ?? false}
+                  disabled={pending.claude_code}
+                  onChange={(val) => {
+                    void handleImportToggle('claude_code', val);
+                  }}
+                />
+              </PreferenceRow>
+
+              {/* CLI History Import — Copilot */}
+              <PreferenceRow
+                label={t('settings.terminalWrapper.cliHistoryCopilotLabel')}
+                description={t('settings.terminalWrapper.cliHistoryCopilotDesc')}
+              >
+                <Switch
+                  checked={config.importCopilot ?? false}
+                  disabled={pending.copilot}
+                  onChange={(val) => {
+                    void handleImportToggle('copilot', val);
+                  }}
                 />
               </PreferenceRow>
             </div>

@@ -359,10 +359,10 @@ Metadata search is automatic as soon as Phase 1 creates the conversation rows. M
 
 ```
 Done (on main):
-  src/process/bridge/cliHistoryBridge.ts        — Session path resolution for all 3 CLIs + isSessionIdle
+  src/process/bridge/cliHistoryBridge.ts        — Session path resolution for all 3 CLIs + isSessionIdle + Phase 1 IPC handlers
   src/renderer/pages/conversation/GroupedHistory/ConversationRow.tsx — Copy Chat Reference action
   src/renderer/pages/conversation/GroupedHistory/hooks/useConversationActions.ts — Copy reference logic
-  src/process/cli-history/types.ts              — SessionSourceProvider, SessionMetadata types
+  src/process/cli-history/types.ts              — SessionSourceProvider, SessionMetadata, ImportResult types
   src/process/cli-history/index.ts              — Provider registry exports
   src/process/cli-history/providers/base.ts     — BaseSessionSourceProvider abstract class
   src/process/cli-history/providers/claude.ts   — Claude Code CLI provider
@@ -370,12 +370,16 @@ Done (on main):
   src/process/cli-history/converters/claude.ts  — Claude JSONL -> TMessage converter
   src/process/cli-history/converters/copilot.ts — Copilot JSONL -> TMessage converter
 
+Done (Phase 1 metadata index):
+  src/process/cli-history/importer.ts           — Phase 1 orchestrator (discoverAndImport, disableSource, reenableSource, hydrateSession stub)
+  src/process/bridge/conversationEvents.ts      — Extracted emitConversationListChanged helper (breaks circular import)
+  src/common/adapter/ipcBridge.ts               — cliHistory.{scan, scanAll, disableSource, reenableSource} IPC routes
+  src/process/services/database/index.ts        — getUserConversations hidden filter + getImportedConversationsIncludingHidden + updateImportedConversation
+  src/renderer/components/settings/SettingsModal/contents/AgentCliModalContent.tsx — Per-CLI import toggles (Claude Code, Copilot)
+  src/process/bridge/index.ts                   — Wires initCliHistoryImporter() for app-launch sync
+
 Not started:
   src/process/cli-history/providers/codex.ts    — Codex CLI provider (deferred to V2)
-  src/process/cli-history/importer.ts           — Metadata import + on-demand hydration orchestrator
-  src/common/adapter/ipcBridge.ts               — Add IPC for CLI history import/sync
-  src/process/bridge/cliHistoryBridge.ts        — Extend with import/hydration endpoints
-  src/renderer/components/settings/SettingsModal/contents/AgentCliModalContent.tsx — CLI history toggles
   src/renderer/pages/conversation/GroupedHistory/ — Per-section truncation, filter, search
   src/renderer/pages/conversation/components/ChatConversation.tsx — Transcript mode gating
   src/renderer/pages/conversation/platforms/acp/AcpChat.tsx — Read-only transcript surface
@@ -434,18 +438,18 @@ Not started:
 
 ### CLI History Import
 
-- [ ] Per-CLI import toggles in Settings > AgentCLI (Claude Code + Copilot for V1)
-- [ ] Phase 1: metadata index on enable (instant scan)
+- [x] Per-CLI import toggles in Settings > AgentCLI (Claude Code + Copilot for V1)
+- [x] Phase 1: metadata index on enable (instant scan)
 - [ ] Phase 2: on-demand message hydration on open (with skeleton loading)
 - [ ] Imported sessions appear in normal sidebar timeline (mixed with native)
 - [ ] Source badge visible on imported sessions (2-letter chips: CC, CP)
 - [ ] Auto-naming uses provider metadata first, upgrades from first user message when needed, and appends workspace for disambiguation
 - [ ] Full `...` menu works: rename, pin, delete, export (export auto-hydrates if messages not yet loaded)
-- [ ] Incremental sync: new sessions imported on app launch
+- [x] Incremental sync: new sessions imported on app launch
 - [ ] mtime staleness check: re-hydrate if source file changed
-- [ ] Deduplication by source + session ID
+- [x] Deduplication by source + session ID
 - [ ] Delete removes from AionUI only, not from CLI history files
-- [ ] Disable/re-enable hides/shows imported rows without deleting
+- [x] Disable/re-enable hides/shows imported rows without deleting
 - [ ] Corrupted JSONL handled gracefully (partial import + warning)
 - [ ] Missing source files show "transcript unavailable" state
 - [ ] Imported sessions open as read-only with "Resume" action

@@ -14,6 +14,12 @@ import { getDataPath } from '@process/utils/utils';
 import { getDatabase } from '@process/services/database/export';
 import { convertClaudeJsonl } from '@process/cli-history/converters/claude';
 import { convertCopilotJsonl } from '@process/cli-history/converters/copilot';
+import {
+  disableSource as disableImportSource,
+  discoverAndImport,
+  discoverAndImportAll,
+  reenableSource as reenableImportSource,
+} from '@process/cli-history/importer';
 
 /**
  * Resolve a Claude Code session ID to its JSONL file path.
@@ -203,9 +209,8 @@ export function initCliHistoryBridge(): void {
         }
 
         // 1. Resolve JSONL file path (sync to avoid Electron async I/O deadlock)
-        const filePath = backend === 'claude'
-          ? resolveClaudeSessionPathSync(sessionId)
-          : resolveCopilotSessionPathSync(sessionId);
+        const filePath =
+          backend === 'claude' ? resolveClaudeSessionPathSync(sessionId) : resolveCopilotSessionPathSync(sessionId);
 
         if (!filePath) {
           return { success: false, msg: `No JSONL file found for session ${sessionId} (backend: ${backend})` };
@@ -246,4 +251,46 @@ export function initCliHistoryBridge(): void {
       }
     }
   );
+
+  // ---------------------------------------------------------------------------
+  // Phase 1 metadata-import IPC handlers (importer.ts).
+  // Renderer drives these from the per-CLI toggles in Settings > AgentCLI.
+  // App-launch sync calls discoverAndImportAll() directly in-process, not via IPC.
+  // ---------------------------------------------------------------------------
+
+  ipcBridge.cliHistory.scan.provider(async ({ source }) => {
+    try {
+      const data = await discoverAndImport(source);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcBridge.cliHistory.scanAll.provider(async ({ sources }) => {
+    try {
+      const data = await discoverAndImportAll(sources);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcBridge.cliHistory.disableSource.provider(async ({ source }) => {
+    try {
+      const data = await disableImportSource(source);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  ipcBridge.cliHistory.reenableSource.provider(async ({ source }) => {
+    try {
+      const data = await reenableImportSource(source);
+      return { success: true, data };
+    } catch (err) {
+      return { success: false, msg: err instanceof Error ? err.message : String(err) };
+    }
+  });
 }

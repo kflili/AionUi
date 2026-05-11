@@ -55,3 +55,20 @@ export type SessionSourceProvider = {
   /** Build a reference string (absolute file path) for the Copy Chat Reference feature. */
   buildReference(sessionId: string): string;
 };
+
+/**
+ * Result of a single Phase 1 import scan for one source.
+ * Defined here (not in `importer.ts`) so `ipcBridge.ts` can import the type without
+ * pulling in the importer module — which loads provider singletons and registers them
+ * at module-load time.
+ */
+export type ImportResult = {
+  /** Number of new conversation rows created */
+  imported: number;
+  /** Number of existing rows whose provider-owned metadata was refreshed */
+  updated: number;
+  /** Number of discovered sessions that needed no DB write (already up-to-date) */
+  skipped: number;
+  /** Per-session errors collected during the scan (provider or DB failures) */
+  errors: Array<{ sessionId: string; message: string }>;
+};

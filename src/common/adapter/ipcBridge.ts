@@ -21,6 +21,7 @@ import type {
   AutoUpdateStatus,
 } from '../update/updateTypes';
 import type { ProtocolDetectionRequest, ProtocolDetectionResponse } from '../utils/protocolDetector';
+import type { ImportResult, SessionSourceId } from '../../process/cli-history/types';
 
 export const shell = {
   openFile: bridge.buildProvider<void, string>('open-file'), // 使用系统默认程序打开文件
@@ -1091,4 +1092,20 @@ export const cliHistory = {
     IBridgeResponse<{ count: number }>,
     { conversationId: string; sessionId: string; backend: string; terminalSwitchedAt: number; showThinking?: boolean }
   >('cli-history.convert-session-to-messages'),
+  /** Phase 1 (metadata index): scan one source's native index and upsert conversation rows */
+  scan: bridge.buildProvider<IBridgeResponse<ImportResult>, { source: SessionSourceId }>('cli-history.scan'),
+  /** Phase 1 (metadata index): scan every requested source. Default = all enabled. */
+  scanAll: bridge.buildProvider<
+    IBridgeResponse<Partial<Record<SessionSourceId, ImportResult>>>,
+    { sources?: SessionSourceId[] }
+  >('cli-history.scan-all'),
+  /** Soft-disable a source: hide imported rows from sidebar without deleting */
+  disableSource: bridge.buildProvider<
+    IBridgeResponse<{ hidden: number; errors: Array<{ sessionId: string; message: string }> }>,
+    { source: SessionSourceId }
+  >('cli-history.disable-source'),
+  /** Soft-re-enable a source: restore hidden rows + run incremental sync */
+  reenableSource: bridge.buildProvider<IBridgeResponse<ImportResult>, { source: SessionSourceId }>(
+    'cli-history.reenable-source'
+  ),
 };

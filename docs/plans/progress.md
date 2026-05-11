@@ -1,6 +1,6 @@
 # AionUI Enhancement Progress
 
-**Last updated:** 2026-04-14
+**Last updated:** 2026-05-10
 
 Quick status of each step in the [plan index](./2026-03-19-plan-index.md).
 
@@ -49,17 +49,29 @@ All 3 iterations complete:
 - JSONL → TMessage converters (reused from Step 1)
 - Session path resolution for Claude, Copilot, Codex
 
-### Not started
+### Done (Phase 1 — metadata index)
 
-- Import orchestrator — discover sessions, insert into SQLite `conversations` + `messages` tables
+- Import orchestrator — `discoverAndImport(source)` writes `conversations` rows for each CLI session (no message hydration yet)
+- Per-source operation chain — disable/re-enable cannot race a scan
+- Settings UI — per-CLI import toggles for Claude Code + Copilot under Settings → AgentCLI
+- Incremental sync on app launch — `initCliHistoryImporter()` runs `discoverAndImportAll()` for enabled sources
+- Soft disable / re-enable — `extra.importMeta.hidden` flag, with `getUserConversations` filter
+- Deduplication by `source + acpSessionId` (fallback `source + sourceFilePath`)
+- Source-aware auto-naming (Claude Code → `firstPrompt`; Copilot → `summary`/`title`); rename-preserving on re-sync via `generatedName` snapshot
+
+**Key files:** `src/process/cli-history/importer.ts` (orchestrator), `src/process/bridge/conversationEvents.ts` (extracted listChanged emitter), `src/process/bridge/cliHistoryBridge.ts` (4 new IPC handlers), `src/process/services/database/index.ts` (hidden filter + importer-private DB methods), `src/renderer/components/settings/SettingsModal/contents/AgentCliModalContent.tsx` (toggles)
+
+### Not started (Phase 2 and beyond)
+
+- Phase 2: on-demand message hydration (`hydrateSession()` is a stub that throws)
 - Background message conversion (newest-first)
-- Settings UI — per-CLI import toggles
 - Sidebar integration — imported sessions visible in timeline with source badges
 - Resume support for imported sessions
-- Incremental sync on app launch
 - Delete behavior (remove from AionUI only, preserve CLI files)
+- Sidebar truncation / filter / search
+- Full-history view page
 
-**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md)
+**Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (parent design) · [`2026-03-19-cli-history/importer-phase1.md`](./2026-03-19-cli-history/importer-phase1.md) (Phase 1 implementation plan)
 
 ---
 

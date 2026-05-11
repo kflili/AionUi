@@ -15,11 +15,18 @@ if (app.isPackaged) {
 import initStorage from './utils/initStorage';
 import './utils/initBridge';
 import './services/i18n'; // Initialize i18n for main process
+import { initCliHistoryImporter } from '@process/cli-history/importer';
 import { getChannelManager } from '@process/channels';
 import { ExtensionRegistry } from '@process/extensions';
 
 export const initializeProcess = async () => {
   await initStorage();
+
+  // CLI-history import scan must run AFTER storage init so the importer's
+  // getDatabase() calls hit a fully-migrated database. initAllBridges() runs at
+  // module-load time (before initializeProcess fires), so the importer cannot
+  // be scheduled from there without racing the DB migration.
+  initCliHistoryImporter();
 
   // Initialize Extension Registry (scan and resolve all extensions)
   try {

@@ -679,6 +679,12 @@
     "sessionEvicted": "Closed an idle terminal session (limit: {{max}}). You can increase this in Terminal settings.",
     "switchModeFailed": "Failed to switch mode",
     "copilotGateway": "Copilot Gateway",
-    "copilotGatewayDesc": "Auto-detect and route Claude through local copilot-gateway when running"
+    "copilotGatewayDesc": "Auto-detect and route Claude through local copilot-gateway when running",
+    "cliHistoryClaudeCodeLabel": "Import Claude Code history",
+    "cliHistoryClaudeCodeDesc": "Show your Claude Code CLI sessions in the sidebar (read-only until opened)",
+    "cliHistoryCopilotLabel": "Import Copilot history",
+    "cliHistoryCopilotDesc": "Show your Copilot CLI sessions in the sidebar (read-only until opened)",
+    "cliHistoryEnableFailed": "Failed to enable history import",
+    "cliHistoryDisableFailed": "Failed to disable history import"
   }
 }
