@@ -101,6 +101,43 @@
     "loadingMore": "더 불러오는 중...",
     "untitled": "제목 없는 대화"
   },
+  "fullHistory": {
+    "pageTitle": "전체 기록",
+    "viewAll": "전체 기록 보기",
+    "viewAllTooltip": "전체 기록 보기",
+    "showAll": "모두 보기",
+    "sessionCount_one": "세션 {{count}}개",
+    "sessionCount_other": "세션 {{count}}개",
+    "filter": {
+      "sourceLabel": "소스",
+      "workspaceLabel": "워크스페이스",
+      "dateLabel": "날짜",
+      "sortLabel": "정렬",
+      "allSources": "모든 소스",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "네이티브",
+      "workspacesPlaceholder": "모든 워크스페이스",
+      "noneWorkspace": "(워크스페이스 없음)",
+      "datePreset": {
+        "last7": "최근 7일",
+        "last30": "최근 30일",
+        "all": "전체 기간",
+        "custom": "사용자 지정"
+      },
+      "search": "대화 및 워크스페이스 검색...",
+      "includeMessageContent": "메시지 내용 포함",
+      "messageIndexNotice": "일부 세션은 아직 메시지 검색을 위해 색인되지 않았습니다",
+      "reset": "필터 재설정"
+    },
+    "sort": {
+      "date": "날짜순(최신)",
+      "name": "이름순"
+    },
+    "empty": {
+      "noMatches": "필터와 일치하는 대화가 없습니다"
+    }
+  },
   "dropdown": {
     "cliAgents": "CLI Agents",
     "presetAssistants": "프리셋 어시스턴트"

@@ -101,6 +101,43 @@
     "loadingMore": "Daha fazla yükleniyor...",
     "untitled": "Adsız sohbet"
   },
+  "fullHistory": {
+    "pageTitle": "Tüm Geçmiş",
+    "viewAll": "Tüm geçmişi görüntüle",
+    "viewAllTooltip": "Tüm geçmişi görüntüle",
+    "showAll": "Tümünü göster",
+    "sessionCount_one": "{{count}} oturum",
+    "sessionCount_other": "{{count}} oturum",
+    "filter": {
+      "sourceLabel": "Kaynak",
+      "workspaceLabel": "Çalışma alanı",
+      "dateLabel": "Tarih",
+      "sortLabel": "Sırala",
+      "allSources": "Tüm kaynaklar",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "Yerel",
+      "workspacesPlaceholder": "Tüm çalışma alanları",
+      "noneWorkspace": "(Çalışma alanı yok)",
+      "datePreset": {
+        "last7": "Son 7 gün",
+        "last30": "Son 30 gün",
+        "all": "Tüm zamanlar",
+        "custom": "Özel"
+      },
+      "search": "Sohbetleri ve çalışma alanlarını ara...",
+      "includeMessageContent": "Mesaj içeriğini dahil et",
+      "messageIndexNotice": "Bazı oturumlar henüz mesaj araması için dizinlenmedi",
+      "reset": "Filtreleri sıfırla"
+    },
+    "sort": {
+      "date": "Tarihe göre (en yeni)",
+      "name": "Ada göre"
+    },
+    "empty": {
+      "noMatches": "Filtrelerinizle eşleşen sohbet yok"
+    }
+  },
   "tabs": {
     "closeAll": "Tümünü Kapat",
     "closeLeft": "Sol tarafı kapat",

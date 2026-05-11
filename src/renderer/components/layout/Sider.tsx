@@ -1,4 +1,4 @@
-import { ArrowCircleLeft, ListCheckbox, Plus, SettingTwo } from '@icon-park/react';
+import { ArrowCircleLeft, ListCheckbox, Plus, SettingTwo, History as HistoryIcon } from '@icon-park/react';
 import { IconMoonFill, IconSunFill } from '@arco-design/web-react/icon';
 import classNames from 'classnames';
 import React, { Suspense, useEffect, useRef, useState } from 'react';
@@ -167,6 +167,36 @@ const Sider: React.FC<SiderProps> = ({ onSessionClick, collapsed = false }) => {
       {/* Footer - settings button */}
       <div className='shrink-0 sider-footer mt-auto pt-8px'>
         <div className='flex flex-col gap-8px'>
+          {!isSettings && (
+            <Tooltip {...siderTooltipProps} content={t('conversation.fullHistory.viewAllTooltip')} position='right'>
+              <div
+                onClick={() => {
+                  cleanupSiderTooltips();
+                  blurActiveElement();
+                  closePreview();
+                  setIsBatchMode(false);
+                  Promise.resolve(navigate('/history')).catch((error) => {
+                    console.error('Navigation failed:', error);
+                  });
+                  if (onSessionClick) {
+                    onSessionClick();
+                  }
+                }}
+                className={classNames(
+                  'flex items-center justify-start gap-10px px-12px py-8px rd-0.5rem cursor-pointer transition-colors',
+                  isMobile && 'sider-footer-btn-mobile',
+                  {
+                    'bg-[rgba(var(--primary-6),0.12)] text-primary': pathname.startsWith('/history'),
+                    'hover:bg-hover hover:shadow-sm active:bg-fill-2': !pathname.startsWith('/history'),
+                  }
+                )}
+                data-testid='sider-view-all-history'
+              >
+                <HistoryIcon className='flex' theme='outline' size='24' fill={iconColors.primary} />
+                <span className='collapsed-hidden text-t-primary'>{t('conversation.fullHistory.viewAll')}</span>
+              </div>
+            </Tooltip>
+          )}
           {isSettings && (
             <Tooltip
               {...siderTooltipProps}

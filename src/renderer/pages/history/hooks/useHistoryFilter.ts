@@ -1,0 +1,119 @@
+/**
+ * @license
+ * Copyright 2025 AionUi (aionui.com)
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import { useCallback, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
+import type { SidebarFilterSource } from '@/renderer/pages/conversation/GroupedHistory/utils/sidebarFilterHelpers';
+import {
+  DEFAULT_HISTORY_FILTER,
+  type HistoryDatePreset,
+  type HistoryFilterCriteria,
+  type HistorySortKey,
+  sectionKeyToPreset,
+} from '../utils/historyFilterHelpers';
+
+export type UseHistoryFilterResult = {
+  criteria: HistoryFilterCriteria;
+  setSources: (next: ReadonlySet<SidebarFilterSource>) => void;
+  toggleSource: (value: SidebarFilterSource) => void;
+  setWorkspaces: (next: ReadonlySet<string>) => void;
+  setPreset: (preset: HistoryDatePreset) => void;
+  setCustomRange: (range: { from: number | null; to: number | null }) => void;
+  setSearch: (search: string) => void;
+  setIncludeMessageContent: (value: boolean) => void;
+  setSort: (sort: HistorySortKey) => void;
+  reset: () => void;
+};
+
+const initFromSearchParam = (sectionParam: string | null): HistoryFilterCriteria => {
+  if (!sectionParam) return DEFAULT_HISTORY_FILTER;
+  return {
+    ...DEFAULT_HISTORY_FILTER,
+    preset: sectionKeyToPreset(sectionParam),
+  };
+};
+
+export const useHistoryFilter = (): UseHistoryFilterResult => {
+  const [searchParams] = useSearchParams();
+  const sectionParam = searchParams.get('section');
+  const [criteria, setCriteria] = useState<HistoryFilterCriteria>(() => initFromSearchParam(sectionParam));
+
+  const setSources = useCallback((next: ReadonlySet<SidebarFilterSource>) => {
+    setCriteria((prev) => ({ ...prev, sources: next }));
+  }, []);
+
+  const toggleSource = useCallback((value: SidebarFilterSource) => {
+    setCriteria((prev) => {
+      const next = new Set(prev.sources);
+      if (next.has(value)) {
+        next.delete(value);
+      } else {
+        next.add(value);
+      }
+      return { ...prev, sources: next };
+    });
+  }, []);
+
+  const setWorkspaces = useCallback((next: ReadonlySet<string>) => {
+    setCriteria((prev) => ({ ...prev, workspaces: next }));
+  }, []);
+
+  const setPreset = useCallback((preset: HistoryDatePreset) => {
+    setCriteria((prev) => {
+      // Switching away from custom resets the custom range so a later return to
+      // 'custom' starts clean. Switching INTO 'custom' preserves the existing range.
+      const customRange = preset === 'custom' ? prev.customRange : { from: null, to: null };
+      return { ...prev, preset, customRange };
+    });
+  }, []);
+
+  const setCustomRange = useCallback((range: { from: number | null; to: number | null }) => {
+    setCriteria((prev) => ({ ...prev, preset: 'custom', customRange: range }));
+  }, []);
+
+  const setSearch = useCallback((search: string) => {
+    setCriteria((prev) => ({ ...prev, search }));
+  }, []);
+
+  const setIncludeMessageContent = useCallback((value: boolean) => {
+    setCriteria((prev) => ({ ...prev, includeMessageContent: value }));
+  }, []);
+
+  const setSort = useCallback((sort: HistorySortKey) => {
+    setCriteria((prev) => ({ ...prev, sort }));
+  }, []);
+
+  const reset = useCallback(() => {
+    setCriteria(DEFAULT_HISTORY_FILTER);
+  }, []);
+
+  return useMemo(
+    () => ({
+      criteria,
+      setSources,
+      toggleSource,
+      setWorkspaces,
+      setPreset,
+      setCustomRange,
+      setSearch,
+      setIncludeMessageContent,
+      setSort,
+      reset,
+    }),
+    [
+      criteria,
+      setSources,
+      toggleSource,
+      setWorkspaces,
+      setPreset,
+      setCustomRange,
+      setSearch,
+      setIncludeMessageContent,
+      setSort,
+      reset,
+    ]
+  );
+};

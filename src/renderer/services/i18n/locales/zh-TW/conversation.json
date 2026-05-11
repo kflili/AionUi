@@ -101,6 +101,43 @@
     "loadingMore": "載入更多...",
     "untitled": "未命名對話"
   },
+  "fullHistory": {
+    "pageTitle": "全部歷史",
+    "viewAll": "查看全部歷史",
+    "viewAllTooltip": "查看全部歷史",
+    "showAll": "查看全部",
+    "sessionCount_one": "{{count}} 個對話",
+    "sessionCount_other": "{{count}} 個對話",
+    "filter": {
+      "sourceLabel": "來源",
+      "workspaceLabel": "工作區",
+      "dateLabel": "日期",
+      "sortLabel": "排序",
+      "allSources": "全部來源",
+      "claudeCode": "Claude Code",
+      "copilot": "Copilot",
+      "native": "原生",
+      "workspacesPlaceholder": "全部工作區",
+      "noneWorkspace": "（無工作區）",
+      "datePreset": {
+        "last7": "最近 7 天",
+        "last30": "最近 30 天",
+        "all": "全部時間",
+        "custom": "自訂"
+      },
+      "search": "搜尋對話和工作區...",
+      "includeMessageContent": "包含訊息內容",
+      "messageIndexNotice": "部分對話尚未建立訊息搜尋索引",
+      "reset": "重置篩選"
+    },
+    "sort": {
+      "date": "依日期（最新）",
+      "name": "依名稱"
+    },
+    "empty": {
+      "noMatches": "沒有對話符合篩選條件"
+    }
+  },
   "dropdown": {
     "cliAgents": "CLI Agents",
     "presetAssistants": "預設助手"
