@@ -1288,6 +1288,104 @@ describe('hydrateSession (Phase 2)', () => {
     expect(r1).toBe(r2);
     expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('queues same-option callers behind the chain tail when a different-option step is pending', async () => {
+    // A (false) is running, B (true) is queued. A new C (false) request arrives:
+    // coalescing C with A would have C resolve when A finishes, but B is queued
+    // AFTER A and will rewrite SQLite to true before C's renderer reads. C must
+    // queue behind B instead so C's runHydrate re-reads and re-converts to false.
+    seedImportedRow({ id: 'conv-1' });
+    const startOrder: string[] = [];
+    let resolveA: ((value: string) => void) | undefined;
+    let resolveB: ((value: string) => void) | undefined;
+    let resolveC: ((value: string) => void) | undefined;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          if (!resolveA) {
+            startOrder.push('A');
+            resolveA = (val) => resolve(val);
+          } else if (!resolveB) {
+            startOrder.push('B');
+            resolveB = (val) => resolve(val);
+          } else {
+            startOrder.push('C');
+            resolveC = (val) => resolve(val);
+          }
+        }),
+    });
+
+    const aPromise = hydrateSession('conv-1', { showThinking: false });
+    const bPromise = hydrateSession('conv-1', { showThinking: true });
+    const cPromise = hydrateSession('conv-1', { showThinking: false });
+
+    // C must NOT be A's promise — if it were, C would resolve before B runs.
+    expect(cPromise).not.toBe(aPromise);
+
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A']);
+
+    // Finish A; B should start next (not C, since B was queued earlier).
+    resolveA!(CLAUDE_USER_LINE('a'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B']);
+
+    // Finish B; C should start next.
+    resolveB!(CLAUDE_USER_LINE('b'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B', 'C']);
+
+    resolveC!(CLAUDE_USER_LINE('c'));
+    const [aResult, bResult, cResult] = await Promise.all([aPromise, bPromise, cPromise]);
+    expect(aResult.status).toBe('hydrated');
+    expect(bResult.status).toBe('hydrated');
+    expect(cResult.status).toBe('hydrated');
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(3);
+
+    // Final SQLite state reflects C (the latest request).
+    const extra = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
+    expect(extra.hydratedShowThinking).toBe(false);
+  });
+
+  it('a second same-option call DOES coalesce with the most-recently-queued tail (not with a still-running earlier step)', async () => {
+    // A (false) is running, B (true) is queued (chain tail = B). D (true) arrives:
+    // D should coalesce with B (chain tail with matching key), NOT start a new step.
+    seedImportedRow({ id: 'conv-1' });
+    const startOrder: string[] = [];
+    let resolveA: ((value: string) => void) | undefined;
+    let resolveB: ((value: string) => void) | undefined;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          if (!resolveA) {
+            startOrder.push('A');
+            resolveA = (val) => resolve(val);
+          } else {
+            startOrder.push('B');
+            resolveB = (val) => resolve(val);
+          }
+        }),
+    });
+
+    const aPromise = hydrateSession('conv-1', { showThinking: false });
+    const bPromise = hydrateSession('conv-1', { showThinking: true });
+    const dPromise = hydrateSession('conv-1', { showThinking: true });
+
+    expect(dPromise).toBe(bPromise);
+
+    // Drain microtasks so A's runHydrate progresses to the readJsonl call.
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A']);
+
+    resolveA!(CLAUDE_USER_LINE('a'));
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(startOrder).toEqual(['A', 'B']);
+    resolveB!(CLAUDE_USER_LINE('b'));
+    await Promise.all([aPromise, bPromise, dPromise]);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(2); // A + B; D coalesced with B.
+  });
 });
 
 // ---------------------------------------------------------------------------

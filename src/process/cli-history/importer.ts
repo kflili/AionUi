@@ -825,13 +825,25 @@ function hydrationKey(conversationId: string, showThinking: boolean | undefined)
  */
 export function hydrateSession(conversationId: string, options?: ConverterOptions): Promise<HydrateResult> {
   const key = hydrationKey(conversationId, options?.showThinking);
+  const chainTail = hydrationChain.get(conversationId);
   const existing = inFlightHydrate.get(key);
-  if (existing) return existing;
+
+  // Coalesce same-option callers ONLY when no later-queued step would
+  // clobber the in-flight's SQLite writes. If `existing` is the chain tail,
+  // it's the LAST queued step for this conversation — joining it is safe.
+  // If a different-option step has been queued after `existing` (so the
+  // tail is no longer `existing`), coalescing would resolve the late
+  // same-option caller with a result that is then overwritten by the
+  // queued step before the caller reads SQLite. Queue this caller behind
+  // the chain tail instead so it picks up the latest stored variant.
+  if (existing && chainTail === existing) {
+    return existing;
+  }
 
   // Serialize different-option callers per conversation. A previous chain
   // step's rejection must NOT poison the chain — `.then(task, task)` runs
   // `runHydrate` whether the prior step resolved or rejected.
-  const previous = hydrationChain.get(conversationId) ?? Promise.resolve();
+  const previous = chainTail ?? Promise.resolve();
   const run = () => runHydrate(conversationId, options ?? {});
   const promise = previous.then(run, run);
 
@@ -841,6 +853,9 @@ export function hydrateSession(conversationId: string, options?: ConverterOption
   };
   void promise.then(cleanup, cleanup);
 
+  // Replace any earlier inFlightHydrate entry for the same key — a future
+  // same-option caller must coalesce with THIS new tail, not the still-running
+  // older step whose writes will be clobbered by an intermediate queued step.
   inFlightHydrate.set(key, promise);
   hydrationChain.set(conversationId, promise);
   return promise;
