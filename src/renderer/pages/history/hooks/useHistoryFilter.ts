@@ -4,7 +4,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import type { SidebarFilterSource } from '@/renderer/pages/conversation/GroupedHistory/utils/sidebarFilterHelpers';
 import {
@@ -38,6 +38,18 @@ export const useHistoryFilter = (): UseHistoryFilterResult => {
   const [searchParams] = useSearchParams();
   const sectionParam = searchParams.get('section');
   const [criteria, setCriteria] = useState<HistoryFilterCriteria>(() => initFromSearchParam(sectionParam));
+
+  // Re-apply the deep-link preset/customRange when the `?section=` param
+  // changes while we're already on /history (e.g. user clicks "Show all" on
+  // a different sidebar section). We track the last-applied param so user
+  // interactions that change filter state (chip clicks, search, etc.) don't
+  // get reset on every render — only true param transitions reapply.
+  const lastAppliedSectionRef = useRef<string | null>(sectionParam);
+  useEffect(() => {
+    if (sectionParam === lastAppliedSectionRef.current) return;
+    lastAppliedSectionRef.current = sectionParam;
+    setCriteria(initFromSearchParam(sectionParam));
+  }, [sectionParam]);
 
   const setSources = useCallback((next: ReadonlySet<SidebarFilterSource>) => {
     setCriteria((prev) => ({ ...prev, sources: next }));

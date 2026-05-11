@@ -54,6 +54,11 @@ const HistoryPage: React.FC = () => {
   // distinct conversations match. Walk pages until `hasMore === false` (or the
   // cap), accumulating conversation IDs into the visible set so later matches
   // aren't silently dropped.
+  //
+  // The effect cleanup increments `requestIdRef.current` so any in-flight IPC
+  // resolved after unmount fails its `requestIdRef.current !== myRequestId`
+  // guard before calling `setMessageMatchIds` — prevents the React
+  // "state update on unmounted component" hazard.
   useEffect(() => {
     if (!criteria.includeMessageContent) {
       setMessageMatchIds(undefined);
@@ -88,7 +93,15 @@ const HistoryPage: React.FC = () => {
         }
       })();
     }, MESSAGE_SEARCH_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      // Invalidate the in-flight request id so any pending IPC resolution
+      // (after the debounce timer fires but before await resolves) fails its
+      // identity check and never calls setMessageMatchIds. Also covers
+      // unmount: requestIdRef survives the unmount but identity drift makes
+      // any late resolution a no-op.
+      requestIdRef.current += 1;
+    };
   }, [criteria.includeMessageContent, criteria.search]);
 
   const workspaceOptions = useMemo(() => collectWorkspaceOptions(conversations), [conversations]);

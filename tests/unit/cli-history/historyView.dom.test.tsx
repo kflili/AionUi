@@ -209,6 +209,18 @@ vi.mock('@renderer/pages/conversation/GroupedHistory/hooks/useConversationListSy
   useConversationListSync: () => useConversationListSyncMock(),
 }));
 
+// Spy on react-router-dom's useNavigate so the row-click test can assert the
+// production navigate(`/conversation/<id>`) call site. MemoryRouter is still
+// the actual router — only useNavigate is intercepted.
+const navigateSpy = vi.fn();
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<typeof import('react-router-dom')>('react-router-dom');
+  return {
+    ...actual,
+    useNavigate: () => navigateSpy,
+  };
+});
+
 import HistoryPage from '../../../src/renderer/pages/history/HistoryPage';
 
 // ---------------------------------------------------------------------------
@@ -265,6 +277,7 @@ const renderPage = (initialPath: string = '/history') =>
 beforeEach(() => {
   useConversationListSyncMock.mockReset();
   searchConversationMessagesInvoke.mockReset();
+  navigateSpy.mockReset();
   useConversationListSyncMock.mockReturnValue({ conversations: seedConversations() });
   searchConversationMessagesInvoke.mockResolvedValue({
     items: [],
@@ -507,14 +520,25 @@ describe('HistoryPage — workspace filter', () => {
 });
 
 describe('HistoryPage — row click navigates to /conversation/:id', () => {
-  it('clicking a row triggers useNavigate with the matching path', () => {
+  it('clicking a row calls useNavigate with the conversation path', () => {
     renderPage();
-    fireEvent.click(screen.getByTestId('history-virtuoso-mock').querySelectorAll('[data-testid="history-row"]')[0]);
-    // We can't directly observe useNavigate without re-mocking; instead assert that
-    // the row's data-conversation-id matches the expected first row, and rely on
-    // the production code path (verified by hand: navigate(`/conversation/${id}`)).
-    // The dom test covers the mapping; the navigate call shape is locked by tsc.
-    expect(true).toBe(true);
+    const firstRow = screen
+      .getByTestId('history-virtuoso-mock')
+      .querySelectorAll('[data-testid="history-row"]')[0] as HTMLElement;
+    expect(firstRow).toBeTruthy();
+    const expectedId = firstRow.getAttribute('data-conversation-id');
+    fireEvent.click(firstRow);
+    expect(navigateSpy).toHaveBeenCalledWith(`/conversation/${expectedId}`);
+  });
+
+  it('Enter key on a focused row also navigates', () => {
+    renderPage();
+    const firstRow = screen
+      .getByTestId('history-virtuoso-mock')
+      .querySelectorAll('[data-testid="history-row"]')[0] as HTMLElement;
+    const expectedId = firstRow.getAttribute('data-conversation-id');
+    fireEvent.keyDown(firstRow, { key: 'Enter' });
+    expect(navigateSpy).toHaveBeenCalledWith(`/conversation/${expectedId}`);
   });
 });
 
