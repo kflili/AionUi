@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                         |
 | ----------- | ----------------------------------------------------------------------------- |
-| Status      | Draft                                                                         |
+| Status      | Implemented                                                                   |
 | Priority    | High                                                                          |
 | Complexity  | High                                                                          |
 | Depends On  | Items 0–8 (importer + source badge + sidebar filter/truncation + resume)      |
