@@ -266,15 +266,18 @@ const ChatConversation: React.FC<{
       void ipcBridge.conversation.update
         .invoke({
           id: conversation.id,
-          updates: result.updates as never,
+          updates: result.updates as unknown as Partial<TChatConversation>,
           mergeExtra: true,
         })
         .then(() => mutate(`conversation/${conversation.id}`))
         .catch((err: unknown) => {
-          // Persist failure — surface a generic resume error so the user knows
-          // the click didn't take effect, and keep the transcript mounted.
+          // Persist failure — the IPC itself rejected (e.g. DB write error or
+          // bridge disconnect), distinct from the pre-flight validation
+          // failures above. Use the generic `common.saveFailed` rather than a
+          // resume-specific key so the user understands the click didn't take
+          // effect for a transport / storage reason. Transcript stays mounted.
           console.error('[ChatConversation] Failed to persist resume state', err);
-          Message.error(t('conversation.transcript.resumeError.sessionMissing'));
+          Message.error(t('common.saveFailed'));
         });
     },
     [agentCliConfig, conversation, t]
