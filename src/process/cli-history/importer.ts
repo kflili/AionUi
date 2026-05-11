@@ -692,7 +692,7 @@ function splitJsonlByValidity(lines: string[]): { validLines: string[]; warningC
 }
 
 const RELATIVE_TIME_FALLBACK_RE =
-  /^(just now|\d+ min ago|\d+ hour(?:s)? ago|\d+ day(?:s)? ago|\d+ month(?:s)? ago|\d+ year(?:s)? ago)/;
+  /^(?:just now|\d+ min ago|\d+ hours? ago|\d+ days? ago|\d+ months? ago|\d+ years? ago)(?: · .+)?$/;
 
 /**
  * Phase-2-only "is this title safe to upgrade?" check. Returns true ONLY

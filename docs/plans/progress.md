@@ -65,7 +65,7 @@ All 3 iterations complete:
 
 - `hydrateSession(conversationId, options?)` — reads source JSONL, converts via existing converters, batch-replaces `messages` rows inside one SQLite transaction
 - mtime-bound cache: `extra.hydratedAt` (source mtimeMs) + `extra.hydratedSourceFilePath` invalidate on file move or content change
-- In-flight coalescing keyed by `conversationId` — concurrent open + export share one read+parse+insert pass
+- In-flight coalescing keyed by `(conversationId, normalizedShowThinking)` — same-option concurrent callers share one read+parse+insert pass; mixed-option callers are serialized through a per-conversation chain so the latest request wins SQLite
 - Source-missing / unreadable / post-stat-race handling — surfaces as `{ status: 'unavailable' | 'cached', warning: 'source_missing' }` rather than throwing
 - Corrupted-JSONL handling — skips malformed lines, returns `warningCount`
 - Phase 2 title upgrade — replaces relative-time / generic fallback titles with the first user message, never downgrades a meaningful provider title, never overrides a manual rename

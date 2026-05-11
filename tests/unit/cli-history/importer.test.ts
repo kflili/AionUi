@@ -1203,7 +1203,6 @@ describe('hydrateSession (Phase 2)', () => {
     const finishOrder: string[] = [];
     let resolveA: ((value: string) => void) | undefined;
     let resolveB: ((value: string) => void) | undefined;
-    let bStartedDuringA = false;
     const lines = [
       JSON.stringify({
         type: 'assistant',
@@ -1229,7 +1228,6 @@ describe('hydrateSession (Phase 2)', () => {
             };
           } else {
             startOrder.push('B');
-            bStartedDuringA = false;
             resolveB = (val) => {
               finishOrder.push('B');
               resolve(val);
@@ -1260,8 +1258,6 @@ describe('hydrateSession (Phase 2)', () => {
     // Final SQLite state reflects B (the latest request, with thinking).
     const extra = dbStore.get('conv-1')!.extra as AcpExtra & { hydratedShowThinking?: boolean };
     expect(extra.hydratedShowThinking).toBe(true);
-    // bStartedDuringA only matters as documentation — it was false (B started after A).
-    expect(bStartedDuringA).toBe(false);
   });
 
   it('still coalesces concurrent hydrations for the same conversation with the SAME showThinking', async () => {
@@ -1461,6 +1457,28 @@ describe('hydrateSession Phase-2 title upgrade', () => {
     expect(row.name).toBe('My manual rename');
     const extra = row.extra as AcpExtra;
     expect(extra.importMeta.autoNamed).toBe(false);
+  });
+
+  it('does NOT classify a provider title as fallback just because it starts with a relative-time phrase', async () => {
+    // The relative-time regex was originally `^(just now|...)` with no end
+    // anchor, so a meaningful provider title like
+    // "5 min ago we discovered the auth bug · demo-project" would have matched
+    // and been treated as upgradeable. The fixed regex requires a full match
+    // (optional ` · <workspace>` suffix only), so titles that START with a
+    // relative-time phrase but continue with meaningful content are preserved.
+    seedImportedRow({
+      id: 'conv-1',
+      generatedName: '5 min ago we discovered the auth bug · demo-project',
+      name: '5 min ago we discovered the auth bug · demo-project',
+      autoNamed: true,
+    });
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => CLAUDE_USER_LINE('something totally different'),
+    });
+    await hydrateSession('conv-1');
+    const row = dbStore.get('conv-1')!;
+    expect(row.name).toBe('5 min ago we discovered the auth bug · demo-project');
   });
 
   it('does not upgrade when the JSONL has no user-role text messages', async () => {

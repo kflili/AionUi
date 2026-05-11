@@ -1111,8 +1111,10 @@ export const cliHistory = {
   /**
    * Phase 2 (on-demand message hydration): read the conversation's source
    * JSONL, convert + persist `messages` rows, and return the hydration state.
-   * Idempotent — concurrent calls for the same `conversationId` share a
-   * single in-flight read+parse+insert pass.
+   * Coalescing keyed by `(conversationId, normalizedShowThinking)` — same-
+   * option concurrent callers share one in-flight pass; mixed-option callers
+   * are serialized through a per-conversation chain so the latest request
+   * wins SQLite's final state.
    */
   hydrate: bridge.buildProvider<IBridgeResponse<HydrateResult>, { conversationId: string; showThinking?: boolean }>(
     'cli-history.hydrate'
