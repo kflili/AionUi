@@ -68,7 +68,11 @@
     "deleteSuccess": "刪除成功",
     "deleteFailed": "刪除失敗",
     "copyReference": "複製會話參考",
-    "copyReferenceSuccess": "會話參考已複製"
+    "copyReferenceSuccess": "會話參考已複製",
+    "source": {
+      "claudeCode": "從 Claude Code 匯入",
+      "copilot": "從 Copilot 匯入"
+    }
   },
   "historySearch": {
     "tooltip": "搜尋訊息",

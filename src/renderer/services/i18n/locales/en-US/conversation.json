@@ -68,7 +68,11 @@
     "deleteSuccess": "Deleted successfully",
     "deleteFailed": "Delete failed",
     "copyReference": "Copy Chat Reference",
-    "copyReferenceSuccess": "Chat reference copied"
+    "copyReferenceSuccess": "Chat reference copied",
+    "source": {
+      "claudeCode": "Imported from Claude Code",
+      "copilot": "Imported from Copilot"
+    }
   },
   "historySearch": {
     "tooltip": "Search messages",

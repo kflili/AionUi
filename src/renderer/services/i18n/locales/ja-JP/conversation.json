@@ -68,7 +68,11 @@
     "deleteSuccess": "削除しました",
     "deleteFailed": "削除に失敗しました",
     "copyReference": "チャット参照をコピー",
-    "copyReferenceSuccess": "チャット参照をコピーしました"
+    "copyReferenceSuccess": "チャット参照をコピーしました",
+    "source": {
+      "claudeCode": "Claude Code からインポート",
+      "copilot": "Copilot からインポート"
+    }
   },
   "historySearch": {
     "tooltip": "メッセージを検索",
