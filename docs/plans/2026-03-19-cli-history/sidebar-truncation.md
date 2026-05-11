@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                                  |
 | ----------- | -------------------------------------------------------------------------------------- |
-| Status      | Active                                                                                 |
+| Status      | Implemented                                                                            |
 | Priority    | High                                                                                   |
 | Complexity  | Medium                                                                                 |
 | Depends On  | Items 0–4 (CLI-history importer + source badge)                                        |
