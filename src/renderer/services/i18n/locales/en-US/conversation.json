@@ -84,7 +84,8 @@
       "openMobileSheet": "Filters",
       "sheetTitle": "Filter conversations",
       "reset": "Reset",
-      "applyDone": "Done"
+      "applyDone": "Done",
+      "noMatches": "No conversations match your filters"
     },
     "showMore": "Show {{count}} more"
   },

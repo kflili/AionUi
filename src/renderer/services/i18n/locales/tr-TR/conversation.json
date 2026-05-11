@@ -84,7 +84,8 @@
       "openMobileSheet": "Filtreler",
       "sheetTitle": "Sohbetleri filtrele",
       "reset": "Sıfırla",
-      "applyDone": "Tamam"
+      "applyDone": "Tamam",
+      "noMatches": "Filtrelerinizle eşleşen sohbet yok"
     },
     "showMore": "{{count}} tane daha göster"
   },

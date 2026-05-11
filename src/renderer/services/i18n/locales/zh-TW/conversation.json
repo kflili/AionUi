@@ -84,7 +84,8 @@
       "openMobileSheet": "篩選",
       "sheetTitle": "篩選對話",
       "reset": "重設",
-      "applyDone": "完成"
+      "applyDone": "完成",
+      "noMatches": "沒有符合條件的對話"
     },
     "showMore": "再顯示 {{count}} 項"
   },

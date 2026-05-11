@@ -280,6 +280,7 @@ export type I18nKey =
   | 'conversation.history.filter.claudeCode'
   | 'conversation.history.filter.copilot'
   | 'conversation.history.filter.native'
+  | 'conversation.history.filter.noMatches'
   | 'conversation.history.filter.openMobileSheet'
   | 'conversation.history.filter.reset'
   | 'conversation.history.filter.searchLabel'

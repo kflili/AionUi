@@ -84,7 +84,8 @@
       "openMobileSheet": "フィルター",
       "sheetTitle": "会話を絞り込む",
       "reset": "リセット",
-      "applyDone": "完了"
+      "applyDone": "完了",
+      "noMatches": "条件に一致する会話はありません"
     },
     "showMore": "さらに {{count}} 件を表示"
   },

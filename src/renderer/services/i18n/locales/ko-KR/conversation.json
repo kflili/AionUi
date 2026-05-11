@@ -84,7 +84,8 @@
       "openMobileSheet": "필터",
       "sheetTitle": "대화 필터링",
       "reset": "초기화",
-      "applyDone": "완료"
+      "applyDone": "완료",
+      "noMatches": "필터와 일치하는 대화가 없습니다"
     },
     "showMore": "{{count}}개 더 보기"
   },
