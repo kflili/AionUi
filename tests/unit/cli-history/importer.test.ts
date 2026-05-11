@@ -1168,6 +1168,57 @@ describe('hydrateSession (Phase 2)', () => {
     expect(fifth.status).toBe('cached');
     expect(insertMessagesSpy).not.toHaveBeenCalled();
   });
+
+  it('does not coalesce concurrent hydrations for the same conversation with DIFFERENT showThinking', async () => {
+    // If A (false) and B (true) both ran via the same in-flight promise, B's
+    // promise would resolve with A's message set — wrong variant for B. The
+    // in-flight key must include showThinking so each caller gets the variant
+    // it asked for.
+    seedImportedRow({ id: 'conv-1' });
+    const reads: boolean[] = [];
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: async () => {
+        reads.push(true);
+        return CLAUDE_USER_LINE('hi');
+      },
+    });
+
+    const [aResult, bResult] = await Promise.all([
+      hydrateSession('conv-1', { showThinking: false }),
+      hydrateSession('conv-1', { showThinking: true }),
+    ]);
+    expect(aResult.status).toBe('hydrated');
+    expect(bResult.status).toBe('hydrated');
+    // Two separate runs — two file reads, two insert calls.
+    expect(reads.length).toBe(2);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it('still coalesces concurrent hydrations for the same conversation with the SAME showThinking', async () => {
+    // Reaffirms the original coalescing contract: matching options still share one pass.
+    seedImportedRow({ id: 'conv-1' });
+    let resolveRead: ((value: string) => void) | undefined;
+    let readCalls = 0;
+    __setFileIoForTests({
+      statMtimeMs: async () => 5000,
+      readJsonl: () =>
+        new Promise<string | null>((resolve) => {
+          readCalls++;
+          resolveRead = (val) => resolve(val);
+        }),
+    });
+
+    const p1 = hydrateSession('conv-1', { showThinking: true });
+    const p2 = hydrateSession('conv-1', { showThinking: true });
+    expect(p1).toBe(p2);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(readCalls).toBe(1);
+    resolveRead!(CLAUDE_USER_LINE('only-one'));
+    const [r1, r2] = await Promise.all([p1, p2]);
+    expect(r1).toBe(r2);
+    expect(insertMessagesSpy).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -754,12 +754,22 @@ function upgradeTitleFromFirstUserMessage(conv: TChatConversation, messages: TMe
 }
 
 /**
- * In-flight hydration promises keyed by `conversationId`. Two concurrent
- * callers (e.g. an open-triggered hydration + an export-triggered one)
- * share a single read+parse+insert pass. Entry is cleared in `finally`
- * so the next caller starts fresh.
+ * In-flight hydration promises keyed by `(conversationId, normalizedShowThinking)`.
+ * Two concurrent callers for the same conversation with the SAME requested
+ * `showThinking` value (after normalizing `undefined`→`false`) share a single
+ * read+parse+insert pass. Callers with DIFFERENT requested values do NOT
+ * coalesce — joining the wrong in-flight pass would resolve the late caller's
+ * promise with messages produced under the other variant, leaving SQLite in
+ * a state that contradicts the late caller's request. Entry is cleared in
+ * `finally` so the next caller starts fresh.
  */
 const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
+
+function hydrationKey(conversationId: string, showThinking: boolean | undefined): string {
+  // Treat `undefined` and `false` as equivalent (both → the converter's default).
+  const normalized = showThinking === true ? 't' : 'f';
+  return `${conversationId}:${normalized}`;
+}
 
 /**
  * Hydrate an imported session's transcript on demand. Reads the conversation
@@ -768,15 +778,15 @@ const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
  * `messages` rows inside a single SQLite transaction. Phase-2 title
  * upgrade runs when the row was Phase-1-imported with a generic name.
  *
- * Concurrent callers for the same `conversationId` share one in-flight
- * promise via `inFlightHydrate`. The first caller's `options.showThinking`
- * value wins for the duration of the in-flight pass — subsequent callers
- * receive that result. After the in-flight pass settles, a new caller with
- * a different `showThinking` value invalidates the cache (because the
- * stored variant ≠ the request's variant) and re-hydrates so SQLite
- * reflects the requested variant. Item 3's render-time filter remains
- * the cleaner long-term path — at that point this cache key can drop the
- * `showThinking` axis entirely.
+ * Concurrent callers for the same `conversationId` and the same requested
+ * `showThinking` (after normalizing `undefined`→`false`) share one in-flight
+ * promise via `inFlightHydrate`. Callers with a different requested value
+ * do NOT coalesce — they run a separate hydration pass so each caller's
+ * promise reflects the variant it asked for. The cache predicate then
+ * invalidates the previous variant's SQLite state. Item 3's render-time
+ * filter remains the cleaner long-term path — at that point the
+ * `showThinking` axis can drop from both the cache key and the in-flight
+ * key.
  *
  * Hydration does NOT enqueue onto the per-source `operationChain` —
  * hydration is per-conversation, scan / disable / reenable are per-source.
@@ -790,15 +800,16 @@ const inFlightHydrate: Map<string, Promise<HydrateResult>> = new Map();
  * 'source_missing' }`.
  */
 export function hydrateSession(conversationId: string, options?: ConverterOptions): Promise<HydrateResult> {
-  const existing = inFlightHydrate.get(conversationId);
+  const key = hydrationKey(conversationId, options?.showThinking);
+  const existing = inFlightHydrate.get(key);
   if (existing) return existing;
 
   const promise = runHydrate(conversationId, options ?? {}).finally(() => {
-    if (inFlightHydrate.get(conversationId) === promise) {
-      inFlightHydrate.delete(conversationId);
+    if (inFlightHydrate.get(key) === promise) {
+      inFlightHydrate.delete(key);
     }
   });
-  inFlightHydrate.set(conversationId, promise);
+  inFlightHydrate.set(key, promise);
   return promise;
 }
 
