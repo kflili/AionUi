@@ -12,6 +12,12 @@ export type WorkspaceGroup = {
   conversations: TChatConversation[];
 };
 
+export type SectionTimelineKey =
+  | 'conversation.history.today'
+  | 'conversation.history.yesterday'
+  | 'conversation.history.recent7Days'
+  | 'conversation.history.earlier';
+
 export type TimelineItem = {
   type: 'workspace' | 'conversation';
   time: number;
@@ -21,6 +27,7 @@ export type TimelineItem = {
 
 export type TimelineSection = {
   timeline: string;
+  timelineKey: SectionTimelineKey;
   items: TimelineItem[];
 };
 

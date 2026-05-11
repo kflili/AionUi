@@ -289,6 +289,7 @@ export type I18nKey =
   | 'conversation.history.saveName'
   | 'conversation.history.selectAll'
   | 'conversation.history.selectedCount'
+  | 'conversation.history.showMore'
   | 'conversation.history.source.claudeCode'
   | 'conversation.history.source.copilot'
   | 'conversation.history.today'

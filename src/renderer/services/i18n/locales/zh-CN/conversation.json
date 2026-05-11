@@ -72,7 +72,8 @@
     "source": {
       "claudeCode": "从 Claude Code 导入",
       "copilot": "从 Copilot 导入"
-    }
+    },
+    "showMore": "再显示 {{count}} 条"
   },
   "historySearch": {
     "tooltip": "检索会话",

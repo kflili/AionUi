@@ -72,7 +72,8 @@
     "source": {
       "claudeCode": "Claude Code'tan içe aktarıldı",
       "copilot": "Copilot'tan içe aktarıldı"
-    }
+    },
+    "showMore": "{{count}} tane daha göster"
   },
   "historySearch": {
     "tooltip": "Mesajları ara",

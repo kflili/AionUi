@@ -72,7 +72,8 @@
     "source": {
       "claudeCode": "從 Claude Code 匯入",
       "copilot": "從 Copilot 匯入"
-    }
+    },
+    "showMore": "再顯示 {{count}} 項"
   },
   "historySearch": {
     "tooltip": "搜尋訊息",
