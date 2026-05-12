@@ -51,8 +51,13 @@ async function withTempHome(): Promise<{ home: string; projectDir: string; resto
     projectDir,
     restore: () => {
       spy.mockRestore();
-      // Best-effort cleanup; ignore failures (other tests may already have torn down).
-      fs.rmSync(home, { recursive: true, force: true });
+      // Best-effort cleanup; ignore failures (e.g. Windows permission/EBUSY when
+      // a still-open file handle blocks the rmtree).
+      try {
+        fs.rmSync(home, { recursive: true, force: true });
+      } catch {
+        // Intentionally swallowed — teardown is non-critical.
+      }
     },
   };
 }
@@ -168,6 +173,61 @@ describe('synthesizeFromJsonl', () => {
     expect(meta!.firstPrompt).toBe('hello');
     expect(meta!.title).toBe('done');
     expect(meta!.messageCount).toBe(3);
+  });
+
+  it('extracts firstPrompt from an array of content blocks (text block wins, tool_result ignored)', async () => {
+    const jsonlPath = path.join(tmp.projectDir, `${UUID_A}.jsonl`);
+    // Claude Code uses the array form when prior assistant turns produced
+    // tool calls — the user line then carries tool_result blocks alongside
+    // any inline text the user typed.
+    const userArrayLine = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [
+          { type: 'tool_result', tool_use_id: 't1', content: 'output', is_error: false },
+          { type: 'text', text: 'continue please' },
+        ],
+      },
+    });
+    await fsPromises.writeFile(jsonlPath, userArrayLine + '\n');
+    const meta = await synthesizeFromJsonl(jsonlPath, UUID_A, tmp.projectDir);
+    expect(meta).not.toBeNull();
+    expect(meta!.firstPrompt).toBe('continue please');
+  });
+
+  it('returns empty firstPrompt when content array has only tool_result blocks (no text)', async () => {
+    const jsonlPath = path.join(tmp.projectDir, `${UUID_A}.jsonl`);
+    const toolOnlyLine = JSON.stringify({
+      type: 'user',
+      message: {
+        role: 'user',
+        content: [{ type: 'tool_result', tool_use_id: 't1', content: 'output', is_error: false }],
+      },
+    });
+    await fsPromises.writeFile(jsonlPath, toolOnlyLine + '\n');
+    const meta = await synthesizeFromJsonl(jsonlPath, UUID_A, tmp.projectDir);
+    expect(meta).not.toBeNull();
+    expect(meta!.firstPrompt).toBe('');
+    // Title falls back to sessionId (no summary, no prompt).
+    expect(meta!.title).toBe(UUID_A);
+  });
+
+  it('prefers JSONL `cwd` over the lossy decoded project-dir basename for workspace', async () => {
+    // The dir basename `-Users-test-Projects-demo` decodes to
+    // `/Users/test/Projects/demo`, but if the JSONL records the original
+    // workspace exactly (e.g. with literal hyphens that the encoding lost),
+    // we should prefer that.
+    const jsonlPath = path.join(tmp.projectDir, `${UUID_A}.jsonl`);
+    const lineWithCwd = JSON.stringify({
+      type: 'user',
+      cwd: '/Users/lili/Projects/claude-toolkit',
+      message: { role: 'user', content: 'hi' },
+    });
+    await fsPromises.writeFile(jsonlPath, lineWithCwd + '\n');
+    const meta = await synthesizeFromJsonl(jsonlPath, UUID_A, tmp.projectDir);
+    expect(meta).not.toBeNull();
+    expect(meta!.workspace).toBe('/Users/lili/Projects/claude-toolkit');
   });
 });
 
@@ -301,6 +361,50 @@ describe('ClaudeCodeProvider.discoverSessions JSONL fallback', () => {
     expect(sessions.length).toBe(2);
   });
 
+  it('drops index entries whose fullPath no longer exists, allowing fallback to re-discover at new dir-layout location', async () => {
+    // The index claims UUID_C lives at `<projectDir>/UUID_C.jsonl`, but the
+    // file was moved (Claude Code reorganized to dir layout) and the actual
+    // transcript now lives at `<projectDir>/UUID_C/subagents/agent.jsonl`.
+    // Pre-fix behavior: the stale-index entry would block fallback discovery
+    // and the importer would keep pointing at the missing file. Post-fix:
+    // index pre-validates `fullPath`, drops the dead entry, and fallback
+    // re-discovers the session at its real location.
+    const ghostPath = path.join(tmp.projectDir, `${UUID_C}.jsonl`); // never written
+    const indexedEntry = {
+      sessionId: UUID_C,
+      fullPath: ghostPath,
+      fileMtime: 1,
+      firstPrompt: 'old',
+      summary: 'stale-index-summary',
+      messageCount: 1,
+      created: '2026-01-01T00:00:00.000Z',
+      modified: '2026-01-01T00:00:00.000Z',
+      gitBranch: '',
+      projectPath: '/Users/test/Projects/demo',
+      isSidechain: false,
+    };
+    await fsPromises.writeFile(
+      path.join(tmp.projectDir, 'sessions-index.json'),
+      JSON.stringify({ version: 1, entries: [indexedEntry], originalPath: '/Users/test/Projects/demo' })
+    );
+    // The session actually lives in the newer dir layout.
+    const realDir = path.join(tmp.projectDir, UUID_C, 'subagents');
+    await fsPromises.mkdir(realDir, { recursive: true });
+    const realPath = path.join(realDir, 'agent.jsonl');
+    await fsPromises.writeFile(realPath, [userLine('the real prompt'), summaryLine('real-summary')].join('\n') + '\n');
+
+    const provider = new ClaudeCodeProvider();
+    const sessions = await provider.discoverSessions();
+
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].id).toBe(UUID_C);
+    // The session's metadata must come from the FALLBACK-synthesized record,
+    // not the dropped stale index entry.
+    expect(sessions[0].title).toBe('real-summary');
+    expect(sessions[0].firstPrompt).toBe('the real prompt');
+    expect(provider.buildReference(UUID_C)).toBe(realPath);
+  });
+
   it('skips empty .jsonl files in the fallback pass', async () => {
     await fsPromises.writeFile(path.join(tmp.projectDir, `${UUID_A}.jsonl`), '');
     await fsPromises.writeFile(path.join(tmp.projectDir, `${UUID_B}.jsonl`), userLine('valid session'));
@@ -352,7 +456,11 @@ describe('ClaudeCodeProvider.discoverSessions JSONL fallback', () => {
       expect(sessions).toEqual([]);
     } finally {
       spy.mockRestore();
-      fs.rmSync(home, { recursive: true, force: true });
+      try {
+        fs.rmSync(home, { recursive: true, force: true });
+      } catch {
+        // Best-effort cleanup
+      }
       // Reinstate a fresh tmp for afterEach to tear down without error.
       tmp = await withTempHome();
     }

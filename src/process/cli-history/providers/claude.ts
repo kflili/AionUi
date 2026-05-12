@@ -167,9 +167,16 @@ export async function pickCanonicalJsonlInDir(sessionDir: string): Promise<strin
  * bounded by the longest line (not the file size — Claude Code session files
  * commonly run to many MB once they include verbose tool outputs). Extracts:
  *  - `firstPrompt`: first line where `type === 'user'` and `message.role === 'user'`
- *    with a string `content`
+ *    with either a string `content` OR an array containing a `{type:'text',text}`
+ *    block (Claude Code's user lines use the array form when tool results are
+ *    interleaved; we extract the first text block and ignore tool_result-only
+ *    blocks)
  *  - `summary`: latest line where `type === 'summary'` carries a string `summary`
  *    (we walk to EOF because newer summary lines override older ones)
+ *  - `cwd`: latest non-empty `cwd` field on any line — used as the workspace
+ *    when present (Claude Code records the originating directory exactly,
+ *    which avoids the lossy `decodeProjectPath` round-trip when the path
+ *    contains literal hyphens)
  *  - `messageCount`: count of non-empty lines
  *  - `createdAt` / `updatedAt`: file `birthtime` / `mtime` ISO strings
  *
@@ -190,6 +197,7 @@ export async function synthesizeFromJsonl(
 
   let firstPrompt = '';
   let summary = '';
+  let cwd = '';
   let parsedAny = false;
   let messageCount = 0;
 
@@ -219,10 +227,14 @@ export async function synthesizeFromJsonl(
       parsedAny = true;
       const obj = parsed as Record<string, unknown>;
 
+      if (typeof obj.cwd === 'string' && obj.cwd.length > 0) {
+        cwd = obj.cwd;
+      }
+
       if (!firstPrompt && obj.type === 'user') {
         const msg = obj.message as { role?: string; content?: unknown } | undefined;
-        if (msg && msg.role === 'user' && typeof msg.content === 'string') {
-          firstPrompt = msg.content;
+        if (msg && msg.role === 'user') {
+          firstPrompt = extractUserPromptText(msg.content);
         }
       }
       // Latest summary wins — keep overwriting as we walk forward.
@@ -244,6 +256,10 @@ export async function synthesizeFromJsonl(
   const titleSource = summary || firstPrompt || sessionId;
   const title = titleSource.length > 80 ? titleSource.slice(0, 80) : titleSource;
 
+  // Prefer the JSONL's own `cwd` for workspace — exact, not lossy. Fall back to
+  // the dir-basename decoder when no cwd was recorded (older transcripts).
+  const workspace = cwd || decodeProjectPath(path.basename(projectDir));
+
   return {
     id: sessionId,
     title,
@@ -252,9 +268,35 @@ export async function synthesizeFromJsonl(
     updatedAt: stat.mtime.toISOString(),
     messageCount,
     filePath,
-    workspace: decodeProjectPath(path.basename(projectDir)),
+    workspace,
     source: 'claude_code',
   };
+}
+
+/**
+ * Extract a plain-text user prompt from Claude Code's `message.content` field.
+ *
+ * Claude Code user lines store content in two shapes:
+ *  - String: `message.content === 'hello world'` (most common).
+ *  - Array of content blocks: `[{type:'text',text:'hi'}, {type:'tool_result',...}]`
+ *    (used when prior assistant turns produced tool calls; the user line then
+ *    interleaves tool_result blocks with any inline text the user typed).
+ *
+ * For title-extraction we want the first plain-text segment, ignoring
+ * tool_result blocks entirely. Returns the empty string when no usable text
+ * is found.
+ */
+function extractUserPromptText(content: unknown): string {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  for (const block of content) {
+    if (typeof block !== 'object' || block === null) continue;
+    const b = block as { type?: unknown; text?: unknown };
+    if (b.type === 'text' && typeof b.text === 'string' && b.text.length > 0) {
+      return b.text;
+    }
+  }
+  return '';
 }
 
 /**
@@ -291,19 +333,41 @@ export class ClaudeCodeProvider extends BaseSessionSourceProvider {
 
     const allSessions: SessionMetadata[] = [];
 
-    // Pass 1: index-based discovery (preserved verbatim from previous behavior).
-    for (const dir of projectDirs) {
-      const indexPath = path.join(dir, 'sessions-index.json');
-      try {
-        const raw = await fsPromises.readFile(indexPath, 'utf-8');
-        const index: ClaudeSessionIndex = JSON.parse(raw);
-
-        for (const entry of index.entries) {
-          this.sessionPaths.set(entry.sessionId, entry.fullPath);
-          allSessions.push(entryToMetadata(entry));
+    // Pass 1: index-based discovery (preserved verbatim from previous behavior),
+    // plus an existence check on each indexed `fullPath`. When the index points
+    // at a transcript that has been moved (e.g. Claude Code reorganized to the
+    // newer `<UUID>/...jsonl` directory layout), we drop the stale entry so
+    // pass 2 can re-discover the session at its current canonical location and
+    // give the importer a chance to refresh `sourceFilePath` via its update
+    // branch — which is exactly what fixes the click-through-unavailable rate
+    // for the existing 111 stale CC rows.
+    const indexedPathChecks = await Promise.all(
+      projectDirs.map(async (dir): Promise<ClaudeSessionIndexEntry[]> => {
+        const indexPath = path.join(dir, 'sessions-index.json');
+        let index: ClaudeSessionIndex;
+        try {
+          const raw = await fsPromises.readFile(indexPath, 'utf-8');
+          index = JSON.parse(raw);
+        } catch {
+          return [];
         }
-      } catch {
-        // No index file in this project directory or malformed JSON — skip silently
+        const validated = await Promise.all(
+          index.entries.map(async (entry) => {
+            try {
+              await fsPromises.access(entry.fullPath, fs.constants.R_OK);
+              return entry;
+            } catch {
+              return null;
+            }
+          })
+        );
+        return validated.filter((e): e is ClaudeSessionIndexEntry => e !== null);
+      })
+    );
+    for (const entries of indexedPathChecks) {
+      for (const entry of entries) {
+        this.sessionPaths.set(entry.sessionId, entry.fullPath);
+        allSessions.push(entryToMetadata(entry));
       }
     }
 
