@@ -200,7 +200,7 @@ export function buildAutoName(metadata: SessionMetadata, now: number = Date.now(
   return wsBase ? `${rel} · ${wsBase}` : rel;
 }
 
-type AcpImportedExtra = {
+interface AcpImportedExtra {
   backend: 'claude' | 'copilot';
   workspace: string;
   /**
@@ -210,8 +210,13 @@ type AcpImportedExtra = {
    * it, imported rows render as flat entries under each timeline section
    * regardless of the `workspace` value, which matches neither the user's
    * pre-importer expectation nor the design of the workspace-grouped sidebar.
+   *
+   * Set only when `workspace` is non-empty — providers that legitimately
+   * report no workspace (e.g. Copilot's `row.cwd || ''` when cwd is unknown)
+   * must not be flagged as custom-workspace, since the renderer treats this
+   * flag as a contract beyond just sidebar grouping (e.g. tab-open behavior).
    */
-  customWorkspace: boolean;
+  customWorkspace?: boolean;
   acpSessionId: string;
   acpSessionUpdatedAt: number;
   sourceFilePath: string;
@@ -226,7 +231,16 @@ type AcpImportedExtra = {
   };
   pinned?: boolean;
   pinnedAt?: number;
-};
+}
+
+/**
+ * True when the provider reported a usable workspace path. Drives whether the
+ * imported row participates in sidebar workspace-grouping — see the
+ * `customWorkspace` field comment on `AcpImportedExtra`.
+ */
+function hasUsableWorkspace(workspace: string | undefined): boolean {
+  return typeof workspace === 'string' && workspace.trim().length > 0;
+}
 
 /**
  * Build the `TChatConversation` row for a freshly-discovered session, or an updated
@@ -254,7 +268,7 @@ export function buildConversationRow(
     const extra: AcpImportedExtra = {
       backend: SOURCE_TO_BACKEND[metadata.source],
       workspace: metadata.workspace,
-      customWorkspace: true,
+      customWorkspace: hasUsableWorkspace(metadata.workspace) ? true : undefined,
       acpSessionId: metadata.id,
       acpSessionUpdatedAt: updatedTs,
       sourceFilePath: metadata.filePath,
@@ -289,10 +303,13 @@ export function buildConversationRow(
     ...existingExtra,
     backend: SOURCE_TO_BACKEND[metadata.source],
     workspace: metadata.workspace,
-    // Backfill historical rows that pre-date the customWorkspace flag. Once
-    // the importer rewrites these on its next scan, the renderer's
-    // workspace-grouping path picks them up automatically.
-    customWorkspace: true,
+    // Backfill historical rows that pre-date the customWorkspace flag. Only
+    // set when the provider reports a usable workspace — sessions imported
+    // without one (e.g. Copilot's `cwd || ''`) must not be misclassified as
+    // custom-workspace conversations. Once the importer rewrites these on
+    // its next scan, the renderer's workspace-grouping path picks them up
+    // automatically.
+    customWorkspace: hasUsableWorkspace(metadata.workspace) ? true : existingExtra.customWorkspace,
     acpSessionId: metadata.id,
     acpSessionUpdatedAt: updatedTs,
     sourceFilePath: metadata.filePath,

@@ -390,6 +390,26 @@ describe('buildConversationRow', () => {
     const refreshed = buildConversationRow(meta({ firstPrompt: 'new' }), existing);
     expect((refreshed.extra as { customWorkspace?: boolean }).customWorkspace).toBe(true);
   });
+
+  it('does NOT set customWorkspace when the provider reports an empty workspace', () => {
+    // Copilot's CopilotProvider can map `row.cwd || ''` when cwd is unknown
+    // for an imported session. The renderer treats `customWorkspace` as a
+    // contract that goes beyond just sidebar grouping (e.g. tab/open behavior),
+    // so a session with no usable workspace must not be flagged.
+    const row = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'hi', workspace: '' }), undefined);
+    const extra = row.extra as { customWorkspace?: boolean; workspace?: string };
+    expect(extra.customWorkspace).toBeUndefined();
+    expect(extra.workspace).toBe('');
+  });
+
+  it('does NOT backfill customWorkspace on update when both old and new metadata have empty workspace', () => {
+    // Build a legacy row whose original workspace was empty and ensure rescan
+    // doesn't suddenly flip it to customWorkspace=true.
+    const existing = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'old', workspace: '' }), undefined);
+    expect((existing.extra as { customWorkspace?: boolean }).customWorkspace).toBeUndefined();
+    const refreshed = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'new', workspace: '' }), existing);
+    expect((refreshed.extra as { customWorkspace?: boolean }).customWorkspace).toBeUndefined();
+  });
 });
 
 // ---------------------------------------------------------------------------
