@@ -384,7 +384,17 @@ export class ClaudeCodeProvider extends BaseSessionSourceProvider {
         } catch {
           return [];
         }
+        // Defend against malformed-but-valid-JSON index files (e.g. an
+        // older Claude Code build that wrote `{ entries: null }` or
+        // `{ entries: {} }`). One corrupt index in one project dir must
+        // not abort discovery for every other project — return [] so
+        // the JSONL fallback can take over.
+        if (!index || !Array.isArray(index.entries)) return [];
         const validated = await mapWithConcurrency(index.entries, FS_CONCURRENCY, async (entry) => {
+          // Defensive shape check: drop entries lacking the two fields we rely on.
+          if (!entry || typeof entry.sessionId !== 'string' || typeof entry.fullPath !== 'string') {
+            return null;
+          }
           try {
             await fsPromises.access(entry.fullPath, fs.constants.R_OK);
             return entry;

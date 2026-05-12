@@ -405,6 +405,25 @@ describe('ClaudeCodeProvider.discoverSessions JSONL fallback', () => {
     expect(provider.buildReference(UUID_C)).toBe(realPath);
   });
 
+  it('tolerates malformed sessions-index.json (entries not an array) and falls through to JSONL discovery', async () => {
+    // Defense in depth: a malformed `entries` field in one project dir's
+    // index must NOT abort discovery for every other dir. Pre-fix the
+    // pre-validation `.map(entries)` would throw before the try/catch could
+    // swallow it, and `discoverSessions()` would reject globally.
+    await fsPromises.writeFile(
+      path.join(tmp.projectDir, 'sessions-index.json'),
+      JSON.stringify({ version: 1, entries: null, originalPath: '/Users/test/Projects/demo' })
+    );
+    // Also drop a JSONL the fallback can pick up.
+    await fsPromises.writeFile(path.join(tmp.projectDir, `${UUID_A}.jsonl`), userLine('survives malformed index'));
+
+    const provider = new ClaudeCodeProvider();
+    const sessions = await provider.discoverSessions();
+    expect(sessions.length).toBe(1);
+    expect(sessions[0].id).toBe(UUID_A);
+    expect(sessions[0].firstPrompt).toBe('survives malformed index');
+  });
+
   it('skips empty .jsonl files in the fallback pass', async () => {
     await fsPromises.writeFile(path.join(tmp.projectDir, `${UUID_A}.jsonl`), '');
     await fsPromises.writeFile(path.join(tmp.projectDir, `${UUID_B}.jsonl`), userLine('valid session'));
