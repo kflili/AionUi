@@ -345,6 +345,51 @@ describe('buildConversationRow', () => {
     expect(extra.importMeta.autoNamed).toBe(false);
     expect(extra.importMeta.generatedName).toBe('old prompt · demo-project'); // not advanced
   });
+
+  it('sets extra.customWorkspace=true on fresh rows so the sidebar groups them by workspace', () => {
+    // The renderer's `groupingHelpers.ts` gates workspace-section rendering on
+    // `customWorkspace && workspace`. Without this flag, every imported row
+    // falls through to the flat `withoutWorkspaceConvs` bucket and renders as
+    // an ungrouped row under each timeline section — regression vs. native
+    // AionUi rows which set this via createConversationParams.ts.
+    const row = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'hello' }), undefined);
+    const extra = row.extra as { customWorkspace?: boolean; workspace?: string };
+    expect(extra.customWorkspace).toBe(true);
+    expect(extra.workspace).toBe('/Users/x/projects/demo-project');
+  });
+
+  it('backfills customWorkspace=true on rescan of an existing row that lacks it (pre-fix DB rows)', () => {
+    // Construct an existing row by hand without the customWorkspace flag —
+    // mirrors the 731 historical rows imported before this fix landed.
+    const existing = {
+      id: 'row-1',
+      type: 'acp' as const,
+      name: 'old · demo-project',
+      createTime: 1,
+      modifyTime: 1,
+      source: 'claude_code' as const,
+      extra: {
+        backend: 'claude' as const,
+        workspace: '/Users/x/projects/demo-project',
+        // customWorkspace deliberately omitted (legacy row)
+        acpSessionId: 'sess-A',
+        acpSessionUpdatedAt: 1,
+        sourceFilePath: '/tmp/sess-A.jsonl',
+        importMeta: { autoNamed: true, generatedName: 'old · demo-project', hidden: false },
+        pinned: false,
+      },
+    } as unknown as TChatConversation;
+    const refreshed = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'new' }), existing);
+    const extra = refreshed.extra as { customWorkspace?: boolean };
+    expect(extra.customWorkspace).toBe(true);
+  });
+
+  it('preserves customWorkspace=true on rescan of an already-flagged row (no flicker)', () => {
+    const existing = buildConversationRow(meta({ firstPrompt: 'old' }), undefined);
+    expect((existing.extra as { customWorkspace?: boolean }).customWorkspace).toBe(true);
+    const refreshed = buildConversationRow(meta({ firstPrompt: 'new' }), existing);
+    expect((refreshed.extra as { customWorkspace?: boolean }).customWorkspace).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------

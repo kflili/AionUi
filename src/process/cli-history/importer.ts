@@ -203,6 +203,15 @@ export function buildAutoName(metadata: SessionMetadata, now: number = Date.now(
 type AcpImportedExtra = {
   backend: 'claude' | 'copilot';
   workspace: string;
+  /**
+   * Marks the row as participating in workspace-grouping in the sidebar
+   * (see `groupingHelpers.ts`'s `customWorkspace && workspace` gate). Native
+   * AionUi conversations set this via `createConversationParams.ts`; without
+   * it, imported rows render as flat entries under each timeline section
+   * regardless of the `workspace` value, which matches neither the user's
+   * pre-importer expectation nor the design of the workspace-grouped sidebar.
+   */
+  customWorkspace: boolean;
   acpSessionId: string;
   acpSessionUpdatedAt: number;
   sourceFilePath: string;
@@ -245,6 +254,7 @@ export function buildConversationRow(
     const extra: AcpImportedExtra = {
       backend: SOURCE_TO_BACKEND[metadata.source],
       workspace: metadata.workspace,
+      customWorkspace: true,
       acpSessionId: metadata.id,
       acpSessionUpdatedAt: updatedTs,
       sourceFilePath: metadata.filePath,
@@ -279,6 +289,10 @@ export function buildConversationRow(
     ...existingExtra,
     backend: SOURCE_TO_BACKEND[metadata.source],
     workspace: metadata.workspace,
+    // Backfill historical rows that pre-date the customWorkspace flag. Once
+    // the importer rewrites these on its next scan, the renderer's
+    // workspace-grouping path picks them up automatically.
+    customWorkspace: true,
     acpSessionId: metadata.id,
     acpSessionUpdatedAt: updatedTs,
     sourceFilePath: metadata.filePath,
