@@ -228,6 +228,20 @@ interface AcpImportedExtra {
     autoNamed: boolean;
     generatedName?: string;
     hidden?: boolean;
+    /**
+     * Result of the post-scan availability sweep (`runAvailabilitySweep`).
+     * `true` = `sourceFilePath` exists on disk as of the latest importer cycle;
+     * `false` = sweep confirmed the file is gone (Copilot's `~/.copilot/session-state/<uuid>/`
+     * pruning is the canonical example — Bug 3b). `undefined` on pre-sweep rows
+     * means "unknown — treat as available" so the user-facing surface only
+     * dims a row when we have positive evidence the source is gone.
+     *
+     * Refreshed once per importer cycle, NOT per render. Renderer reads the
+     * persisted flag as a static property of the row (no live FS probing).
+     * `modifyTime` is preserved across flag flips so the sidebar timeline does
+     * not reorder when sources rotate.
+     */
+    sourceAvailable?: boolean;
   };
   pinned?: boolean;
   pinnedAt?: number;
@@ -277,6 +291,10 @@ export function buildConversationRow(
         autoNamed: true,
         generatedName,
         hidden: false,
+        // The provider just discovered the session by reading the source on disk,
+        // so we know `sourceFilePath` was reachable at scan time. The sweep refines
+        // this later for rows whose source rotates between scans.
+        sourceAvailable: true,
       },
       pinned: false,
     };
@@ -321,6 +339,11 @@ export function buildConversationRow(
       autoNamed: wasAutoNamed,
       generatedName: wasAutoNamed ? generatedName : existingExtra.importMeta?.generatedName,
       hidden: existingExtra.importMeta?.hidden ?? false,
+      // Re-discovery proves the provider reached the source again on this scan,
+      // so flip availability back to true. This is how Bug 3a's CC refresh
+      // flow (PR #28's JSONL fallback) clears a stale `sourceAvailable: false`
+      // that an earlier sweep had set on the now-superseded path.
+      sourceAvailable: true,
     },
   };
 
@@ -392,70 +415,156 @@ async function runDiscoverAndImport(source: SessionSourceId): Promise<ImportResu
     return result;
   }
 
-  if (discovered.length === 0) {
-    return result;
-  }
-
-  const db = getDatabase();
-  const existingResult = db.getImportedConversationsIncludingHidden([source]);
-  if (!existingResult.success) {
-    result.errors.push({ sessionId: '', message: existingResult.error ?? 'Failed to read existing imported rows' });
-    return result;
-  }
-  const existingRows = existingResult.data ?? [];
-
-  // Build dedup index. Index by both keys so a session whose acpSessionId is set
-  // can still be matched if a previous import only had sourceFilePath.
-  const byKey = new Map<string, TChatConversation>();
-  for (const row of existingRows) {
-    const extra = (row.extra ?? {}) as Partial<AcpImportedExtra>;
-    if (extra.acpSessionId) byKey.set(`${source}::id:${extra.acpSessionId}`, row);
-    if (extra.sourceFilePath) byKey.set(`${source}::path:${extra.sourceFilePath}`, row);
-  }
-
-  for (const metadata of discovered) {
-    try {
-      const idKey = `${source}::id:${metadata.id}`;
-      const pathKey = `${source}::path:${metadata.filePath}`;
-      const existingRow = byKey.get(idKey) ?? byKey.get(pathKey);
-
-      if (existingRow) {
-        const updated = buildConversationRow(metadata, existingRow);
-        if (rowsEqualForImporter(existingRow, updated)) {
-          result.skipped++;
-          continue;
-        }
-        const writeResult = db.updateImportedConversation(updated);
-        if (writeResult.success) {
-          result.updated++;
-          emitConversationListChanged(updated, 'updated');
-        } else {
-          result.errors.push({ sessionId: metadata.id, message: writeResult.error ?? 'Unknown database error' });
-        }
-      } else {
-        const created = buildConversationRow(metadata, undefined);
-        const writeResult = db.createConversation(created);
-        if (writeResult.success) {
-          result.imported++;
-          emitConversationListChanged(created, 'created');
-          // Update local dedup index so a duplicate entry in the same scan does not
-          // produce a second row.
-          const createdExtra = (created.extra ?? {}) as Partial<AcpImportedExtra>;
-          if (createdExtra.acpSessionId) byKey.set(`${source}::id:${createdExtra.acpSessionId}`, created);
-          if (createdExtra.sourceFilePath) byKey.set(`${source}::path:${createdExtra.sourceFilePath}`, created);
-        } else {
-          result.errors.push({ sessionId: metadata.id, message: writeResult.error ?? 'Unknown database error' });
-        }
-      }
-    } catch (err) {
+  // NOTE: even if `discovered.length === 0` (provider returned no sessions
+  // this cycle), the availability sweep below still needs to run — Bug 3b's
+  // pruning scenario is precisely "no new sessions but old rows' files
+  // rotated out". Fall through so the sweep stats every imported row.
+  if (discovered.length > 0) {
+    const db = getDatabase();
+    const existingResult = db.getImportedConversationsIncludingHidden([source]);
+    if (!existingResult.success) {
       result.errors.push({
-        sessionId: metadata.id,
-        message: err instanceof Error ? err.message : String(err),
+        sessionId: '',
+        message: existingResult.error ?? 'Failed to read existing imported rows',
       });
+      return result;
+    }
+    const existingRows = existingResult.data ?? [];
+
+    // Build dedup index. Index by both keys so a session whose acpSessionId is set
+    // can still be matched if a previous import only had sourceFilePath.
+    const byKey = new Map<string, TChatConversation>();
+    for (const row of existingRows) {
+      const extra = (row.extra ?? {}) as Partial<AcpImportedExtra>;
+      if (extra.acpSessionId) byKey.set(`${source}::id:${extra.acpSessionId}`, row);
+      if (extra.sourceFilePath) byKey.set(`${source}::path:${extra.sourceFilePath}`, row);
+    }
+
+    for (const metadata of discovered) {
+      try {
+        const idKey = `${source}::id:${metadata.id}`;
+        const pathKey = `${source}::path:${metadata.filePath}`;
+        const existingRow = byKey.get(idKey) ?? byKey.get(pathKey);
+
+        if (existingRow) {
+          const updated = buildConversationRow(metadata, existingRow);
+          if (rowsEqualForImporter(existingRow, updated)) {
+            result.skipped++;
+            continue;
+          }
+          const writeResult = db.updateImportedConversation(updated);
+          if (writeResult.success) {
+            result.updated++;
+            emitConversationListChanged(updated, 'updated');
+          } else {
+            result.errors.push({
+              sessionId: metadata.id,
+              message: writeResult.error ?? 'Unknown database error',
+            });
+          }
+        } else {
+          const created = buildConversationRow(metadata, undefined);
+          const writeResult = db.createConversation(created);
+          if (writeResult.success) {
+            result.imported++;
+            emitConversationListChanged(created, 'created');
+            // Update local dedup index so a duplicate entry in the same scan does not
+            // produce a second row.
+            const createdExtra = (created.extra ?? {}) as Partial<AcpImportedExtra>;
+            if (createdExtra.acpSessionId) byKey.set(`${source}::id:${createdExtra.acpSessionId}`, created);
+            if (createdExtra.sourceFilePath) byKey.set(`${source}::path:${createdExtra.sourceFilePath}`, created);
+          } else {
+            result.errors.push({
+              sessionId: metadata.id,
+              message: writeResult.error ?? 'Unknown database error',
+            });
+          }
+        }
+      } catch (err) {
+        result.errors.push({
+          sessionId: metadata.id,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
     }
   }
 
+  // Post-scan availability sweep. The discovery + upsert loop above only touches
+  // rows whose source was re-discovered on this cycle. Rows whose source rotated
+  // out between cycles (Copilot's `~/.copilot/session-state/<uuid>/` pruning is
+  // the canonical example — Bug 3b) would otherwise keep `sourceAvailable: true`
+  // until the next click surfaced the "Transcript unavailable" empty state.
+  // Sweep after discovery so a row whose path just got refreshed (Bug 3a's CC
+  // fallback) is statted at its NEW path, not the stale one.
+  await runAvailabilitySweep(source, result);
+
   return result;
+}
+
+/**
+ * Stat every imported row's `sourceFilePath` and flip `extra.importMeta.sourceAvailable`
+ * when the on-disk state has changed since the last sweep. Preserves `modifyTime`,
+ * `name`, `pinned`, and every other user-owned field — only `sourceAvailable` moves.
+ *
+ * Hidden rows are skipped: a soft-disabled source should not generate sidebar churn
+ * from availability sweeps. Rows without a `sourceFilePath` are skipped: there is
+ * nothing to stat.
+ *
+ * Errors are collected into the supplied `ImportResult.errors` (rather than thrown
+ * or returned separately) so the IPC caller surfaces a single combined error list.
+ */
+async function runAvailabilitySweep(source: SessionSourceId, result: ImportResult): Promise<void> {
+  const db = getDatabase();
+  const listResult = db.getImportedConversationsIncludingHidden([source]);
+  if (!listResult.success) {
+    result.errors.push({
+      sessionId: '',
+      message: `Availability sweep failed to read rows: ${listResult.error ?? 'unknown error'}`,
+    });
+    return;
+  }
+  const rows = listResult.data ?? [];
+  for (const row of rows) {
+    const extra = (row.extra ?? {}) as Partial<AcpImportedExtra>;
+    if (!extra.importMeta) continue;
+    if (extra.importMeta.hidden === true) continue;
+    if (typeof extra.sourceFilePath !== 'string' || extra.sourceFilePath.length === 0) continue;
+    let mtimeMs: number | null;
+    try {
+      mtimeMs = await fileIo.statMtimeMs(extra.sourceFilePath);
+    } catch (err) {
+      result.errors.push({
+        sessionId: extra.acpSessionId ?? row.id,
+        message: `Availability stat threw: ${err instanceof Error ? err.message : String(err)}`,
+      });
+      continue;
+    }
+    const computed = mtimeMs !== null;
+    if (extra.importMeta.sourceAvailable === computed) continue;
+    // Restate `modifyTime` from the spread to make the contract explicit: unlike
+    // `db.updateConversation` which force-stamps `Date.now()`, the sweep MUST keep
+    // the existing modifyTime so a rotation flip does not reorder the timeline.
+    const updated: TChatConversation = {
+      ...row,
+      modifyTime: row.modifyTime,
+      extra: {
+        ...extra,
+        importMeta: {
+          ...extra.importMeta,
+          sourceAvailable: computed,
+        },
+      },
+    } as unknown as TChatConversation;
+    const writeResult = db.updateImportedConversation(updated);
+    if (writeResult.success) {
+      emitConversationListChanged(updated, 'updated');
+    } else {
+      result.errors.push({
+        sessionId: extra.acpSessionId ?? row.id,
+        message: writeResult.error ?? 'Failed to update sourceAvailable',
+      });
+    }
+  }
 }
 
 /**

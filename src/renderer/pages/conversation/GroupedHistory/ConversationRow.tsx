@@ -12,7 +12,7 @@ import { CronJobIndicator } from '@/renderer/pages/cron';
 import { cleanupSiderTooltips, getSiderTooltipProps } from '@/renderer/utils/ui/siderTooltip';
 import { useLayoutContext } from '@/renderer/hooks/context/LayoutContext';
 import { Checkbox, Dropdown, Menu, Spin, Tooltip } from '@arco-design/web-react';
-import { Copy, DeleteOne, EditOne, Export, MessageOne, Pushpin } from '@icon-park/react';
+import { Copy, DeleteOne, EditOne, Export, LinkBreak, MessageOne, Pushpin } from '@icon-park/react';
 import classNames from 'classnames';
 import React from 'react';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,23 @@ import type { ConversationRowProps } from './types';
 import { getBackendKeyFromConversation } from './utils/exportHelpers';
 import { isConversationPinned } from './utils/groupingHelpers';
 import SourceBadge from './parts/SourceBadge';
+
+/**
+ * Read `extra.importMeta.sourceAvailable` defensively. Returns `true` only when
+ * the importer's post-scan availability sweep has positively confirmed the
+ * source file is gone (Copilot's `~/.copilot/session-state/<uuid>/` rotation
+ * is the canonical case — Bug 3b). `undefined` and missing values fall back
+ * to "available" so pre-sweep rows from older app versions stay visually
+ * intact. Exported for the matching DOM test in `tests/unit/cli-history/`.
+ */
+export function isSourceRotated(conversation: TChatConversation | undefined | null): boolean {
+  if (!conversation) return false;
+  const extra = conversation.extra && typeof conversation.extra === 'object' ? conversation.extra : null;
+  if (!extra) return false;
+  const importMeta = (extra as Record<string, unknown>).importMeta;
+  if (!importMeta || typeof importMeta !== 'object') return false;
+  return (importMeta as Record<string, unknown>).sourceAvailable === false;
+}
 
 const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const {
@@ -57,6 +74,13 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
   const showCompletionUnreadDot = !batchMode && hasCompletionUnread && !isGenerating;
   const hideSourceBadgeForActions = !batchMode && (isMobile || isPinned || menuVisible);
   const hideSourceBadgeOnHover = !batchMode && !hideSourceBadgeForActions;
+  // Per-row "source rotated" affordance. The flag is written by the importer's
+  // post-scan availability sweep (importer.ts `runAvailabilitySweep`), NOT by
+  // a live fs probe at render time. Rotated rows stay visible so the user
+  // can still pin / rename / delete them; the icon + dimmed text set the
+  // expectation that opening will land on the existing "Transcript unavailable"
+  // state in `TranscriptView`.
+  const rotated = isSourceRotated(conversation);
 
   const renderLeadingIcon = () => {
     if (cronStatus !== 'none') {
@@ -148,13 +172,37 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             <div
               className={classNames(
                 'chat-history__item-name overflow-hidden text-ellipsis block w-full text-14px lh-24px whitespace-nowrap min-w-0 group-hover:text-1',
-                selected && !batchMode ? 'text-1 font-medium' : 'text-2'
+                selected && !batchMode ? 'text-1 font-medium' : 'text-2',
+                // Dim the title when the importer's sweep flagged this row's
+                // source as gone; keeps the row scannable but signals at-a-glance
+                // that opening will hit `TranscriptView`'s `unavailable` state.
+                rotated && 'opacity-60'
               )}
+              data-source-rotated={rotated ? 'true' : undefined}
             >
               <span className='block overflow-hidden text-ellipsis whitespace-nowrap'>{conversation.name}</span>
             </div>
           </Tooltip>
         </FlexFullContainer>
+
+        {rotated && (
+          <Tooltip content={t('conversation.history.sourceRotated.tooltip')} position='top'>
+            <span
+              className={classNames(
+                'flex-shrink-0 collapsed-hidden mr-4px text-t-secondary flex items-center',
+                // Hide the rotated icon when the row's action gradient takes over the
+                // right edge (pinned / menu open / mobile). The action overlay needs
+                // the space; the tooltip remains discoverable from the dimmed title.
+                hideSourceBadgeForActions && 'hidden',
+                hideSourceBadgeOnHover && 'group-hover:invisible'
+              )}
+              data-testid='conversation-source-rotated'
+              aria-label={t('conversation.history.sourceRotated.tooltip')}
+            >
+              <LinkBreak theme='outline' size='14' />
+            </span>
+          </Tooltip>
+        )}
 
         <SourceBadge
           source={conversation.source}
