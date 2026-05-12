@@ -200,9 +200,23 @@ export function buildAutoName(metadata: SessionMetadata, now: number = Date.now(
   return wsBase ? `${rel} · ${wsBase}` : rel;
 }
 
-type AcpImportedExtra = {
+interface AcpImportedExtra {
   backend: 'claude' | 'copilot';
   workspace: string;
+  /**
+   * Marks the row as participating in workspace-grouping in the sidebar
+   * (see `groupingHelpers.ts`'s `customWorkspace && workspace` gate). Native
+   * AionUi conversations set this via `createConversationParams.ts`; without
+   * it, imported rows render as flat entries under each timeline section
+   * regardless of the `workspace` value, which matches neither the user's
+   * pre-importer expectation nor the design of the workspace-grouped sidebar.
+   *
+   * Set only when `workspace` is non-empty — providers that legitimately
+   * report no workspace (e.g. Copilot's `row.cwd || ''` when cwd is unknown)
+   * must not be flagged as custom-workspace, since the renderer treats this
+   * flag as a contract beyond just sidebar grouping (e.g. tab-open behavior).
+   */
+  customWorkspace?: boolean;
   acpSessionId: string;
   acpSessionUpdatedAt: number;
   sourceFilePath: string;
@@ -217,7 +231,16 @@ type AcpImportedExtra = {
   };
   pinned?: boolean;
   pinnedAt?: number;
-};
+}
+
+/**
+ * True when the provider reported a usable workspace path. Drives whether the
+ * imported row participates in sidebar workspace-grouping — see the
+ * `customWorkspace` field comment on `AcpImportedExtra`.
+ */
+function hasUsableWorkspace(workspace: string | undefined): boolean {
+  return typeof workspace === 'string' && workspace.trim().length > 0;
+}
 
 /**
  * Build the `TChatConversation` row for a freshly-discovered session, or an updated
@@ -245,6 +268,7 @@ export function buildConversationRow(
     const extra: AcpImportedExtra = {
       backend: SOURCE_TO_BACKEND[metadata.source],
       workspace: metadata.workspace,
+      customWorkspace: hasUsableWorkspace(metadata.workspace) ? true : undefined,
       acpSessionId: metadata.id,
       acpSessionUpdatedAt: updatedTs,
       sourceFilePath: metadata.filePath,
@@ -279,6 +303,15 @@ export function buildConversationRow(
     ...existingExtra,
     backend: SOURCE_TO_BACKEND[metadata.source],
     workspace: metadata.workspace,
+    // Backfill historical rows that pre-date the customWorkspace flag, AND
+    // clear it on rescan when the workspace disappears (e.g. Copilot's
+    // `row.cwd || ''` returns empty for a previously-tagged session). The
+    // flag is a contract that goes beyond sidebar grouping — code paths like
+    // `ConversationTabsContext.openTab` and search-result clicks gate on
+    // `customWorkspace` alone, so a `customWorkspace=true` row with an empty
+    // workspace would mis-route. Mirror fresh-insert semantics so the flag
+    // is always derived from the current `workspace` value.
+    customWorkspace: hasUsableWorkspace(metadata.workspace) ? true : undefined,
     acpSessionId: metadata.id,
     acpSessionUpdatedAt: updatedTs,
     sourceFilePath: metadata.filePath,
