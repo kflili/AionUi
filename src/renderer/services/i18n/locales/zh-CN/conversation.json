@@ -75,6 +75,9 @@
       "claudeCode": "从 Claude Code 导入",
       "copilot": "从 Copilot 导入"
     },
+    "sourceRotated": {
+      "tooltip": "源文件已不在磁盘上 — CLI 已轮换或清理了该文件。打开时将无法显示对话记录。"
+    },
     "filter": {
       "allSources": "全部来源",
       "claudeCode": "Claude Code",

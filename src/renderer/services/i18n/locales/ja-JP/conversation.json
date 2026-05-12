@@ -75,6 +75,9 @@
       "claudeCode": "Claude Code からインポート",
       "copilot": "Copilot からインポート"
     },
+    "sourceRotated": {
+      "tooltip": "ソースファイルがディスク上に存在しません — CLI が削除またはローテーションしました。開いてもトランスクリプトは表示されません。"
+    },
     "filter": {
       "allSources": "すべて",
       "claudeCode": "Claude Code",

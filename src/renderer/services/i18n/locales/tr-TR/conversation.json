@@ -75,6 +75,9 @@
       "claudeCode": "Claude Code'tan içe aktarıldı",
       "copilot": "Copilot'tan içe aktarıldı"
     },
+    "sourceRotated": {
+      "tooltip": "Kaynak dosya artık diskte yok — CLI dosyayı arşivledi veya temizledi. Açıldığında transkript kullanılamayacak."
+    },
     "filter": {
       "allSources": "Tüm kaynaklar",
       "claudeCode": "Claude Code",
