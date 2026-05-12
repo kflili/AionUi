@@ -153,6 +153,22 @@ describe('synthesizeFromJsonl', () => {
     expect(meta!.firstPrompt).toBe('');
     expect(meta!.title).toBe(UUID_A);
   });
+
+  it('handles CRLF line endings correctly (newline normalization in stream reader)', async () => {
+    const jsonlPath = path.join(tmp.projectDir, `${UUID_A}.jsonl`);
+    // Write with explicit CRLF — Windows-written transcripts use this, and the
+    // readline interface must collapse `\r\n` into a single line event so the
+    // JSON.parse on each line doesn't see a trailing `\r`.
+    await fsPromises.writeFile(
+      jsonlPath,
+      [userLine('hello'), assistantLine('hi'), summaryLine('done')].join('\r\n') + '\r\n'
+    );
+    const meta = await synthesizeFromJsonl(jsonlPath, UUID_A, tmp.projectDir);
+    expect(meta).not.toBeNull();
+    expect(meta!.firstPrompt).toBe('hello');
+    expect(meta!.title).toBe('done');
+    expect(meta!.messageCount).toBe(3);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -201,6 +217,24 @@ describe('pickCanonicalJsonlInDir', () => {
     await fsPromises.writeFile(inSub, 'a'.repeat(100));
     await fsPromises.writeFile(outside, 'a'.repeat(100));
     expect(await pickCanonicalJsonlInDir(sessionDir)).toBe(outside);
+  });
+
+  it('does NOT mis-classify as "underSubagents" when an unrelated ancestor dir contains "subagents" in its name', async () => {
+    // Real-world scenario: the user has a subagents-archive parent, or any ancestor
+    // path component that contains the literal string "subagents". The previous
+    // `fullPath.includes('${sep}subagents${sep}')` substring check would mis-tag
+    // every file inside such a parent as `underSubagents=true` and incorrectly
+    // demote it on a tied size. The fix uses `path.relative(sessionDir, fullPath)`
+    // which only considers segments under the session dir.
+    const sessionDir = path.join(tmp.home, 'subagents-archive', 'projects', UUID_A);
+    await fsPromises.mkdir(sessionDir, { recursive: true });
+    const a = path.join(sessionDir, 'a.jsonl');
+    const b = path.join(sessionDir, 'b.jsonl');
+    await fsPromises.writeFile(a, 'a'.repeat(100));
+    await fsPromises.writeFile(b, 'a'.repeat(100));
+    // Both files have tied size and neither is under a `subagents/` SEGMENT
+    // relative to sessionDir, so the deterministic localeCompare tie-break wins.
+    expect(await pickCanonicalJsonlInDir(sessionDir)).toBe(a);
   });
 });
 

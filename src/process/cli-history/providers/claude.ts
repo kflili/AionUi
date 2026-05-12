@@ -4,9 +4,11 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import fs from 'fs';
 import fsPromises from 'fs/promises';
 import os from 'os';
 import path from 'path';
+import readline from 'readline';
 import type { SessionMetadata } from '../types';
 import { BaseSessionSourceProvider } from './base';
 
@@ -99,7 +101,11 @@ export function decodeProjectPath(dirBasename: string): string {
  */
 export async function pickCanonicalJsonlInDir(sessionDir: string): Promise<string | null> {
   type Candidate = { filePath: string; size: number; underSubagents: boolean };
-  const candidates: Candidate[] = [];
+
+  // First walk the tree synchronously to enumerate `.jsonl` paths, then stat
+  // them in parallel. Splitting these two phases keeps the recursion simple
+  // while still parallelizing the per-file fs calls.
+  const jsonlPaths: string[] = [];
 
   async function walk(dir: string): Promise<void> {
     let entries: import('fs').Dirent[];
@@ -108,27 +114,41 @@ export async function pickCanonicalJsonlInDir(sessionDir: string): Promise<strin
     } catch {
       return;
     }
+    const subWalks: Array<Promise<void>> = [];
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
-        await walk(fullPath);
+        subWalks.push(walk(fullPath));
         continue;
       }
-      if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
-      try {
-        const stat = await fsPromises.stat(fullPath);
-        candidates.push({
-          filePath: fullPath,
-          size: stat.size,
-          underSubagents: fullPath.includes(`${path.sep}subagents${path.sep}`),
-        });
-      } catch {
-        // Skip unreadable files
+      if (entry.isFile() && entry.name.endsWith('.jsonl')) {
+        jsonlPaths.push(fullPath);
       }
     }
+    await Promise.all(subWalks);
   }
 
   await walk(sessionDir);
+  if (jsonlPaths.length === 0) return null;
+
+  const candidates: Candidate[] = (
+    await Promise.all(
+      jsonlPaths.map(async (filePath): Promise<Candidate | null> => {
+        try {
+          const stat = await fsPromises.stat(filePath);
+          // Use path.relative + segment check rather than substring `includes`
+          // so an unrelated `subagents` ancestor in the absolute path can't
+          // mis-tag a file (e.g. `/Users/x/subagents-archive/...`).
+          const relSegments = path.relative(sessionDir, filePath).split(path.sep);
+          return { filePath, size: stat.size, underSubagents: relSegments.includes('subagents') };
+        } catch {
+          // Skip unreadable files
+          return null;
+        }
+      })
+    )
+  ).filter((c): c is Candidate => c !== null);
+
   if (candidates.length === 0) return null;
 
   candidates.sort((a, b) => {
@@ -143,10 +163,13 @@ export async function pickCanonicalJsonlInDir(sessionDir: string): Promise<strin
  * Synthesize SessionMetadata from a JSONL transcript file when the project
  * has no `sessions-index.json` (or the index is stale).
  *
- * Reads the file once, scans every non-empty line, and extracts:
+ * Streams the file line-by-line via a `readline` interface so memory stays
+ * bounded by the longest line (not the file size — Claude Code session files
+ * commonly run to many MB once they include verbose tool outputs). Extracts:
  *  - `firstPrompt`: first line where `type === 'user'` and `message.role === 'user'`
  *    with a string `content`
  *  - `summary`: latest line where `type === 'summary'` carries a string `summary`
+ *    (we walk to EOF because newer summary lines override older ones)
  *  - `messageCount`: count of non-empty lines
  *  - `createdAt` / `updatedAt`: file `birthtime` / `mtime` ISO strings
  *
@@ -165,41 +188,53 @@ export async function synthesizeFromJsonl(
   }
   if (stat.size === 0) return null;
 
-  let content: string;
-  try {
-    content = await fsPromises.readFile(filePath, 'utf-8');
-  } catch {
-    return null;
-  }
-
-  const lines = content.split('\n').filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return null;
-
   let firstPrompt = '';
   let summary = '';
   let parsedAny = false;
+  let messageCount = 0;
 
-  for (const line of lines) {
-    let parsed: unknown;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-    if (typeof parsed !== 'object' || parsed === null) continue;
-    parsedAny = true;
-    const obj = parsed as Record<string, unknown>;
+  let stream: fs.ReadStream;
+  try {
+    stream = fs.createReadStream(filePath, { encoding: 'utf-8' });
+  } catch {
+    return null;
+  }
+  // `crlfDelay: Infinity` so `\r\n`-terminated lines (Windows-written transcripts)
+  // are emitted as a single line event instead of two.
+  const rl = readline.createInterface({ input: stream, crlfDelay: Infinity });
 
-    if (!firstPrompt && obj.type === 'user') {
-      const msg = obj.message as { role?: string; content?: unknown } | undefined;
-      if (msg && msg.role === 'user' && typeof msg.content === 'string') {
-        firstPrompt = msg.content;
+  try {
+    for await (const rawLine of rl) {
+      const line = rawLine.trim();
+      if (line.length === 0) continue;
+      messageCount += 1;
+
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(line);
+      } catch {
+        continue;
+      }
+      if (typeof parsed !== 'object' || parsed === null) continue;
+      parsedAny = true;
+      const obj = parsed as Record<string, unknown>;
+
+      if (!firstPrompt && obj.type === 'user') {
+        const msg = obj.message as { role?: string; content?: unknown } | undefined;
+        if (msg && msg.role === 'user' && typeof msg.content === 'string') {
+          firstPrompt = msg.content;
+        }
+      }
+      // Latest summary wins — keep overwriting as we walk forward.
+      if (obj.type === 'summary' && typeof obj.summary === 'string') {
+        summary = obj.summary;
       }
     }
-    // Latest summary wins — keep overwriting as we walk forward.
-    if (obj.type === 'summary' && typeof obj.summary === 'string') {
-      summary = obj.summary;
-    }
+  } catch {
+    // Mid-stream read error — fall through with whatever we managed to parse.
+  } finally {
+    rl.close();
+    stream.destroy();
   }
 
   if (!parsedAny) return null;
@@ -215,7 +250,7 @@ export async function synthesizeFromJsonl(
     firstPrompt,
     createdAt: stat.birthtime.toISOString(),
     updatedAt: stat.mtime.toISOString(),
-    messageCount: lines.length,
+    messageCount,
     filePath,
     workspace: decodeProjectPath(path.basename(projectDir)),
     source: 'claude_code',
@@ -273,44 +308,79 @@ export class ClaudeCodeProvider extends BaseSessionSourceProvider {
     }
 
     // Pass 2: JSONL-fallback discovery for sessions absent from the index.
+    // Run per-project-dir scans in parallel — each project dir owns a disjoint
+    // set of session UUIDs, so there is no cross-dir mutation hazard. Within
+    // a single dir we still walk sub-passes (a) and (b) sequentially because
+    // they share the same `dirIndexed` dedup set.
     const indexedIds = new Set(allSessions.map((s) => s.id));
 
-    for (const dir of projectDirs) {
-      let entries: import('fs').Dirent[];
-      try {
-        entries = await fsPromises.readdir(dir, { withFileTypes: true });
-      } catch {
-        continue;
-      }
+    type FallbackHit = { sessionId: string; canonicalPath: string; meta: SessionMetadata };
 
-      // (a) Top-level `<UUID>.jsonl` files.
-      for (const entry of entries) {
-        if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
-        const sessionId = path.basename(entry.name, '.jsonl');
-        if (!UUID_RE.test(sessionId) || indexedIds.has(sessionId)) continue;
-        const fullPath = path.join(dir, entry.name);
-        const meta = await synthesizeFromJsonl(fullPath, sessionId, dir);
-        if (meta) {
-          this.sessionPaths.set(sessionId, fullPath);
-          allSessions.push(meta);
-          indexedIds.add(sessionId);
+    const perDirHits = await Promise.all(
+      projectDirs.map(async (dir): Promise<FallbackHit[]> => {
+        let entries: import('fs').Dirent[];
+        try {
+          entries = await fsPromises.readdir(dir, { withFileTypes: true });
+        } catch {
+          return [];
         }
-      }
 
-      // (b) Newer `<UUID>/...jsonl` directory layout.
-      for (const entry of entries) {
-        if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
-        const sessionId = entry.name;
+        const dirIndexed = new Set(indexedIds);
+        const hits: FallbackHit[] = [];
+
+        // (a) Top-level `<UUID>.jsonl` files. Synthesize in parallel; the
+        //     dedup against `dirIndexed` happens before the await, so a single
+        //     UUID is processed at most once per project dir.
+        const topLevelTasks: Array<Promise<FallbackHit | null>> = [];
+        for (const entry of entries) {
+          if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
+          const sessionId = path.basename(entry.name, '.jsonl');
+          if (!UUID_RE.test(sessionId) || dirIndexed.has(sessionId)) continue;
+          dirIndexed.add(sessionId);
+          const fullPath = path.join(dir, entry.name);
+          topLevelTasks.push(
+            synthesizeFromJsonl(fullPath, sessionId, dir).then((meta) =>
+              meta ? { sessionId, canonicalPath: fullPath, meta } : null
+            )
+          );
+        }
+        for (const hit of await Promise.all(topLevelTasks)) {
+          if (hit) hits.push(hit);
+        }
+
+        // (b) Newer `<UUID>/...jsonl` directory layout.
+        const dirTasks: Array<Promise<FallbackHit | null>> = [];
+        for (const entry of entries) {
+          if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
+          const sessionId = entry.name;
+          if (dirIndexed.has(sessionId)) continue;
+          dirIndexed.add(sessionId);
+          const sessionDir = path.join(dir, sessionId);
+          dirTasks.push(
+            (async (): Promise<FallbackHit | null> => {
+              const canonical = await pickCanonicalJsonlInDir(sessionDir);
+              if (!canonical) return null;
+              const meta = await synthesizeFromJsonl(canonical, sessionId, dir);
+              return meta ? { sessionId, canonicalPath: canonical, meta } : null;
+            })()
+          );
+        }
+        for (const hit of await Promise.all(dirTasks)) {
+          if (hit) hits.push(hit);
+        }
+
+        return hits;
+      })
+    );
+
+    for (const hits of perDirHits) {
+      for (const { sessionId, canonicalPath, meta } of hits) {
+        // Guard against cross-dir UUID collisions (vanishingly unlikely with
+        // proper UUIDs, but the contract is explicit: index pass wins).
         if (indexedIds.has(sessionId)) continue;
-        const sessionDir = path.join(dir, sessionId);
-        const canonical = await pickCanonicalJsonlInDir(sessionDir);
-        if (!canonical) continue;
-        const meta = await synthesizeFromJsonl(canonical, sessionId, dir);
-        if (meta) {
-          this.sessionPaths.set(sessionId, canonical);
-          allSessions.push(meta);
-          indexedIds.add(sessionId);
-        }
+        this.sessionPaths.set(sessionId, canonicalPath);
+        allSessions.push(meta);
+        indexedIds.add(sessionId);
       }
     }
 
