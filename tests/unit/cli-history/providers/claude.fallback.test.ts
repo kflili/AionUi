@@ -445,6 +445,49 @@ describe('ClaudeCodeProvider.discoverSessions JSONL fallback', () => {
     expect(provider.buildReference(UUID_C)).toBe(large);
   });
 
+  it('caps in-flight stream reads so a project dir with thousands of session files cannot exhaust file descriptors', async () => {
+    // Generate 200 distinct UUID sessions in a single project dir. The
+    // FS_CONCURRENCY limiter is hard-coded at 32, so we should never observe
+    // more than 32 concurrent in-flight reads regardless of how many sessions
+    // we throw at the discovery pass.
+    const writes: Array<Promise<void>> = [];
+    for (let i = 0; i < 200; i++) {
+      const uuid = `${i.toString(16).padStart(8, '0')}-aaaa-4aaa-aaaa-aaaaaaaaaaaa`;
+      writes.push(fsPromises.writeFile(path.join(tmp.projectDir, `${uuid}.jsonl`), userLine(`session-${i}`)));
+    }
+    await Promise.all(writes);
+
+    // Wrap fs.createReadStream so we can observe the in-flight count. The
+    // limiter contract: at most FS_CONCURRENCY (= 32) streams open at once.
+    const realCreate = fs.createReadStream;
+    let inFlight = 0;
+    let peak = 0;
+    const spy = vi.spyOn(fs, 'createReadStream').mockImplementation(((path: fs.PathLike, options?: unknown) => {
+      inFlight++;
+      if (inFlight > peak) peak = inFlight;
+      const stream = realCreate(path, options as Parameters<typeof realCreate>[1]);
+      const decrement = (): void => {
+        inFlight--;
+      };
+      stream.once('end', decrement);
+      stream.once('error', decrement);
+      stream.once('close', decrement);
+      return stream;
+    }) as unknown as typeof fs.createReadStream);
+
+    try {
+      const provider = new ClaudeCodeProvider();
+      const sessions = await provider.discoverSessions();
+      expect(sessions.length).toBe(200);
+      // Headroom: should be tightly bounded by the limiter (32). Allow a
+      // small slop for the close-event timing race (the decrement fires
+      // after the next stream has already incremented).
+      expect(peak).toBeLessThanOrEqual(40);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('returns an empty list when ~/.claude/projects/ does not exist', async () => {
     // Tear down the temp tree so the projects dir is missing.
     tmp.restore();

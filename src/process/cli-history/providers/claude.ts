@@ -43,6 +43,41 @@ type ClaudeSessionIndex = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Maximum number of `fs.createReadStream` / `fs.access` operations in flight
+ * concurrently during discovery. Caps file-descriptor usage so a project dir
+ * with 2000+ session files can't exhaust the process's FD limit (macOS default
+ * soft limit is 256). Picked conservatively well below that ceiling — the
+ * importer is bottlenecked by disk I/O, not CPU, so a higher value buys
+ * little.
+ */
+const FS_CONCURRENCY = 32;
+
+/**
+ * Like `Promise.all(items.map(fn))` but runs at most `limit` invocations of
+ * `fn` concurrently. Preserves input order in the result. Used to bound
+ * file-descriptor usage on the discovery hot path.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const effectiveLimit = Math.max(1, Math.min(limit, items.length));
+  const results: R[] = Array.from({ length: items.length });
+  let cursor = 0;
+  const workers = Array.from({ length: effectiveLimit }, async () => {
+    while (true) {
+      const i = cursor++;
+      if (i >= items.length) return;
+      results[i] = await fn(items[i], i);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+/**
  * Resolve the base directory for Claude Code session storage.
  * - macOS/Linux: ~/.claude/projects/
  * - Windows: %USERPROFILE%\.claude\projects\
@@ -132,21 +167,19 @@ export async function pickCanonicalJsonlInDir(sessionDir: string): Promise<strin
   if (jsonlPaths.length === 0) return null;
 
   const candidates: Candidate[] = (
-    await Promise.all(
-      jsonlPaths.map(async (filePath): Promise<Candidate | null> => {
-        try {
-          const stat = await fsPromises.stat(filePath);
-          // Use path.relative + segment check rather than substring `includes`
-          // so an unrelated `subagents` ancestor in the absolute path can't
-          // mis-tag a file (e.g. `/Users/x/subagents-archive/...`).
-          const relSegments = path.relative(sessionDir, filePath).split(path.sep);
-          return { filePath, size: stat.size, underSubagents: relSegments.includes('subagents') };
-        } catch {
-          // Skip unreadable files
-          return null;
-        }
-      })
-    )
+    await mapWithConcurrency(jsonlPaths, FS_CONCURRENCY, async (filePath): Promise<Candidate | null> => {
+      try {
+        const stat = await fsPromises.stat(filePath);
+        // Use path.relative + segment check rather than substring `includes`
+        // so an unrelated `subagents` ancestor in the absolute path can't
+        // mis-tag a file (e.g. `/Users/x/subagents-archive/...`).
+        const relSegments = path.relative(sessionDir, filePath).split(path.sep);
+        return { filePath, size: stat.size, underSubagents: relSegments.includes('subagents') };
+      } catch {
+        // Skip unreadable files
+        return null;
+      }
+    })
   ).filter((c): c is Candidate => c !== null);
 
   if (candidates.length === 0) return null;
@@ -351,16 +384,14 @@ export class ClaudeCodeProvider extends BaseSessionSourceProvider {
         } catch {
           return [];
         }
-        const validated = await Promise.all(
-          index.entries.map(async (entry) => {
-            try {
-              await fsPromises.access(entry.fullPath, fs.constants.R_OK);
-              return entry;
-            } catch {
-              return null;
-            }
-          })
-        );
+        const validated = await mapWithConcurrency(index.entries, FS_CONCURRENCY, async (entry) => {
+          try {
+            await fsPromises.access(entry.fullPath, fs.constants.R_OK);
+            return entry;
+          } catch {
+            return null;
+          }
+        });
         return validated.filter((e): e is ClaudeSessionIndexEntry => e !== null);
       })
     );
@@ -392,44 +423,45 @@ export class ClaudeCodeProvider extends BaseSessionSourceProvider {
         const dirIndexed = new Set(indexedIds);
         const hits: FallbackHit[] = [];
 
-        // (a) Top-level `<UUID>.jsonl` files. Synthesize in parallel; the
-        //     dedup against `dirIndexed` happens before the await, so a single
-        //     UUID is processed at most once per project dir.
-        const topLevelTasks: Array<Promise<FallbackHit | null>> = [];
+        // Collect candidate work items for both sub-passes BEFORE awaiting any
+        // I/O, so the dedup against `dirIndexed` is deterministic. Then run the
+        // I/O with a global concurrency cap so a project dir with thousands of
+        // session files can't exhaust file descriptors (`EMFILE`).
+        const topLevelCandidates: Array<{ sessionId: string; fullPath: string }> = [];
         for (const entry of entries) {
           if (!entry.isFile() || !entry.name.endsWith('.jsonl')) continue;
           const sessionId = path.basename(entry.name, '.jsonl');
           if (!UUID_RE.test(sessionId) || dirIndexed.has(sessionId)) continue;
           dirIndexed.add(sessionId);
-          const fullPath = path.join(dir, entry.name);
-          topLevelTasks.push(
-            synthesizeFromJsonl(fullPath, sessionId, dir).then((meta) =>
-              meta ? { sessionId, canonicalPath: fullPath, meta } : null
-            )
-          );
+          topLevelCandidates.push({ sessionId, fullPath: path.join(dir, entry.name) });
         }
-        for (const hit of await Promise.all(topLevelTasks)) {
+        const topLevelHits = await mapWithConcurrency(
+          topLevelCandidates,
+          FS_CONCURRENCY,
+          async ({ sessionId, fullPath }) => {
+            const meta = await synthesizeFromJsonl(fullPath, sessionId, dir);
+            return meta ? { sessionId, canonicalPath: fullPath, meta } : null;
+          }
+        );
+        for (const hit of topLevelHits) {
           if (hit) hits.push(hit);
         }
 
-        // (b) Newer `<UUID>/...jsonl` directory layout.
-        const dirTasks: Array<Promise<FallbackHit | null>> = [];
+        const dirCandidates: Array<{ sessionId: string; sessionDir: string }> = [];
         for (const entry of entries) {
           if (!entry.isDirectory() || !UUID_RE.test(entry.name)) continue;
           const sessionId = entry.name;
           if (dirIndexed.has(sessionId)) continue;
           dirIndexed.add(sessionId);
-          const sessionDir = path.join(dir, sessionId);
-          dirTasks.push(
-            (async (): Promise<FallbackHit | null> => {
-              const canonical = await pickCanonicalJsonlInDir(sessionDir);
-              if (!canonical) return null;
-              const meta = await synthesizeFromJsonl(canonical, sessionId, dir);
-              return meta ? { sessionId, canonicalPath: canonical, meta } : null;
-            })()
-          );
+          dirCandidates.push({ sessionId, sessionDir: path.join(dir, sessionId) });
         }
-        for (const hit of await Promise.all(dirTasks)) {
+        const dirHits = await mapWithConcurrency(dirCandidates, FS_CONCURRENCY, async ({ sessionId, sessionDir }) => {
+          const canonical = await pickCanonicalJsonlInDir(sessionDir);
+          if (!canonical) return null;
+          const meta = await synthesizeFromJsonl(canonical, sessionId, dir);
+          return meta ? { sessionId, canonicalPath: canonical, meta } : null;
+        });
+        for (const hit of dirHits) {
           if (hit) hits.push(hit);
         }
 
