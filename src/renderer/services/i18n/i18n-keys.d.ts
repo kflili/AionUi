@@ -333,7 +333,6 @@ export type I18nKey =
   | 'conversation.history.showMore'
   | 'conversation.history.source.claudeCode'
   | 'conversation.history.source.copilot'
-  | 'conversation.history.sourceRotated.badge'
   | 'conversation.history.sourceRotated.tooltip'
   | 'conversation.history.today'
   | 'conversation.history.unpin'

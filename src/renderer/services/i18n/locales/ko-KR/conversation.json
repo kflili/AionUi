@@ -75,6 +75,9 @@
       "claudeCode": "Claude Code에서 가져옴",
       "copilot": "Copilot에서 가져옴"
     },
+    "sourceRotated": {
+      "tooltip": "소스 파일이 더 이상 디스크에 없습니다 — CLI가 이를 로테이션하거나 정리했습니다. 열면 트랜스크립트를 사용할 수 없습니다."
+    },
     "filter": {
       "allSources": "모든 출처",
       "claudeCode": "Claude Code",

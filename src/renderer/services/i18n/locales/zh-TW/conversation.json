@@ -75,6 +75,9 @@
       "claudeCode": "從 Claude Code 匯入",
       "copilot": "從 Copilot 匯入"
     },
+    "sourceRotated": {
+      "tooltip": "原始檔案已不在磁碟上 — CLI 已輪換或清理了該檔案。開啟時將無法顯示對話記錄。"
+    },
     "filter": {
       "allSources": "全部來源",
       "claudeCode": "Claude Code",

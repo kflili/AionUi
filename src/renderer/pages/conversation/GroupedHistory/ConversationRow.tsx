@@ -190,11 +190,15 @@ const ConversationRow: React.FC<ConversationRowProps> = (props) => {
             <span
               className={classNames(
                 'flex-shrink-0 collapsed-hidden mr-4px text-t-secondary flex items-center',
-                // Hide the rotated icon when the row's action gradient takes over the
-                // right edge (pinned / menu open / mobile). The action overlay needs
-                // the space; the tooltip remains discoverable from the dimmed title.
-                hideSourceBadgeForActions && 'hidden',
-                hideSourceBadgeOnHover && 'group-hover:invisible'
+                // The rotated icon is the only place this row's "Transcript
+                // unavailable" warning is surfaced pre-click. Unlike the
+                // `SourceBadge` (CC/CP chip), we do NOT apply
+                // `group-hover:invisible` here — hiding it on hover would
+                // make the explanatory tooltip undiscoverable, since the
+                // tooltip only opens on hover. Keep hiding it only when the
+                // row's action-button gradient takes over the right edge
+                // (pinned / menu open / mobile), where there is no room.
+                hideSourceBadgeForActions && 'hidden'
               )}
               data-testid='conversation-source-rotated'
               aria-label={t('conversation.history.sourceRotated.tooltip')}

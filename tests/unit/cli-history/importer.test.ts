@@ -591,20 +591,23 @@ describe('discoverAndImport', () => {
 describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
   // The sweep is private; we exercise it via `discoverAndImport` which calls it
   // after the discover+upsert loop. Each test seeds the dbStore with a known
-  // row, configures `statMtimeMs` to either return a number (file present) or
-  // null (file gone), runs an empty-discovery scan, and asserts the resulting
-  // `sourceAvailable` flag on the row.
+  // row, configures `fileExists` to return true/false/null, runs an
+  // empty-discovery scan, and asserts the resulting `sourceAvailable` flag on
+  // the row. The sweep is the SOLE source of truth for `sourceAvailable`;
+  // `buildConversationRow` does NOT stamp it (see PR review thread on the
+  // false→true→false churn that would result from doing so for
+  // CopilotProvider, which synthesizes `events.jsonl` paths without verifying
+  // they exist on disk).
 
-  it('flips sourceAvailable to false when the source file is gone', async () => {
+  it('flips sourceAvailable to false when the source file is gone (ENOENT)', async () => {
     seedImportedRow({ id: 'conv-rot-1', sourceFilePath: '/tmp/rotated.jsonl' });
-    // Seed pre-sweep: simulate a row that was discovered earlier with sourceAvailable=true.
     const seeded = dbStore.get('conv-rot-1')!;
     (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = true;
     const beforeModifyTime = seeded.modifyTime;
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
     __setFileIoForTests({
-      statMtimeMs: async (p: string) => (p === '/tmp/rotated.jsonl' ? null : 1234),
+      fileExists: async (p: string) => (p === '/tmp/rotated.jsonl' ? false : true),
     });
 
     await discoverAndImport('claude_code');
@@ -622,7 +625,7 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = false;
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    __setFileIoForTests({ statMtimeMs: async () => 5000 });
+    __setFileIoForTests({ fileExists: async () => true });
 
     await discoverAndImport('claude_code');
 
@@ -635,14 +638,13 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
   it('initializes sourceAvailable on pre-sweep rows whose flag is undefined', async () => {
     // Pre-sweep DB row from older app versions has importMeta but no sourceAvailable key.
     seedImportedRow({ id: 'conv-rot-3', sourceFilePath: '/tmp/pre-sweep.jsonl' });
-    // seedImportedRow defaults to omitting sourceAvailable from importMeta.
     const before = dbStore.get('conv-rot-3')!;
     expect(
       (before.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable
     ).toBeUndefined();
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    __setFileIoForTests({ statMtimeMs: async () => null });
+    __setFileIoForTests({ fileExists: async () => false });
 
     await discoverAndImport('claude_code');
 
@@ -658,7 +660,7 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = true;
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    __setFileIoForTests({ statMtimeMs: async () => null });
+    __setFileIoForTests({ fileExists: async () => false });
     updateSpy.mockClear();
 
     await discoverAndImport('claude_code');
@@ -677,12 +679,11 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = true;
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    __setFileIoForTests({ statMtimeMs: async () => 5000 });
+    __setFileIoForTests({ fileExists: async () => true });
     updateSpy.mockClear();
 
     await discoverAndImport('claude_code');
 
-    // No flip needed → no update emitted by the sweep.
     expect(updateSpy).not.toHaveBeenCalled();
   });
 
@@ -698,7 +699,7 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = true;
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
-    __setFileIoForTests({ statMtimeMs: async () => null });
+    __setFileIoForTests({ fileExists: async () => false });
 
     await discoverAndImport('claude_code');
 
@@ -710,12 +711,42 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     );
   });
 
-  it('regression guard — Bug 3a CC refresh: re-discovery flips sourceAvailable back to true at the new path', async () => {
-    // Simulate the Bug 3a flow: PR #28's CC fallback re-discovers a session
-    // whose old `sourceFilePath` is gone (stale sessions-index path) and whose
-    // new path points at the dir-layout transcript. The update branch must
-    // (a) refresh sourceFilePath, (b) restore sourceAvailable=true so the
-    // renderer's rotated badge clears in lockstep with the path refresh.
+  it('treats ambiguous stat errors (null from fileExists) as "do not flip the flag"', async () => {
+    // Thread-3 scenario: stat threw with something other than ENOENT
+    // (permission, IO, ETIMEDOUT on a network mount). The previous use of
+    // `statMtimeMs` (which collapses every error to null) would have flipped
+    // the row to `sourceAvailable=false` and badged it as rotated. With
+    // `fileExists` discriminating ENOENT from other errors, the sweep
+    // leaves the row alone and reports the error.
+    seedImportedRow({ id: 'conv-ambiguous', sourceFilePath: '/tmp/permission-denied.jsonl' });
+    const seeded = dbStore.get('conv-ambiguous')!;
+    (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = true;
+    (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
+
+    __setFileIoForTests({ fileExists: async () => null });
+    updateSpy.mockClear();
+
+    const result = await discoverAndImport('claude_code');
+
+    // No update fired — the flag is preserved.
+    expect(updateSpy).not.toHaveBeenCalled();
+    expect(
+      (dbStore.get('conv-ambiguous')!.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta
+        .sourceAvailable
+    ).toBe(true);
+    expect(result.errors.some((e) => e.message.includes('ambiguous'))).toBe(true);
+  });
+
+  it('regression guard — Bug 3a CC refresh: sweep flips sourceAvailable to true at the new path after the update branch refreshed the path', async () => {
+    // Bug 3a flow: PR #28's CC fallback re-discovers a session whose old
+    // `sourceFilePath` is gone (stale sessions-index path) and whose new
+    // path points at the dir-layout transcript. Contract:
+    //   (a) update branch refreshes `sourceFilePath` to the new path AND
+    //       resets `sourceAvailable` to undefined (path changed → previous
+    //       sweep's flag was for the OBSOLETE path),
+    //   (b) sweep then stats the new path and sets `sourceAvailable=true`.
+    // The renderer therefore sees the row transition straight from
+    // "rotated at old path" → "available at new path" without flicker.
     seedImportedRow({
       id: 'sess-cc-1',
       source: 'claude_code',
@@ -723,7 +754,6 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     });
     const seeded = dbStore.get('sess-cc-1')!;
     (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = false;
-    // acpSessionId from seedImportedRow defaults to the row id ('sess-cc-1').
 
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([
       meta({
@@ -733,7 +763,7 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
         firstPrompt: 'rediscovered',
       }),
     ]);
-    __setFileIoForTests({ statMtimeMs: async () => 9000 });
+    __setFileIoForTests({ fileExists: async (p: string) => p === '/new/dir-layout/path.jsonl' });
 
     await discoverAndImport('claude_code');
 
@@ -743,27 +773,89 @@ describe('runAvailabilitySweep (post-scan, via discoverAndImport)', () => {
     expect(extraAfter.importMeta.sourceAvailable).toBe(true);
   });
 
-  it('fresh-insert stamps sourceAvailable=true on the new row', async () => {
+  it('regression guard — Copilot prune+rediscover does NOT churn the flag (Thread 4)', async () => {
+    // Copilot's `CopilotProvider` reads `~/.copilot/session-store.db` and
+    // synthesizes `events.jsonl` paths WITHOUT verifying the file exists.
+    // A previously-pruned row that the sweep has stamped `sourceAvailable=false`
+    // is therefore re-emitted by `discoverSessions` on every scan (the DB row
+    // still exists). If `buildConversationRow` unconditionally stamped
+    // `sourceAvailable=true` on update, the importer would churn
+    // false→true→false every cycle: discovery sets `true`, sweep corrects to
+    // `false`, next scan repeats.
+    //
+    // Contract: the update branch preserves the existing flag when the path
+    // is unchanged, and the sweep is the sole writer.
+    seedImportedRow({
+      id: 'sess-cp-1',
+      source: 'copilot',
+      sourceFilePath: '/Users/lili/.copilot/session-state/sess-cp-1/events.jsonl',
+    });
+    const seeded = dbStore.get('sess-cp-1')!;
+    (seeded.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable = false;
+
+    // Discovery still emits the session (DB row exists) but the file is gone.
+    (mockCopilot.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([
+      meta({
+        id: 'sess-cp-1',
+        source: 'copilot',
+        filePath: '/Users/lili/.copilot/session-state/sess-cp-1/events.jsonl',
+        title: 'pruned copilot session',
+      }),
+    ]);
+    __setFileIoForTests({ fileExists: async () => false });
+    updateSpy.mockClear();
+
+    // First cycle.
+    await discoverAndImport('copilot');
+    const afterFirst = dbStore.get('sess-cp-1')!;
+    const extraFirst = afterFirst.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } };
+    expect(extraFirst.importMeta.sourceAvailable).toBe(false);
+
+    const updatesAfterFirst = updateSpy.mock.calls.length;
+    updateSpy.mockClear();
+
+    // Second cycle — flag must NOT change (no churn).
+    __resetInFlightForTests();
+    __setFileIoForTests({ fileExists: async () => false });
+    await discoverAndImport('copilot');
+    const afterSecond = dbStore.get('sess-cp-1')!;
+    expect(
+      (afterSecond.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable
+    ).toBe(false);
+    // No additional update was needed on the second cycle (the dedup check
+    // in the discover loop sees rowsEqualForImporter, and the sweep no-ops
+    // because the stored flag already matches the computed one).
+    expect(updatesAfterFirst).toBeGreaterThanOrEqual(1);
+    expect(updateSpy.mock.calls.length).toBe(0);
+  });
+
+  it('fresh-insert leaves sourceAvailable undefined until the sweep determines it', async () => {
+    // Contract: `buildConversationRow` does NOT stamp `sourceAvailable`.
+    // The sweep is the sole writer of the flag — so a freshly-inserted row
+    // ends a single `discoverAndImport` invocation with the sweep-computed
+    // value. We assert by configuring `fileExists: false` (so the post-sweep
+    // value is `false`); a stamp on insert would have yielded `true` until
+    // the sweep flipped it (the very churn this contract prevents).
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([
       meta({ id: 'fresh-1', filePath: '/tmp/fresh.jsonl', firstPrompt: 'hello' }),
     ]);
-    __setFileIoForTests({ statMtimeMs: async () => 1000 });
+    __setFileIoForTests({ fileExists: async () => false });
 
     await discoverAndImport('claude_code');
 
     const row = Array.from(dbStore.values()).find((r) => (r.extra as AcpExtra).acpSessionId === 'fresh-1');
     expect(row).toBeDefined();
     expect((row!.extra as AcpExtra & { importMeta: { sourceAvailable?: boolean } }).importMeta.sourceAvailable).toBe(
-      true
+      false
     );
   });
 
-  it('survives a stat throw without blowing up the scan', async () => {
+  it('survives a fileExists throw without blowing up the scan', async () => {
     seedImportedRow({ id: 'conv-throw', sourceFilePath: '/tmp/explode.jsonl' });
     (mockClaude.discoverSessions as ReturnType<typeof vi.fn>).mockResolvedValue([]);
 
     __setFileIoForTests({
-      statMtimeMs: async () => {
+      fileExists: async () => {
         throw new Error('disk on fire');
       },
     });

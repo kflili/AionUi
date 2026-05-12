@@ -76,7 +76,6 @@
       "copilot": "Imported from Copilot"
     },
     "sourceRotated": {
-      "badge": "Rotated",
       "tooltip": "Source file is no longer on disk — the CLI rotated or pruned it. Transcript will be unavailable when opened."
     },
     "filter": {

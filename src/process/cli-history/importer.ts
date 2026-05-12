@@ -291,10 +291,15 @@ export function buildConversationRow(
         autoNamed: true,
         generatedName,
         hidden: false,
-        // The provider just discovered the session by reading the source on disk,
-        // so we know `sourceFilePath` was reachable at scan time. The sweep refines
-        // this later for rows whose source rotates between scans.
-        sourceAvailable: true,
+        // `sourceAvailable` is deliberately omitted on fresh insert. Providers
+        // synthesize `filePath` from a session index / database row WITHOUT
+        // verifying the file exists (CopilotProvider in particular reads
+        // `session-store.db` and constructs an `events.jsonl` path; the
+        // referenced file may have been pruned by the CLI before our scan).
+        // Stamping `true` here would publish "available" to the renderer
+        // until the next sweep corrected it, and would churn `false`→`true`
+        // every cycle for permanently-pruned rows. The post-scan sweep is
+        // the sole source of truth for this flag.
       },
       pinned: false,
     };
@@ -316,6 +321,18 @@ export function buildConversationRow(
     typeof priorGeneratedName === 'string' &&
     priorGeneratedName.trim().length > 0 &&
     existing.name === priorGeneratedName;
+
+  // When the provider refreshed the row's `sourceFilePath` (e.g. Bug 3a's CC
+  // fallback discovering the new dir-layout transcript for a session whose
+  // old top-level `.jsonl` is gone), reset `sourceAvailable` so the next
+  // sweep recomputes it for the NEW path. Otherwise an old `false` from a
+  // sweep over the obsolete path would briefly leak through the
+  // `emitConversationListChanged('updated')` below before the sweep corrects
+  // it. When the path is unchanged we preserve the prior flag so providers
+  // that synthesize paths without verifying existence (CopilotProvider) do
+  // not churn `false`→`true`→`false` every cycle.
+  const pathChanged = existingExtra.sourceFilePath !== metadata.filePath;
+  const carriedSourceAvailable = pathChanged ? undefined : existingExtra.importMeta?.sourceAvailable;
 
   const nextExtra: AcpImportedExtra = {
     ...existingExtra,
@@ -339,11 +356,7 @@ export function buildConversationRow(
       autoNamed: wasAutoNamed,
       generatedName: wasAutoNamed ? generatedName : existingExtra.importMeta?.generatedName,
       hidden: existingExtra.importMeta?.hidden ?? false,
-      // Re-discovery proves the provider reached the source again on this scan,
-      // so flip availability back to true. This is how Bug 3a's CC refresh
-      // flow (PR #28's JSONL fallback) clears a stale `sourceAvailable: false`
-      // that an earlier sweep had set on the now-superseded path.
-      sourceAvailable: true,
+      sourceAvailable: carriedSourceAvailable,
     },
   };
 
@@ -529,9 +542,9 @@ async function runAvailabilitySweep(source: SessionSourceId, result: ImportResul
     if (!extra.importMeta) continue;
     if (extra.importMeta.hidden === true) continue;
     if (typeof extra.sourceFilePath !== 'string' || extra.sourceFilePath.length === 0) continue;
-    let mtimeMs: number | null;
+    let exists: boolean | null;
     try {
-      mtimeMs = await fileIo.statMtimeMs(extra.sourceFilePath);
+      exists = await fileIo.fileExists(extra.sourceFilePath);
     } catch (err) {
       result.errors.push({
         sessionId: extra.acpSessionId ?? row.id,
@@ -539,8 +552,18 @@ async function runAvailabilitySweep(source: SessionSourceId, result: ImportResul
       });
       continue;
     }
-    const computed = mtimeMs !== null;
-    if (extra.importMeta.sourceAvailable === computed) continue;
+    if (exists === null) {
+      // Stat failed with something other than ENOENT (permission, IO,
+      // ETIMEDOUT on a network mount, ...). Leave the row's flag unchanged —
+      // we don't want to badge it "rotated" on a transient permission
+      // failure. Report so the IPC caller can surface it.
+      result.errors.push({
+        sessionId: extra.acpSessionId ?? row.id,
+        message: `Availability stat returned ambiguous error for ${extra.sourceFilePath}`,
+      });
+      continue;
+    }
+    if (extra.importMeta.sourceAvailable === exists) continue;
     // Restate `modifyTime` from the spread to make the contract explicit: unlike
     // `db.updateConversation` which force-stamps `Date.now()`, the sweep MUST keep
     // the existing modifyTime so a rotation flip does not reorder the timeline.
@@ -551,7 +574,7 @@ async function runAvailabilitySweep(source: SessionSourceId, result: ImportResul
         ...extra,
         importMeta: {
           ...extra.importMeta,
-          sourceAvailable: computed,
+          sourceAvailable: exists,
         },
       },
     } as unknown as TChatConversation;
@@ -787,14 +810,42 @@ async function realReadJsonl(filePath: string): Promise<string | null> {
   }
 }
 
+/**
+ * Distinguish "file does not exist" from "stat threw for another reason
+ * (permission, IO, network mount, ...)". Returns:
+ *   - `true`  — file exists
+ *   - `false` — confirmed ENOENT (or ENOTDIR for a path through a non-dir)
+ *   - `null`  — stat threw with another error; the sweep treats this as
+ *               "unknown, leave the row alone" and reports the error rather
+ *               than misclassifying a transient permission failure as
+ *               "source rotated"
+ *
+ * `statMtimeMs` collapses every error to `null`, which is fine for the
+ * hydration path (caller falls back to "unavailable" either way) but is
+ * not safe for the availability sweep — we'd briefly badge a row as
+ * rotated whenever the user revoked read on its parent dir.
+ */
+async function realFileExists(filePath: string): Promise<boolean | null> {
+  try {
+    await fsPromises.stat(filePath);
+    return true;
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (code === 'ENOENT' || code === 'ENOTDIR') return false;
+    return null;
+  }
+}
+
 type FileIo = {
   statMtimeMs: (filePath: string) => Promise<number | null>;
   readJsonl: (filePath: string) => Promise<string | null>;
+  fileExists: (filePath: string) => Promise<boolean | null>;
 };
 
 const defaultFileIo: FileIo = {
   statMtimeMs: realStatMtimeMs,
   readJsonl: realReadJsonl,
+  fileExists: realFileExists,
 };
 
 let fileIo: FileIo = { ...defaultFileIo };
