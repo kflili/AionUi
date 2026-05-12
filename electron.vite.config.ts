@@ -14,16 +14,30 @@ function iconParkPlugin() {
       if (!id.endsWith('.tsx') || id.includes('node_modules')) return null;
       if (!source.includes('@icon-park/react')) return null;
       const transformedSource = source.replace(
-        /import\s+\{\s+([a-zA-Z, ]*)\s+\}\s+from\s+['"]@icon-park\/react['"](;?)/g,
+        /import\s+\{\s+([a-zA-Z0-9_,\s]*)\s+\}\s+from\s+['"]@icon-park\/react['"](;?)/g,
         function (str, match) {
           if (!match) return str;
-          const components = match.split(',');
-          const importComponent = str.replace(
-            match,
-            components.map((key: string) => `${key} as _${key.trim()}`).join(', ')
-          );
+          const specifiers = match.split(',').map((raw: string) => {
+            const trimmed = raw.trim();
+            // Handle `OriginalName as LocalName` rename form so callers can
+            // disambiguate icon-park exports from same-named local symbols.
+            const renameMatch = trimmed.match(/^([A-Za-z0-9_$]+)\s+as\s+([A-Za-z0-9_$]+)$/);
+            if (renameMatch) {
+              return { importName: renameMatch[1], localName: renameMatch[2] };
+            }
+            return { importName: trimmed, localName: trimmed };
+          });
+          const importChunk = specifiers
+            .map((s: { importName: string; localName: string }) => `${s.importName} as _${s.localName}`)
+            .join(', ');
+          const hocChunk = specifiers
+            .map(
+              (s: { importName: string; localName: string }) => `const ${s.localName} = IconParkHOC(_${s.localName})`
+            )
+            .join(';\n          ');
+          const importComponent = str.replace(match, importChunk);
           const hoc = `import IconParkHOC from '@renderer/components/IconParkHOC';
-          ${components.map((key: string) => `const ${key.trim()} = IconParkHOC(_${key.trim()})`).join(';\n')}`;
+          ${hocChunk}`;
           return importComponent + ';' + hoc;
         }
       );
