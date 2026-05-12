@@ -410,6 +410,20 @@ describe('buildConversationRow', () => {
     const refreshed = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'new', workspace: '' }), existing);
     expect((refreshed.extra as { customWorkspace?: boolean }).customWorkspace).toBeUndefined();
   });
+
+  it('CLEARS customWorkspace on update when a previously-tagged row loses its workspace', () => {
+    // Codex P2 review on PR #29: a session imported with workspace = '/x/y'
+    // (so customWorkspace=true) might re-scan with workspace='' (e.g. Copilot
+    // mapping `row.cwd || ''` when the cwd became unknown). Without this
+    // clear, the row would carry `customWorkspace=true` AND `workspace=''`,
+    // which `ConversationTabsContext.openTab` and search-result clicks would
+    // mis-route as a custom-workspace tab even though no workspace exists.
+    const existing = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'old', workspace: '/x/y' }), undefined);
+    expect((existing.extra as { customWorkspace?: boolean }).customWorkspace).toBe(true);
+    const refreshed = buildConversationRow(meta({ id: 'sess-A', firstPrompt: 'new', workspace: '' }), existing);
+    expect((refreshed.extra as { customWorkspace?: boolean }).customWorkspace).toBeUndefined();
+    expect((refreshed.extra as { workspace?: string }).workspace).toBe('');
+  });
 });
 
 // ---------------------------------------------------------------------------

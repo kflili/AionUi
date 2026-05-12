@@ -303,13 +303,15 @@ export function buildConversationRow(
     ...existingExtra,
     backend: SOURCE_TO_BACKEND[metadata.source],
     workspace: metadata.workspace,
-    // Backfill historical rows that pre-date the customWorkspace flag. Only
-    // set when the provider reports a usable workspace — sessions imported
-    // without one (e.g. Copilot's `cwd || ''`) must not be misclassified as
-    // custom-workspace conversations. Once the importer rewrites these on
-    // its next scan, the renderer's workspace-grouping path picks them up
-    // automatically.
-    customWorkspace: hasUsableWorkspace(metadata.workspace) ? true : existingExtra.customWorkspace,
+    // Backfill historical rows that pre-date the customWorkspace flag, AND
+    // clear it on rescan when the workspace disappears (e.g. Copilot's
+    // `row.cwd || ''` returns empty for a previously-tagged session). The
+    // flag is a contract that goes beyond sidebar grouping — code paths like
+    // `ConversationTabsContext.openTab` and search-result clicks gate on
+    // `customWorkspace` alone, so a `customWorkspace=true` row with an empty
+    // workspace would mis-route. Mirror fresh-insert semantics so the flag
+    // is always derived from the current `workspace` value.
+    customWorkspace: hasUsableWorkspace(metadata.workspace) ? true : undefined,
     acpSessionId: metadata.id,
     acpSessionUpdatedAt: updatedTs,
     sourceFilePath: metadata.filePath,
