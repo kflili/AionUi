@@ -19,6 +19,7 @@ import { useDeepLink } from '@renderer/hooks/system/useDeepLink';
 import { useNotificationClick } from '@renderer/hooks/system/useNotificationClick';
 import { useDirectorySelection } from '@renderer/hooks/file/useDirectorySelection';
 import { useMultiAgentDetection } from '@renderer/hooks/agent/useMultiAgentDetection';
+import { useResizablePixelWidth } from '@renderer/hooks/ui/useResizablePixelWidth';
 import { processCustomCss } from '@renderer/utils/theme/customCssProcessor';
 import { cleanupSiderTooltips } from '@renderer/utils/ui/siderTooltip';
 import { isElectronDesktop } from '@renderer/utils/platform';
@@ -58,6 +59,9 @@ const useDebug = () => {
 const UpdateModal = React.lazy(() => import('@/renderer/components/settings/UpdateModal'));
 
 const DEFAULT_SIDER_WIDTH = 250;
+const MIN_SIDER_WIDTH = 200;
+const MAX_SIDER_WIDTH = 400;
+const SIDER_WIDTH_STORAGE_KEY = 'aionui_global_sider_width';
 const MOBILE_SIDER_WIDTH_RATIO = 0.67;
 const MOBILE_SIDER_MIN_WIDTH = 260;
 const MOBILE_SIDER_MAX_WIDTH = 420;
@@ -94,6 +98,15 @@ const Layout: React.FC<{
   const { contextHolder: directorySelectionContextHolder } = useDirectorySelection();
   useDeepLink();
   useNotificationClick();
+
+  // 桌面端可拖动左侧栏宽度（移动端使用固定比例不参与拖动）
+  // Resizable desktop left-sider width (mobile uses ratio-based width, not draggable)
+  const { width: resizableSiderWidth, dragHandle: siderDragHandle } = useResizablePixelWidth({
+    defaultWidth: DEFAULT_SIDER_WIDTH,
+    minWidth: MIN_SIDER_WIDTH,
+    maxWidth: MAX_SIDER_WIDTH,
+    storageKey: SIDER_WIDTH_STORAGE_KEY,
+  });
 
   // Global listener for PTY session eviction toast (must be in always-mounted component)
   useEffect(() => {
@@ -349,7 +362,7 @@ const Layout: React.FC<{
         MOBILE_SIDER_MIN_WIDTH,
         Math.min(MOBILE_SIDER_MAX_WIDTH, Math.round(viewportWidth * MOBILE_SIDER_WIDTH_RATIO))
       )
-    : DEFAULT_SIDER_WIDTH;
+    : resizableSiderWidth;
   useEffect(() => {
     collapsedRef.current = collapsed;
   }, [collapsed]);
@@ -451,6 +464,8 @@ const Layout: React.FC<{
                   } as any)
                 : sider}
             </ArcoLayout.Content>
+            {/* 桌面端可拖动右边缘 / Desktop draggable right edge (hidden on mobile or when collapsed) */}
+            {!isMobile && !collapsed && siderDragHandle}
           </ArcoLayout.Sider>
 
           <ArcoLayout.Content
