@@ -1,7 +1,7 @@
 # CLI History Integration
 
-**Date:** 2026-03-19 (updated 2026-04-14)
-**Status:** In progress — shared infra merged, import UX designed, core import not started
+**Date:** 2026-03-19 (updated 2026-05-12)
+**Status:** Implemented — all 10 items (0–9) shipped via PRs #17–#26 plus 4 post-recovery fix PRs #27–#30. Codex CLI import remains V2 deferred. See `../progress.md` for the PR-by-PR rollup.
 
 ---
 
@@ -393,13 +393,29 @@ Done (Phase 2 on-demand message hydration):
   src/common/config/storage.ts                  — extra.hydratedAt + extra.hydratedSourceFilePath optional fields on the acp variant
   src/common/adapter/ipcBridge.ts               — cliHistory.hydrate IPC route (forwards optional showThinking)
 
-Not started:
-  src/process/cli-history/providers/codex.ts    — Codex CLI provider (deferred to V2)
-  src/renderer/pages/conversation/GroupedHistory/ — Per-section truncation, filter, search
+Done (item 3 — transcript mode, PR #20):
   src/renderer/pages/conversation/components/ChatConversation.tsx — Transcript mode gating
   src/renderer/pages/conversation/platforms/acp/AcpChat.tsx — Read-only transcript surface
-  src/renderer/pages/conversation/platforms/acp/AcpSendBox.tsx — Hide in transcript mode
-  src/renderer/pages/history/                   — Full History view (new page)
+  src/renderer/pages/conversation/platforms/acp/AcpSendBox.tsx — Hidden in transcript mode
+
+Done (item 4 — source badge, PR #21):
+  src/renderer/pages/conversation/GroupedHistory/parts/SourceBadge.tsx — CC/CP chip primitive
+
+Done (items 5+6 — sidebar truncation + filter/search, PRs #22 + #23):
+  src/renderer/pages/conversation/GroupedHistory/ — Per-section truncation, "Show N more" expander, source filter dropdown, search input
+  src/renderer/pages/conversation/GroupedHistory/utils/sidebarFilterHelpers.ts — Pure filter helper (reused by item 9)
+
+Done (item 7 — export auto-hydrate, PR #24):
+  src/renderer/pages/conversation/GroupedHistory/hooks/useConversationActions.ts — Export path triggers hydration on cache miss
+
+Done (item 8 — resume imported, PR #25):
+  src/renderer/pages/conversation/platforms/acp/AcpChat.tsx — "Resume this session" → live ACP / terminal launch (Step 1 toggle)
+
+Done (item 9 — full-screen history view, PR #26):
+  src/renderer/pages/history/                   — Full History view (route at /history)
+
+Not started:
+  src/process/cli-history/providers/codex.ts    — Codex CLI provider (deferred to V2)
 ```
 
 ---
@@ -455,33 +471,33 @@ Not started:
 
 - [x] Per-CLI import toggles in Settings > AgentCLI (Claude Code + Copilot for V1)
 - [x] Phase 1: metadata index on enable (instant scan)
-- [x] Phase 2: on-demand message hydration (backend done; transcript-mode UI with skeleton loading is item 3)
-- [ ] Imported sessions appear in normal sidebar timeline (mixed with native)
-- [ ] Source badge visible on imported sessions (2-letter chips: CC, CP)
-- [ ] Auto-naming uses provider metadata first, upgrades from first user message when needed, and appends workspace for disambiguation
-- [x] Full `...` menu works: rename, pin, delete, export (export auto-hydrates if messages not yet loaded)
+- [x] Phase 2: on-demand message hydration (backend + transcript-mode UI with skeleton loading shipped in item 3)
+- [x] Imported sessions appear in normal sidebar timeline (mixed with native) — PR #18 (importer creates `conversations` rows) + PR #29 (customWorkspace tagging so they group correctly)
+- [x] Source badge visible on imported sessions (2-letter chips: CC, CP) — PR #21
+- [x] Auto-naming uses provider metadata first, upgrades from first user message when needed, and appends workspace for disambiguation — PRs #18 + #19
+- [x] Full `...` menu works: rename, pin, delete, export (export auto-hydrates if messages not yet loaded) — PR #24
 - [x] Incremental sync: new sessions imported on app launch
-- [ ] mtime staleness check: re-hydrate if source file changed
+- [x] mtime staleness check: re-hydrate if source file changed — PR #19 (`hydratedAt` + `hydratedSourceFilePath`); PR #30 adds the rotated-source-file sidebar affordance
 - [x] Deduplication by source + session ID
-- [ ] Delete removes from AionUI only, not from CLI history files
+- [x] Delete removes from AionUI only, not from CLI history files — PR #18 (tooltip + behavior)
 - [x] Disable/re-enable hides/shows imported rows without deleting
-- [ ] Corrupted JSONL handled gracefully (partial import + warning)
-- [ ] Missing source files show "transcript unavailable" state
-- [ ] Imported sessions open as read-only with "Resume" action
+- [x] Corrupted JSONL handled gracefully (partial import + warning) — PR #19 (`splitJsonlByValidity`, `warningCount`)
+- [x] Missing source files show "transcript unavailable" state — PR #19 (`{ status: 'unavailable' | 'cached', warning: 'source_missing' }`) + PR #28 (jsonl fallback discovery)
+- [x] Imported sessions open as read-only with "Resume" action — PR #20
 
 ### Full History View
 
-- [ ] Dedicated full-screen history panel (replaces main content)
-- [ ] Source filter chips + workspace filter + date range
-- [ ] Full-text search (for hydrated sessions)
-- [ ] Virtual scrolling or paginated loading
-- [ ] Entry from sidebar "View all history" link
+- [x] Dedicated full-screen history panel (replaces main content) — PR #26
+- [x] Source filter chips + workspace filter + date range — PR #26
+- [x] Full-text search (for hydrated sessions) — PR #26 ("Include message content" toggle)
+- [x] Virtual scrolling or paginated loading — PR #26 (virtuoso-backed)
+- [x] Entry from sidebar "View all history" link — PR #26 (footer link + per-section "Show all")
 
 ### Resume
 
-- [ ] Imported sessions can be resumed via ACP or terminal mode (Step 1 toggle)
-- [ ] At least Claude Code resume works end-to-end
-- [ ] Clear error message when resume fails (auth, cwd mismatch, etc.)
+- [x] Imported sessions can be resumed via ACP or terminal mode (Step 1 toggle) — PR #25
+- [x] At least Claude Code resume works end-to-end — PR #25
+- [x] Clear error message when resume fails (auth, cwd mismatch, etc.) — PR #25
 
 ---
 

@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                                  |
 | ----------- | -------------------------------------------------------------------------------------- |
-| Status      | Implemented                                                                            |
+| Status      | Implemented (PR #22, merged 2026-05-11, sha `9f3dbede`)                                |
 | Priority    | High                                                                                   |
 | Complexity  | Medium                                                                                 |
 | Depends On  | Items 0–4 (CLI-history importer + source badge)                                        |
