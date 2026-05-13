@@ -2,7 +2,7 @@
 
 | Field       | Value                                                                         |
 | ----------- | ----------------------------------------------------------------------------- |
-| Status      | Implemented                                                                   |
+| Status      | Implemented (PR #26, merged 2026-05-11, sha `b5d3fee6`)                       |
 | Priority    | High                                                                          |
 | Complexity  | High                                                                          |
 | Depends On  | Items 0–8 (importer + source badge + sidebar filter/truncation + resume)      |

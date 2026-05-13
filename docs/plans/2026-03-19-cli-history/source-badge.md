@@ -1,5 +1,7 @@
 # Plan: Source Badge (CC / CP chips on imported sidebar rows)
 
+**Status:** Implemented in PR #21 (merged 2026-05-11, sha `846dac88`).
+
 Sub-plan under `docs/plans/2026-03-19-cli-history/plan.md` — item 4 of the cli-history orchestration run.
 
 ## Context

@@ -24,13 +24,14 @@ Add "Copy Chat Reference" to conversation `...` menu. Low-risk, high-leverage, i
 
 Build terminal wrapper infrastructure: embed xterm.js in the renderer, spawn CLIs via node-pty, create `TerminalSessionManager` for PTY lifecycle. Exposed as a mode toggle (`💬 Rich UI | >_ Terminal`) in the chat header — not a separate conversation type, but an alternative rendering mode on existing conversations. Both directions work via CLI `--resume`. Includes JSONL → TMessage converter for rendering terminal history as rich UI. New "AgentCLI" settings tab for default mode.
 
-### Step 2: CLI History Integration
+### Step 2: CLI History Integration — Done
 
 **Plan:** [`2026-03-19-cli-history/plan.md`](./2026-03-19-cli-history/plan.md) (parent design)
-**Implementation sub-plans:** [`importer-phase1.md`](./2026-03-19-cli-history/importer-phase1.md) (metadata index — done) · [`importer-phase2.md`](./2026-03-19-cli-history/importer-phase2.md) (on-demand message hydration — done)
+**Implementation sub-plans:** [`importer-phase1.md`](./2026-03-19-cli-history/importer-phase1.md) (metadata index — done) · [`importer-phase2.md`](./2026-03-19-cli-history/importer-phase2.md) (on-demand message hydration — done) · [`sidebar-truncation.md`](./2026-03-19-cli-history/sidebar-truncation.md) (item 5 — done) · [`source-badge.md`](./2026-03-19-cli-history/source-badge.md) (item 4 — done) · [`full-history-view.md`](./2026-03-19-cli-history/full-history-view.md) (item 9 — done)
 **Where:** AionUI project
+**Shipped via:** PRs #17–#26 (items 0–9) + PRs #27–#30 (post-recovery fixes). See [`progress.md`](./progress.md) for the PR-by-PR rollup.
 
-Import CLI sessions (Claude Code, Copilot, Codex) into AionUI's SQLite as first-class conversations. No separate data model — imported sessions appear in the normal sidebar timeline with full functionality (rename, pin, delete, export, resume). JSONL + SQLite hybrid approach, same as Copilot and Codex already use. Background message conversion newest-first.
+Import CLI sessions (Claude Code, Copilot, Codex) into AionUI's SQLite as first-class conversations. No separate data model — imported sessions appear in the normal sidebar timeline with full functionality (rename, pin, delete, export, resume). JSONL + SQLite hybrid approach, same as Copilot and Codex already use. Background message conversion newest-first. Codex CLI import remains V2 deferred.
 
 ### Step 3: Knowledge Consolidation
 

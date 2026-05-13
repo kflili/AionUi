@@ -1,7 +1,7 @@
 # Plan: CLI History Importer — Phase 1 (Metadata Index)
 
 **Date:** 2026-05-10
-**Status:** Active — implementation in progress on `feat/cli-history-importer-phase1`
+**Status:** Implemented in PR #18 (merged 2026-05-11, sha `470b0813`).
 **Scope:** Phase 1 only (metadata indexing). Phase 2 (message hydration) is a separate item.
 **Parent design:** `docs/plans/2026-03-19-cli-history/plan.md`
 
